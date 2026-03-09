@@ -1,38 +1,36 @@
-# FieldAgent
+# Foreman
 
-**AI-powered reengagement and business operations platform for small field service contractors (HVAC, plumbing, electrical, etc.)**
+AI-powered customer reengagement and scheduling platform for small field service contractors (HVAC, plumbing, etc.).
 
----
-
-## What This Is
-
-FieldAgent is an agentic AI platform that helps small/solo field service operators (HVAC, plumbing, electrical) run their customer relationships and scheduling autonomously. It is designed for operators who may have nothing (no website, no CRM, no business email) or who already have basic tools (Gmail, Google Calendar) and want to layer AI on top.
-
-The agent runs on a daily cycle. It decides who to contact, drafts personalized outreach in the operator's own voice, sends via email or SMS, handles replies, books appointments, and reminds customers — without the operator needing to manage any of it manually.
+**Live:** https://web-production-3df3a.up.railway.app
+**Repo:** https://github.com/avelayud/foreman
 
 ---
 
-## Core Philosophy
+## What it does
 
-- **Agnostic first** — works with what the operator has. No forced migrations.
-- **SMS-native** — blue collar operators and their customers live in text, not email dashboards.
-- **Single pane of glass** — one unified calendar, one activity log. No app-switching.
-- **Operator voice** — AI learns how the operator writes and sounds like them, not a marketing agency.
-- **Prove ROI fast** — the first win is a reactivated customer. Everything else is downstream.
+Foreman helps field service business owners win back dormant customers by:
+1. Reading the operator's sent Gmail to learn their natural writing voice
+2. Identifying customers who are overdue for service (365+ days dormant)
+3. Drafting personalized reactivation emails written in the operator's exact tone
+4. Presenting emails for review and approval before sending
 
 ---
 
-## Two Products (Shared Infrastructure)
+## Current State — Phase 2 Complete
 
-### Product A — AI Reactivation Agent *(build first)*
-Plugs into what the operator already has. Runs outreach, follow-ups, and booking close automatically.
-- Target user: Operator who has a customer list but isn't working it
-- Core value: "That customer called back after 18 months"
-
-### Product B — All-in-One for the Unequipped *(build second)*
-Full lightweight operating system for operators with nothing. Provisions email, SMS number, booking page, calendar.
-- Target user: Operator running everything from their personal phone
-- Core value: "I have a real business presence now and it runs itself"
+| Feature | Status |
+|---|---|
+| Database models (Operator, Customer, Job, Booking, OutreachLog) | ✅ |
+| Config and environment management | ✅ |
+| Sample data seed (20 HVAC customers) | ✅ |
+| Gmail OAuth + sent email reader | ✅ |
+| Tone profiler agent (Claude-powered voice extraction) | ✅ |
+| Dashboard UI (customer categories, metrics) | ✅ |
+| Customer detail view (service history, outreach history) | ✅ |
+| Outreach draft generation (Claude, inline approval) | ✅ |
+| Outreach queue page | ✅ |
+| Railway deployment (Postgres) | ✅ |
 
 ---
 
@@ -40,94 +38,113 @@ Full lightweight operating system for operators with nothing. Provisions email, 
 
 | Layer | Tool |
 |---|---|
-| Language | Python 3.11+ |
-| AI / LLM | Anthropic Claude API (`claude-sonnet-4-20250514`) |
-| SMS | Twilio |
-| Email sending | SendGrid |
-| Email reading (tone) | Gmail API (OAuth) |
-| Calendar sync | Google Calendar API (OAuth) |
-| Database | SQLite (dev) → Postgres (prod) |
-| Scheduling | APScheduler |
-| API layer | FastAPI |
-| Frontend (booking page) | React (later phase) |
+| Language | Python 3.12 |
+| AI / LLM | Anthropic Claude (`claude-sonnet-4-20250514`) |
+| Web framework | FastAPI + Jinja2 |
+| Frontend | Tailwind CSS (CDN) |
+| Database | SQLite (dev) → PostgreSQL (prod via Railway) |
+| Email reading | Gmail API (OAuth2) |
+| Email sending | SendGrid (Phase 3) |
+| SMS | Twilio (Phase 5) |
+| Scheduling | APScheduler (Phase 3) |
+| Deployment | Railway |
 
 ---
 
 ## Project Structure
 
 ```
-fieldagent/
-├── agents/              # Autonomous agent logic
-│   ├── reactivation.py  # Main outreach agent
-│   ├── tone_profiler.py # Voice/tone learning from emails
-│   ├── scheduler.py     # Booking and calendar agent
-│   └── follow_up.py     # Sequence and follow-up agent
-├── core/                # Shared business logic
-│   ├── models.py        # Data models (Operator, Customer, Job, Booking)
-│   ├── database.py      # DB connection and setup
-│   └── config.py        # Environment/config management
-├── integrations/        # External service connectors
-│   ├── gmail.py         # Gmail OAuth + read/send
-│   ├── gcal.py          # Google Calendar sync
-│   ├── twilio_sms.py    # SMS send/receive
-│   └── sendgrid.py      # Email sending fallback
-├── api/                 # FastAPI routes (webhook receivers, booking API)
-│   └── routes.py
-├── data/                # Sample data, CSV imports, DB files
-├── tests/               # Unit tests per module
-├── docs/                # Additional documentation
-├── README.md            # This file — always up to date
-├── PROJECT_PLAN.md      # Detailed phase plan and current status
-├── .env.example         # Environment variable template
-├── requirements.txt     # Python dependencies
-└── main.py              # Entry point / agent runner
+foreman/
+├── api/
+│   └── app.py              # FastAPI — web UI + JSON API
+├── agents/
+│   └── tone_profiler.py    # Gmail → Claude voice extraction
+├── core/
+│   ├── config.py           # Environment variable management
+│   ├── database.py         # SQLAlchemy session management
+│   └── models.py           # ORM models
+├── data/
+│   └── seed.py             # Sample HVAC data seed
+├── integrations/
+│   └── gmail.py            # Gmail OAuth + sent mail reader
+├── templates/
+│   ├── base.html           # Shared layout + sidebar
+│   ├── dashboard.html      # Customer overview + categories
+│   ├── customer.html       # Customer detail + draft generation
+│   └── outreach.html       # Outreach queue
+├── main.py                 # CLI entry point
+├── Procfile                # Railway web process
+└── requirements.txt
 ```
 
 ---
 
-## Quick Start (for new contributors or new chat sessions)
+## Pages
 
-1. Clone the repo and create a virtual environment:
-```bash
-git clone <repo-url>
-cd fieldagent
-python -m venv venv
-source venv/bin/activate  # Windows: venv\Scripts\activate
-pip install -r requirements.txt
-```
+| URL | Description |
+|---|---|
+| `/` | Dashboard — metrics + customers by reactivation category |
+| `/customer/{id}` | Customer detail — service history, outreach log, draft email |
+| `/outreach` | Outreach queue — drafted emails awaiting review/send |
 
-2. Copy `.env.example` to `.env` and fill in your keys:
+---
+
+## Local Setup
+
 ```bash
+git clone https://github.com/avelayud/foreman
+cd foreman
+python3 -m venv venv
+venv/bin/pip install -r requirements.txt
+
 cp .env.example .env
+# Fill in: ANTHROPIC_API_KEY, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET
+
+venv/bin/python main.py --seed          # Seed sample data
+venv/bin/uvicorn api.app:app --reload   # Start web server → http://localhost:8000
 ```
 
-3. Check `PROJECT_PLAN.md` to see current build status and what's next.
+## CLI Agents
 
-4. Run the agent:
 ```bash
-python main.py
+# Extract voice profile from Gmail (run once per operator)
+venv/bin/python -m agents.tone_profiler --operator-id 1
 ```
 
 ---
 
-## Current Status
+## Environment Variables
 
-**Phase 1 — Complete** (project structure, data models, DB, seed data)  
-**Phase 2 — Environment setup in progress**  
-See `PROJECT_PLAN.md` for detailed task breakdown and current position.
-
-### GitHub
-https://github.com/avelayud/foreman
+```
+ANTHROPIC_API_KEY       # Required — console.anthropic.com
+DATABASE_URL            # Default: sqlite:///./foreman.db
+APP_ENV                 # development | production
+DRY_RUN                 # true = generate but don't send
+GOOGLE_CLIENT_ID        # Gmail OAuth
+GOOGLE_CLIENT_SECRET    # Gmail OAuth
+```
 
 ---
 
-## Key Design Decisions (Log)
+## Core Philosophy
 
-| Decision | Choice | Reason |
+- **Operator voice** — AI learns how the operator writes. Emails sound like them, not a marketing agency.
+- **SMS-native** — field operators live in text (Phase 5)
+- **Prove ROI fast** — first win is a reactivated customer. Everything else is downstream.
+- **Agnostic** — works with what the operator already has (Gmail, Google Cal)
+
+---
+
+## Roadmap
+
+See `PROJECT_PLAN.md` for the full phase-by-phase breakdown.
+
+| Phase | Name | Status |
 |---|---|---|
-| Start niche | HVAC/plumbing | Tight ICP, predictable seasonal patterns, underserved |
-| Outreach channel priority | SMS > Email | Higher open rates, operators live in texts |
-| Tone learning approach | Scan sent Gmail → Claude analysis → stored system prompt prefix | Feels authentic, no manual config |
-| Calendar conflict prevention | Write blocks immediately on booking, soft-confirm for AI-initiated | Prevents double booking without full takeover |
-| Pricing target | $29-49/mo | Below Jobber, above "free trial" psychology |
-| Build order | Reactivation agent first, then close the loop with booking | Ship value fast, validate before building infra |
+| 1 | Foundation (models, DB, config) | ✅ Complete |
+| 2 | Tone Profiler + Dashboard UI | ✅ Complete |
+| 3 | Reactivation Outreach Agent | 🟡 Next |
+| 4 | Follow-up Sequence Engine | ⬜ |
+| 5 | SMS Channel (Twilio) | ⬜ |
+| 6 | Booking Page + Slot Management | ⬜ |
+| 7–12 | Confirmations, Cal sync, Dashboard, Onboarding | ⬜ |

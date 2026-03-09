@@ -1,0 +1,146 @@
+{% extends "base.html" %}
+{% block page_title %}Dashboard{% endblock %}
+
+{% block content %}
+
+<!-- Metric cards -->
+<div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+
+  <div class="bg-white rounded-xl border border-gray-200 p-5">
+    <p class="text-xs font-medium text-gray-500 uppercase tracking-wide">Total Customers</p>
+    <p class="mt-2 text-3xl font-bold text-gray-900">{{ stats.total_customers }}</p>
+  </div>
+
+  <div class="bg-white rounded-xl border border-red-200 p-5">
+    <p class="text-xs font-medium text-red-500 uppercase tracking-wide">Prime Targets</p>
+    <p class="mt-2 text-3xl font-bold text-red-600">{{ stats.prime_count }}</p>
+    <p class="mt-1 text-xs text-gray-400">Dormant 365+ days, never contacted</p>
+  </div>
+
+  <div class="bg-white rounded-xl border border-gray-200 p-5">
+    <p class="text-xs font-medium text-gray-500 uppercase tracking-wide">Revenue at Risk</p>
+    <p class="mt-2 text-3xl font-bold text-gray-900">${{ "{:,.0f}".format(stats.prime_revenue) }}</p>
+    <p class="mt-1 text-xs text-gray-400">From prime targets</p>
+  </div>
+
+  <div class="bg-white rounded-xl border border-gray-200 p-5">
+    <p class="text-xs font-medium text-gray-500 uppercase tracking-wide">Avg Days Dormant</p>
+    <p class="mt-2 text-3xl font-bold text-gray-900">{{ stats.avg_days_dormant }}</p>
+    <p class="mt-1 text-xs text-gray-400">Among prime targets</p>
+  </div>
+
+</div>
+
+<!-- Category tabs -->
+<div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
+
+  <!-- Tab bar -->
+  <div class="border-b border-gray-200 px-6">
+    <nav class="-mb-px flex gap-6 overflow-x-auto" id="tab-nav">
+      {% set tabs = [
+        ("prime",       "🎯 Prime Targets",  stats.prime_count,        "text-red-600 border-red-500"),
+        ("warming",     "⚡ Warming Up",      stats.warming_count,      "text-amber-600 border-amber-500"),
+        ("in_sequence", "📬 In Sequence",     stats.in_sequence_count,  "text-blue-600 border-blue-500"),
+        ("converted",   "✅ Converted",       stats.converted_count,    "text-green-600 border-green-500"),
+        ("recent",      "🕐 Recent",          categories.recent|length, "text-gray-600 border-gray-400"),
+      ] %}
+      {% for key, label, count, color in tabs %}
+      <button onclick="showTab('{{ key }}')" id="tab-btn-{{ key }}"
+              class="tab-btn whitespace-nowrap py-3 px-1 text-sm font-medium border-b-2 border-transparent text-gray-500 hover:text-gray-700 transition-colors">
+        {{ label }}
+        <span class="ml-1.5 text-xs font-semibold bg-gray-100 text-gray-600 rounded-full px-2 py-0.5">{{ count }}</span>
+      </button>
+      {% endfor %}
+    </nav>
+  </div>
+
+  <!-- Tab panels -->
+  {% for key, label, _, _ in tabs %}
+  <div id="tab-{{ key }}" class="tab-panel hidden">
+    {% set rows = categories[key] %}
+    {% if rows %}
+    <table class="w-full text-sm">
+      <thead>
+        <tr class="border-b border-gray-100 text-left">
+          <th class="px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Customer</th>
+          <th class="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Last Service</th>
+          <th class="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Days Dormant</th>
+          <th class="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Service Type</th>
+          <th class="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Total Spend</th>
+          <th class="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Status</th>
+          <th class="px-4 py-3"></th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-gray-50">
+        {% for c in rows %}
+        <tr class="hover:bg-gray-50 transition-colors">
+          <td class="px-6 py-3">
+            <a href="/customer/{{ c.id }}" class="font-medium text-gray-900 hover:text-indigo-600">{{ c.name }}</a>
+            <p class="text-xs text-gray-400">{{ c.email }}</p>
+          </td>
+          <td class="px-4 py-3 text-gray-600">
+            {% if c.last_service_date %}
+              {{ c.last_service_date.strftime('%b %d, %Y') }}
+            {% else %}—{% endif %}
+          </td>
+          <td class="px-4 py-3">
+            <span class="font-semibold {% if c.days_dormant >= 365 %}text-red-600{% elif c.days_dormant >= 180 %}text-amber-600{% else %}text-gray-600{% endif %}">
+              {{ c.days_dormant }}d
+            </span>
+          </td>
+          <td class="px-4 py-3 text-gray-600">{{ c.last_service_type or '—' }}</td>
+          <td class="px-4 py-3 text-gray-700 font-medium">${{ "{:,.0f}".format(c.total_spend) }}</td>
+          <td class="px-4 py-3">
+            {% set badge = {
+              "never_contacted": ("bg-gray-100 text-gray-600", "Never contacted"),
+              "outreach_sent":   ("bg-blue-100 text-blue-700", "Outreach sent"),
+              "sequence_step_2": ("bg-blue-100 text-blue-700", "Follow-up 1"),
+              "sequence_step_3": ("bg-blue-100 text-blue-700", "Follow-up 2"),
+              "replied":         ("bg-green-100 text-green-700", "Replied"),
+              "booked":          ("bg-green-100 text-green-700", "Booked"),
+              "sequence_complete": ("bg-gray-100 text-gray-600", "Sequence done"),
+              "unsubscribed":    ("bg-gray-100 text-gray-400", "Unsubscribed"),
+            } %}
+            {% set cls, text = badge.get(c.reactivation_status, ("bg-gray-100 text-gray-500", c.reactivation_status)) %}
+            <span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium {{ cls }}">{{ text }}</span>
+          </td>
+          <td class="px-4 py-3 text-right">
+            <a href="/customer/{{ c.id }}"
+               class="text-xs font-medium text-indigo-600 hover:text-indigo-800">View →</a>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <div class="py-12 text-center text-sm text-gray-400">No customers in this category.</div>
+    {% endif %}
+  </div>
+  {% endfor %}
+
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+  const tabs = ['prime', 'warming', 'in_sequence', 'converted', 'recent'];
+
+  function showTab(key) {
+    tabs.forEach(t => {
+      document.getElementById('tab-' + t).classList.add('hidden');
+      const btn = document.getElementById('tab-btn-' + t);
+      btn.classList.remove('border-indigo-500', 'text-indigo-600');
+      btn.classList.add('border-transparent', 'text-gray-500');
+    });
+    document.getElementById('tab-' + key).classList.remove('hidden');
+    const active = document.getElementById('tab-btn-' + key);
+    active.classList.remove('border-transparent', 'text-gray-500');
+    active.classList.add('border-indigo-500', 'text-indigo-600');
+  }
+
+  // Show prime targets by default (or warming if none)
+  const defaultTab = {{ '\'prime\'' if stats.prime_count > 0 else '\'warming\'' if stats.warming_count > 0 else '\'recent\'' }};
+  showTab(defaultTab);
+</script>
+{% endblock %}

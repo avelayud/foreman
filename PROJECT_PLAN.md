@@ -6,9 +6,10 @@
 
 ## Current Status
 
-**Active Phase:** Phase 2 ✅ Complete. Phase 3 next.
-**Current Step:** Tone profiler built and tested end-to-end against real Gmail. Voice profile stored in DB. Starting Phase 3: Reactivation Outreach Agent.
+**Active Phase:** Phase 2 ✅ Complete (including dashboard UI). Phase 3 next.
+**Current Step:** Dashboard, customer detail, and outreach queue UI built and deployed to Railway. Next: Phase 3 reactivation agent + dashboard iteration.
 **Last Updated:** 2026-03-09
+**Live URL:** https://web-production-3df3a.up.railway.app
 **GitHub:** https://github.com/avelayud/foreman
 
 ---
