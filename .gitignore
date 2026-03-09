@@ -35,3 +35,10 @@ credentials.json
 # Logs
 *.log
 logs/
+venv/
+.DS_Store
+__pycache__/
+*.pyc
+credentials.json
+*.db
+token.json
