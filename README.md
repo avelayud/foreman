@@ -112,8 +112,12 @@ python main.py
 
 ## Current Status
 
-**Phase 1 — In Progress**
+**Phase 1 — Complete** (project structure, data models, DB, seed data)  
+**Phase 2 — Environment setup in progress**  
 See `PROJECT_PLAN.md` for detailed task breakdown and current position.
+
+### GitHub
+https://github.com/avelayud/foreman
 
 ---
 

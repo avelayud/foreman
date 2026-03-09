@@ -1,4 +1,4 @@
-# FieldAgent — Project Plan & Status Tracker
+# Foreman — Project Plan & Status Tracker
 
 > **How to use this file:** At the start of every new chat session, share this file. It tells the AI assistant exactly where we are, what's built, what's next, and all relevant context so we can keep building without re-explaining.
 
@@ -6,10 +6,23 @@
 
 ## Current Status
 
-**Active Phase:** Phase 1 — Foundation  
-**Current Step:** Project scaffolding complete. Starting core data models.  
-**Last Updated:** 2026-03-08  
-**GitHub:** https://github.com/avelayud/foreman.git
+**Active Phase:** Phase 1 ✅ Complete. Phase 2 environment setup in progress.
+**Current Step:** Files on disk + pushed to GitHub. Completing non-code setup (venv deps, .env, Google OAuth, Railway) before building tone profiler.
+**Last Updated:** 2026-03-09
+**GitHub:** https://github.com/avelayud/foreman
+
+---
+
+## Non-Code Setup Checklist (Complete Before Building)
+
+- [ ] Regenerate Anthropic API key (previous one was exposed — do this at console.anthropic.com)
+- [ ] Create `.env` from `.env.example` and paste new API key
+- [ ] Run `pip install -r requirements.txt` inside activated venv
+- [ ] Run `python main.py --seed` — confirm 20 customers load
+- [ ] Run `python main.py` — confirm clean startup
+- [ ] Google Cloud Console: create project `foreman-dev`, enable Gmail API, create OAuth credentials, download `credentials.json`
+- [ ] Add `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` to `.env`
+- [ ] Railway: sign up at railway.app with GitHub, link to `avelayud/foreman`
 
 ---
 
@@ -17,8 +30,8 @@
 
 | Phase | Name | Status | Est. Time |
 |---|---|---|---|
-| 1 | Foundation (models, config, DB) | 🟡 In Progress | Week 1 |
-| 2 | Tone Profiler Agent | ⬜ Not Started | Week 1-2 |
+| 1 | Foundation (models, config, DB) | ✅ Complete | Week 1 |
+| 2 | Tone Profiler Agent | 🟡 In Progress | Week 1-2 |
 | 3 | Reactivation Outreach Agent (Email) | ⬜ Not Started | Week 2 |
 | 4 | Follow-up Sequence Engine | ⬜ Not Started | Week 2 |
 | 5 | SMS Channel (Twilio) | ⬜ Not Started | Week 3 |
@@ -34,281 +47,188 @@
 
 ---
 
-## Phase 1 — Foundation
+## Phase 1 — Foundation ✅ COMPLETE
 
-**Goal:** Get the data models, database, and config infrastructure in place so every agent has a clean foundation to build on.
-
-**Why this first:** Every agent needs to read/write Operators, Customers, Jobs, and Bookings. Getting this right now prevents refactoring later.
-
-### Tasks
-
-- [x] Create project directory structure
-- [x] Create README.md
-- [x] Create PROJECT_PLAN.md
-- [ ] `core/config.py` — env var loading, API key management
-- [ ] `core/models.py` — SQLAlchemy models: Operator, Customer, Job, Booking, OutreachLog
-- [ ] `core/database.py` — SQLite setup, session management, init script
-- [ ] `requirements.txt` — all dependencies pinned
-- [ ] `.env.example` — template with all required keys
-- [ ] `main.py` — basic entry point that initializes DB and runs agent loop
-- [ ] Load sample data — 20-30 fake HVAC customers with realistic service history
-- [ ] Confirm DB initializes and sample data loads cleanly
-
-### Data Models (design)
-
-```
-Operator
-  - id, name, business_name, email, phone
-  - tone_profile (JSON) ← output of tone profiler agent
-  - niche (hvac | plumbing | electrical | ...)
-  - onboarding_complete (bool)
-  - integrations (JSON) ← which services are connected
-
-Customer
-  - id, operator_id (FK)
-  - name, email, phone
-  - last_service_date, last_service_type
-  - total_jobs, total_spend
-  - reactivation_status (never_contacted | outreach_sent | replied | booked | unsubscribed)
-  - notes
-
-Job
-  - id, customer_id (FK), operator_id (FK)
-  - service_type, scheduled_at, completed_at
-  - status (scheduled | complete | cancelled | no_show)
-  - amount, notes
-
-Booking
-  - id, customer_id (FK), operator_id (FK)
-  - slot_start, slot_end
-  - status (tentative | confirmed | cancelled)
-  - source (ai_outreach | customer_initiated | manual)
-  - created_at
-
-OutreachLog
-  - id, customer_id (FK), operator_id (FK)
-  - channel (email | sms)
-  - direction (outbound | inbound)
-  - content, sent_at
-  - opened (bool), replied (bool), reply_content
-  - sequence_step (int) ← which step in follow-up sequence
-```
+All core infrastructure is built and verified:
+- Project directory structure
+- SQLAlchemy models: Operator, Customer, Job, Booking, OutreachLog
+- DB initialization and session management
+- Config and environment variable management
+- Sample data seed script (20 HVAC customers)
+- Entry point (main.py) with --seed and --dry-run flags
+- README.md, .env.example, .gitignore, requirements.txt
 
 ---
 
-## Phase 2 — Tone Profiler Agent
+## Phase 2 — Tone Profiler Agent 🟡 IN PROGRESS
 
-**Goal:** Read the operator's existing sent emails (via Gmail OAuth or pasted samples), extract their writing style, and store a "voice profile" used by all future outreach.
+**Goal:** Read the operator's existing sent Gmail, extract their writing style, store a "voice profile" used by all future outreach.
 
 **File:** `agents/tone_profiler.py`
+**Depends on:** Gmail OAuth (`integrations/gmail.py`)
 
 ### What it does
-1. Accepts either: Gmail OAuth (reads last 20-30 sent emails) OR pasted email samples
-2. Sends samples to Claude with a prompt that extracts:
+1. Authenticates with Gmail via OAuth
+2. Reads last 25-30 sent emails
+3. Sends samples to Claude with a voice extraction prompt that identifies:
    - Formality level (casual / semi-formal / formal)
    - Greeting style ("Hey John" vs "Hi John," vs "Hello")
-   - Sign-off style ("Thanks, Mike" vs "Best regards")
-   - Sentence length tendency
+   - Sign-off style ("Thanks, Mike" vs "Best, Mike")
+   - Sentence length and structure tendency
    - Use of humor or regional phrasing
-   - Emoji usage (yes/no)
-3. Stores voice profile as JSON on the Operator record
-4. Generates 2-3 sample reactivation messages using that profile for operator review
+   - Emoji usage
+4. Stores voice profile as JSON on the Operator record
+5. Generates 2-3 sample outreach messages using that profile for review
 
 ### Tasks
-- [ ] `agents/tone_profiler.py` — core logic
 - [ ] `integrations/gmail.py` — OAuth flow + read sent mail
-- [ ] Prompt engineering: voice extraction system prompt
-- [ ] Prompt engineering: "write in this voice" prefix prompt
-- [ ] Store profile in Operator.tone_profile
-- [ ] CLI test: run profiler on sample emails, review output
+- [ ] `agents/tone_profiler.py` — core profiling logic
+- [ ] Voice extraction prompt (system prompt for Claude)
+- [ ] "Write in this voice" prefix prompt (reused by all agents)
+- [ ] Store profile in Operator.tone_profile in DB
+- [ ] CLI test: `python -m agents.tone_profiler --operator-id 1`
 
 ---
 
 ## Phase 3 — Reactivation Outreach Agent (Email)
 
-**Goal:** Agent autonomously identifies dormant customers, drafts personalized reactivation emails in the operator's voice, and sends them on a schedule.
+**Goal:** Agent autonomously identifies dormant customers, drafts personalized reactivation emails in the operator's voice, sends on schedule.
 
 **File:** `agents/reactivation.py`
 
-### What it does
-1. Runs on schedule (daily, configurable)
-2. Queries customers where:
-   - `last_service_date` > 12 months ago (configurable threshold)
-   - `reactivation_status` == `never_contacted`
-3. For each candidate, calls Claude to draft a personalized email:
-   - Uses operator tone profile
-   - References actual service history ("last time we serviced your AC in June...")
-   - Includes a soft call to action ("would love to get you on the schedule")
-4. Sends via Gmail (if connected) or SendGrid
-5. Logs to OutreachLog, updates Customer.reactivation_status
-
-### Inputs to Claude (per customer)
-```
-- Operator name, business name, tone profile
-- Customer name, last service date, last service type
-- Season/month context
-- Niche-specific templates (HVAC: seasonal tune-up angle)
-```
+### Logic
+- Runs daily via APScheduler
+- Targets customers where last_service_date > 365 days ago AND reactivation_status == 'never_contacted'
+- Calls Claude with operator tone profile + customer service history
+- Sends via Gmail (if connected) or SendGrid fallback
+- Logs everything to OutreachLog
 
 ### Tasks
-- [ ] `agents/reactivation.py` — main agent logic
-- [ ] `integrations/sendgrid.py` — email sending
-- [ ] Prompt: reactivation email generation
-- [ ] Scheduling: APScheduler daily trigger
-- [ ] Dry-run mode: generate emails but don't send (for review)
-- [ ] Test run on sample data, review output quality
+- [ ] `agents/reactivation.py`
+- [ ] `integrations/sendgrid.py`
+- [ ] Reactivation email generation prompt
+- [ ] APScheduler daily trigger
+- [ ] Dry-run mode (generate + print, don't send)
 
 ---
 
 ## Phase 4 — Follow-up Sequence Engine
 
-**Goal:** If a customer doesn't respond to the first outreach, the agent automatically sends follow-up messages on a cadence.
-
 **File:** `agents/follow_up.py`
 
-### Sequence logic
+### Sequence
 ```
-Day 0:  Initial outreach (Phase 3)
-Day 3:  Follow-up #1 — softer, check-in tone
-Day 7:  Follow-up #2 — create light urgency ("slots filling up for the season")
-Day 14: Close loop — "I'll leave you alone, but reach out when ready"
-        → Update reactivation_status = 'sequence_complete'
+Day 0:   Initial outreach
+Day 3:   Follow-up #1 — softer check-in
+Day 7:   Follow-up #2 — light urgency
+Day 14:  Close loop — "I'll leave you alone"
 ```
 
 ### Tasks
-- [ ] `agents/follow_up.py` — state machine per customer
-- [ ] Sequence step tracking in OutreachLog
-- [ ] Prompt variants for each sequence step
-- [ ] Skip logic: if reply detected at any step → exit sequence
-- [ ] Test full sequence on sample data
+- [ ] State machine per customer (tracked via OutreachLog.sequence_step)
+- [ ] Prompt variants per step
+- [ ] Skip logic when reply is detected
 
 ---
 
 ## Phase 5 — SMS Channel (Twilio)
 
-**Goal:** All outreach and replies can happen via SMS. Most blue-collar customers prefer text.
-
-**File:** `agents/` (update reactivation + follow_up) + `integrations/twilio_sms.py`
-
-### What it adds
-- Operator gets a provisioned Twilio number (their "business SMS")
-- All outreach can be sent via SMS instead of (or in addition to) email
-- Inbound replies to that number are captured, logged, and trigger agent response
-- Operator gets SMS alerts on their personal phone for key events (new reply, new booking)
+**Goal:** All outreach and replies work via SMS. Blue-collar operators live in text.
 
 ### Tasks
-- [ ] `integrations/twilio_sms.py` — send + webhook receive
-- [ ] `api/routes.py` — Twilio webhook endpoint for inbound SMS
-- [ ] Inbound reply handler: parse reply, update OutreachLog, trigger follow-up branch
-- [ ] Operator notification: SMS to operator's personal number on key events
-- [ ] Test two-way SMS flow end to end
+- [ ] `integrations/twilio_sms.py`
+- [ ] `api/routes.py` — Twilio inbound webhook
+- [ ] Two-way reply handling
+- [ ] Operator alert SMS on key events
 
 ---
 
 ## Phase 6 — Booking Page + Slot Management
 
-**Goal:** Customers can see available slots and book directly without calling. Agent proposes booking links in outreach messages.
-
-### What it adds
-- Operator defines weekly availability (e.g., Mon-Fri 8am-5pm, 2hr slots)
-- Booking page hosted at `{business}.fieldagent.app`
-- Customer picks a slot, enters name/address, confirms
-- Booking written to DB, calendar blocked, operator notified
+**Goal:** Customers can self-book from a hosted page. Agent sends booking links in outreach.
 
 ### Tasks
-- [ ] Slot availability model (operator sets weekly schedule)
-- [ ] `api/routes.py` — booking API endpoints
-- [ ] Simple React booking page (or server-rendered for MVP)
-- [ ] Booking link generation (unique per outreach)
-- [ ] Conflict detection: block slot on booking, prevent double-book
+- [ ] Slot availability model
+- [ ] Booking API endpoints
+- [ ] Simple hosted booking page
+- [ ] Conflict detection
 
 ---
 
 ## Phase 7 — Confirmation + Reminder Loop
 
-**Goal:** Once booked, the customer receives automated confirmations and reminders. No more no-shows.
-
 ### Sequence
 ```
-Immediately after booking: Confirmation SMS + email
-24 hours before:           Reminder SMS ("Mike from ABC HVAC tomorrow at 2pm. Reply CONFIRM or RESCHEDULE")
-2 hours before:            "On my way" trigger (operator initiates, customer gets ETA)
-After job:                 Thank you + review request (24hrs post-complete)
+On booking:      Confirmation SMS + email
+24hrs before:    Reminder SMS with CONFIRM/RESCHEDULE option
+2hrs before:     On-my-way trigger
+After job:       Review request (24hrs post-complete)
 ```
 
-### Tasks
-- [ ] APScheduler jobs for reminder timing
-- [ ] RESCHEDULE reply handler → re-open slot, send new booking link
-- [ ] Job status update: operator marks job complete via SMS command or simple UI
-- [ ] Review solicitation trigger on job completion
+---
+
+## Phases 8-12 (Future — see earlier phases for detail)
+
+- Phase 8: Google Calendar OAuth sync
+- Phase 9: Review solicitation agent
+- Phase 10: Operator dashboard (mobile-first)
+- Phase 11: Dynamic onboarding flow
+- Phase 12: Niche config layer (expand beyond HVAC)
 
 ---
 
-## Phase 8 — Google Calendar OAuth Sync
+## Decisions & Context Log
 
-**Goal:** If operator already uses Google Calendar, sync bi-directionally so there are never conflicts.
-
-### Tasks
-- [ ] `integrations/gcal.py` — OAuth flow + read/write
-- [ ] On booking: write event to Google Cal
-- [ ] On Google Cal event creation: block slot in FieldAgent
-- [ ] Periodic sync job (every 15min) to catch manual calendar additions
-
----
-
-## Phases 9-12 (Future)
-
-Brief descriptions — will be expanded when we get there.
-
-**Phase 9 — Review Solicitation Agent**
-After job marked complete, agent sends personalized review request with Google Maps link. Tracks if review was left.
-
-**Phase 10 — Basic Operator Dashboard**
-Mobile-first web UI. Shows: today's jobs, AI activity log (what ran, what's pending approval), customer list, outreach stats. Replaces the "weekly email digest" placeholder.
-
-**Phase 11 — Dynamic Onboarding Flow**
-Conversational setup wizard. Detects what the operator has (Gmail? Google Cal? Nothing?) and configures integrations accordingly. Provisions what's missing.
-
-**Phase 12 — Niche Config Layer**
-Service-type templates for HVAC, plumbing, electrical, landscaping, cleaning. Different seasonal triggers, terminology, follow-up cadences. This is how we expand without rebuilding.
-
----
-
-## Decisions & Open Questions Log
-
-| Date | Topic | Decision / Status |
+| Date | Topic | Decision |
 |---|---|---|
+| 2026-03-08 | Product name | Foreman |
 | 2026-03-08 | Niche focus | HVAC/plumbing first. Infrastructure designed to expand. |
-| 2026-03-08 | Build order | Product A (reactivation agent) before Product B (full OS) |
+| 2026-03-08 | Build order | Reactivation agent (Product A) before full OS (Product B) |
 | 2026-03-08 | SMS vs email | SMS is primary channel. Email is fallback/supplement. |
-| 2026-03-08 | Calendar conflict strategy | Soft-confirm for AI bookings. Hard block on any booking. |
+| 2026-03-08 | Calendar conflict | Soft-confirm for AI bookings. Hard block on any booking. |
 | 2026-03-08 | Pricing target | $29-49/mo. Below Jobber. |
 | 2026-03-08 | DB for dev | SQLite → Postgres for prod |
-| 2026-03-08 | Frontend timing | Defer React dashboard. Use SMS + email summaries as UI substitute early on. |
-| TBD | Hosting | TBD — likely Railway or Render for easy Python deploy |
-| TBD | Auth | TBD — simple API key for MVP, OAuth for operators later |
+| 2026-03-09 | Deployment | Railway (Python-native) over Vercel for backend |
+| 2026-03-09 | Frontend | Defer React dashboard. SMS + email summaries as UI substitute early. |
 
 ---
 
 ## Environment Variables Required
 
-See `.env.example`. Keys needed:
-
 ```
-ANTHROPIC_API_KEY        # Claude API
-SENDGRID_API_KEY         # Email sending
-TWILIO_ACCOUNT_SID       # SMS
+ANTHROPIC_API_KEY        # Claude API — get from console.anthropic.com
+SENDGRID_API_KEY         # Email sending — sendgrid.com (Phase 3)
+TWILIO_ACCOUNT_SID       # SMS — twilio.com (Phase 5)
 TWILIO_AUTH_TOKEN        # SMS
 TWILIO_FROM_NUMBER       # Provisioned SMS number
 GOOGLE_CLIENT_ID         # Gmail + Calendar OAuth
 GOOGLE_CLIENT_SECRET     # Gmail + Calendar OAuth
-DATABASE_URL             # SQLite path or Postgres URL
+DATABASE_URL             # Default: sqlite:///./foreman.db
 ```
 
 ---
 
 ## How to Resume in a New Chat
 
-1. Share this file (`PROJECT_PLAN.md`) and `README.md` with the new session
-2. Say: *"I'm continuing to build FieldAgent. Here's the project plan. We're currently on [phase]. Let's work on [next task]."*
-3. The assistant should be able to pick up exactly where we left off.
+1. Share `PROJECT_PLAN.md` with the new session
+2. Say: *"I'm continuing to build Foreman. Here's the project plan. Current step: [copy from Current Status above]. Let's work on [next task]."*
+3. The assistant will have full context and can keep building.
+
+---
+
+## Starter Prompt for Claude Code
+
+Once your environment is set up and you're in Claude Code, use this to kick off Phase 2:
+
+```
+I'm building Foreman — an AI reengagement platform for HVAC/plumbing contractors.
+Phase 1 (foundation) is complete. Here is the PROJECT_PLAN.md: [paste file]
+
+We are starting Phase 2: the Tone Profiler Agent.
+The repo is at https://github.com/avelayud/foreman
+Local path: /Users/arjunavelayudam/Desktop/Coding/foreman
+
+Start by building integrations/gmail.py (Gmail OAuth + read sent emails),
+then agents/tone_profiler.py (send emails to Claude, extract voice profile, store on Operator).
+Use dry-run mode. I want to run this against my own Gmail and see my voice profile output.
+```
