@@ -30,7 +30,7 @@ class Operator(Base):
 
     # Business type — controls templates, seasonal logic, terminology
     niche = Column(
-        Enum("hvac", "plumbing", "electrical", "landscaping", "cleaning", "other"),
+        Enum("hvac", "plumbing", "electrical", "landscaping", "cleaning", "other", native_enum=False),
         default="hvac"
     )
 
@@ -104,7 +104,8 @@ class Customer(Base):
             "sequence_complete",
             "replied",
             "booked",
-            "unsubscribed"
+            "unsubscribed",
+            native_enum=False
         ),
         default="never_contacted"
     )
@@ -139,7 +140,7 @@ class Job(Base):
     completed_at = Column(DateTime)
 
     status = Column(
-        Enum("scheduled", "complete", "cancelled", "no_show"),
+        Enum("scheduled", "complete", "cancelled", "no_show", native_enum=False),
         default="scheduled"
     )
 
@@ -170,13 +171,13 @@ class Booking(Base):
     slot_end = Column(DateTime, nullable=False)
 
     status = Column(
-        Enum("tentative", "confirmed", "cancelled", "complete"),
+        Enum("tentative", "confirmed", "cancelled", "complete", native_enum=False),
         default="tentative"
     )
 
     # How was this booking created?
     source = Column(
-        Enum("ai_outreach", "customer_initiated", "manual", "phone"),
+        Enum("ai_outreach", "customer_initiated", "manual", "phone", native_enum=False),
         default="manual"
     )
 
@@ -204,8 +205,8 @@ class OutreachLog(Base):
     operator_id = Column(Integer, ForeignKey("operators.id"), nullable=False)
     customer_id = Column(Integer, ForeignKey("customers.id"), nullable=False)
 
-    channel = Column(Enum("email", "sms"), nullable=False)
-    direction = Column(Enum("outbound", "inbound"), nullable=False)
+    channel = Column(Enum("email", "sms", native_enum=False), nullable=False)
+    direction = Column(Enum("outbound", "inbound", native_enum=False), nullable=False)
 
     content = Column(Text, nullable=False)
     subject = Column(String)   # Email subject if applicable
