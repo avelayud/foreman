@@ -6,8 +6,8 @@
 
 ## Current Status
 
-**Active Phase:** Phase 1 ✅ Complete. Phase 2 environment setup in progress.
-**Current Step:** Files on disk + pushed to GitHub. Completing non-code setup (venv deps, .env, Google OAuth, Railway) before building tone profiler.
+**Active Phase:** Phase 2 ✅ Complete. Phase 3 next.
+**Current Step:** Tone profiler built and tested end-to-end against real Gmail. Voice profile stored in DB. Starting Phase 3: Reactivation Outreach Agent.
 **Last Updated:** 2026-03-09
 **GitHub:** https://github.com/avelayud/foreman
 
@@ -31,7 +31,7 @@
 | Phase | Name | Status | Est. Time |
 |---|---|---|---|
 | 1 | Foundation (models, config, DB) | ✅ Complete | Week 1 |
-| 2 | Tone Profiler Agent | 🟡 In Progress | Week 1-2 |
+| 2 | Tone Profiler Agent | ✅ Complete | Week 1-2 |
 | 3 | Reactivation Outreach Agent (Email) | ⬜ Not Started | Week 2 |
 | 4 | Follow-up Sequence Engine | ⬜ Not Started | Week 2 |
 | 5 | SMS Channel (Twilio) | ⬜ Not Started | Week 3 |
@@ -60,7 +60,7 @@ All core infrastructure is built and verified:
 
 ---
 
-## Phase 2 — Tone Profiler Agent 🟡 IN PROGRESS
+## Phase 2 — Tone Profiler Agent ✅ COMPLETE
 
 **Goal:** Read the operator's existing sent Gmail, extract their writing style, store a "voice profile" used by all future outreach.
 
@@ -81,12 +81,12 @@ All core infrastructure is built and verified:
 5. Generates 2-3 sample outreach messages using that profile for review
 
 ### Tasks
-- [ ] `integrations/gmail.py` — OAuth flow + read sent mail
-- [ ] `agents/tone_profiler.py` — core profiling logic
-- [ ] Voice extraction prompt (system prompt for Claude)
-- [ ] "Write in this voice" prefix prompt (reused by all agents)
-- [ ] Store profile in Operator.tone_profile in DB
-- [ ] CLI test: `python -m agents.tone_profiler --operator-id 1`
+- [x] `integrations/gmail.py` — OAuth flow + read sent mail
+- [x] `agents/tone_profiler.py` — core profiling logic
+- [x] Voice extraction prompt (system prompt for Claude)
+- [x] "Write in this voice" prefix prompt (reused by all agents)
+- [x] Store profile in Operator.tone_profile in DB
+- [x] CLI test: `python -m agents.tone_profiler --operator-id 1`
 
 ---
 
