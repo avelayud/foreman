@@ -9,7 +9,7 @@
 **Active Phase:** Phase 1 — Foundation  
 **Current Step:** Project scaffolding complete. Starting core data models.  
 **Last Updated:** 2026-03-08  
-**GitHub:** *(add repo URL here once pushed)*
+**GitHub:** https://github.com/avelayud/foreman.git
 
 ---
 
