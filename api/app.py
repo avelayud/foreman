@@ -93,8 +93,14 @@ def dashboard(request: Request):
     with get_db() as db:
         operator = db.query(Operator).filter_by(id=OPERATOR_ID).first()
         raw_customers = db.query(Customer).filter_by(operator_id=OPERATOR_ID).all()
-
-    customers = sorted([enrich(c) for c in raw_customers], key=lambda x: x["days_dormant"], reverse=True)
+        operator_data = {
+            "id": operator.id,
+            "name": operator.name,
+            "business_name": operator.business_name,
+            "niche": operator.niche,
+            "onboarding_complete": operator.onboarding_complete,
+        }
+        customers = sorted([enrich(c) for c in raw_customers], key=lambda x: x["days_dormant"], reverse=True)
 
     cats = {k: [] for k in ("prime", "warming", "in_sequence", "converted", "recent", "unsubscribed")}
     for c in customers:
@@ -117,7 +123,7 @@ def dashboard(request: Request):
     return templates.TemplateResponse("dashboard.html", {
         "request": request,
         "active": "dashboard",
-        "operator": operator,
+        "operator": operator_data,
         "stats": stats,
         "categories": cats,
     })
@@ -130,14 +136,28 @@ def customer_detail(request: Request, customer_id: int):
         if not customer:
             raise HTTPException(status_code=404, detail="Customer not found")
         operator = db.query(Operator).filter_by(id=OPERATOR_ID).first()
-        jobs = db.query(Job).filter_by(customer_id=customer_id).order_by(Job.completed_at.desc()).all()
-        logs = db.query(OutreachLog).filter_by(customer_id=customer_id).order_by(OutreachLog.sent_at.desc()).all()
+        jobs_raw = db.query(Job).filter_by(customer_id=customer_id).order_by(Job.completed_at.desc()).all()
+        logs_raw = db.query(OutreachLog).filter_by(customer_id=customer_id).order_by(OutreachLog.sent_at.desc()).all()
+
+        operator_data = {
+            "id": operator.id,
+            "name": operator.name,
+            "business_name": operator.business_name,
+            "niche": operator.niche,
+            "onboarding_complete": operator.onboarding_complete,
+        }
+        customer_data = enrich(customer)
+        jobs = [{"service_type": j.service_type, "completed_at": j.completed_at,
+                 "status": j.status, "amount": j.amount} for j in jobs_raw]
+        logs = [{"id": l.id, "subject": l.subject, "content": l.content,
+                 "sent_at": l.sent_at, "dry_run": l.dry_run, "sequence_step": l.sequence_step}
+                for l in logs_raw]
 
     return templates.TemplateResponse("customer.html", {
         "request": request,
         "active": "customers",
-        "operator": operator,
-        "customer": enrich(customer),
+        "operator": operator_data,
+        "customer": customer_data,
         "jobs": jobs,
         "logs": logs,
     })
@@ -154,25 +174,31 @@ def outreach_queue(request: Request):
             .order_by(OutreachLog.created_at.desc())
             .all()
         )
-
-    items = [
-        {
-            "log_id": log.id,
-            "customer_id": customer.id,
-            "customer_name": customer.name,
-            "subject": log.subject,
-            "content": log.content,
-            "created_at": log.created_at,
-            "dry_run": log.dry_run,
-            "sequence_step": log.sequence_step,
+        operator_data = {
+            "id": operator.id,
+            "name": operator.name,
+            "business_name": operator.business_name,
+            "niche": operator.niche,
+            "onboarding_complete": operator.onboarding_complete,
         }
-        for log, customer in rows
-    ]
+        items = [
+            {
+                "log_id": log.id,
+                "customer_id": customer.id,
+                "customer_name": customer.name,
+                "subject": log.subject,
+                "content": log.content,
+                "created_at": log.created_at,
+                "dry_run": log.dry_run,
+                "sequence_step": log.sequence_step,
+            }
+            for log, customer in rows
+        ]
 
     return templates.TemplateResponse("outreach.html", {
         "request": request,
         "active": "outreach",
-        "operator": operator,
+        "operator": operator_data,
         "items": items,
     })
 
