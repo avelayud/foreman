@@ -69,6 +69,9 @@
         <div class="agent-stat">
           <div class="agent-stat-label">{{ agent.stat_label }}</div>
           <div class="agent-stat-value">{{ agent.stat_value }}</div>
+          {% if agent.stat_meta %}
+          <div class="agent-stat-meta">{{ agent.stat_meta }}</div>
+          {% endif %}
         </div>
         {% endif %}
         {% if agent.last_run_at %}

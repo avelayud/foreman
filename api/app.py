@@ -17,7 +17,7 @@ JSON API:
 """
 
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 import anthropic
@@ -69,6 +69,41 @@ def _get_queue_count(db) -> int:
     return db.query(OutreachLog).filter_by(
         operator_id=OPERATOR_ID, dry_run=True
     ).count()
+
+
+def _parse_iso_datetime(value: str):
+    if not value:
+        return None
+    try:
+        dt = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        if dt.tzinfo:
+            return dt.astimezone(timezone.utc).replace(tzinfo=None)
+        return dt
+    except (TypeError, ValueError):
+        return None
+
+
+def _normalize_customer_profile(profile: dict | None) -> dict:
+    profile = profile or {}
+    topics = profile.get("topics_discussed")
+    concerns = profile.get("prior_concerns")
+    try:
+        email_count = int(profile.get("email_count") or 0)
+    except (TypeError, ValueError):
+        email_count = 0
+
+    return {
+        "relationship_history": profile.get("relationship_history") or "",
+        "topics_discussed": topics if isinstance(topics, list) else [],
+        "customer_tone": profile.get("customer_tone") or "unknown",
+        "prior_concerns": concerns if isinstance(concerns, list) else [],
+        "response_patterns": profile.get("response_patterns") or "",
+        "interest_signals": profile.get("interest_signals") or "",
+        "context_notes": profile.get("context_notes") or "",
+        "analyzed_at": _parse_iso_datetime(profile.get("analyzed_at")),
+        "email_count": email_count,
+    }
+
 
 def days_since(dt) -> int:
     if not dt:
@@ -231,6 +266,7 @@ def customer_detail(request: Request, customer_id: int):
         customer_data = enrich(customer)
         customer_data = add_segment(customer_data)
         customer_data["assigned_voice_id"] = customer.assigned_voice_id
+        customer_data["customer_profile"] = _normalize_customer_profile(customer.customer_profile)
         jobs = [{"service_type": j.service_type, "completed_at": j.completed_at,
                  "status": j.status, "amount": j.amount} for j in jobs_raw]
         logs = [{"id": l.id, "subject": l.subject, "content": l.content,
@@ -560,9 +596,9 @@ def agent_status():
         op = db.query(Operator).filter_by(id=OPERATOR_ID).first()
         tone_profile_set = bool(op.tone_profile) if op else False
 
-        latest_log = (
+        latest_reactivation_log = (
             db.query(OutreachLog)
-            .filter_by(operator_id=OPERATOR_ID, sequence_step=0)
+            .filter_by(operator_id=OPERATOR_ID, sequence_step=0, direction="outbound")
             .order_by(OutreachLog.created_at.desc())
             .first()
         )
@@ -571,7 +607,54 @@ def agent_status():
             .filter_by(operator_id=OPERATOR_ID, dry_run=True)
             .count()
         )
-        last_run_at = latest_log.created_at.isoformat() if latest_log else None
+        last_reactivation_run = (
+            latest_reactivation_log.created_at.isoformat()
+            if latest_reactivation_log else None
+        )
+
+        customer_profiles = 0
+        latest_analyzed = None
+        customers = db.query(Customer).filter_by(operator_id=OPERATOR_ID).all()
+        for customer in customers:
+            profile = _normalize_customer_profile(customer.customer_profile)
+            if profile["analyzed_at"]:
+                customer_profiles += 1
+                if not latest_analyzed or profile["analyzed_at"] > latest_analyzed:
+                    latest_analyzed = profile["analyzed_at"]
+
+        tracked_threads = (
+            db.query(OutreachLog.gmail_thread_id)
+            .filter(
+                OutreachLog.operator_id == OPERATOR_ID,
+                OutreachLog.dry_run == False,
+                OutreachLog.direction == "outbound",
+                OutreachLog.gmail_thread_id != None,
+            )
+            .distinct()
+            .count()
+        )
+        inbound_replies = (
+            db.query(OutreachLog)
+            .filter_by(operator_id=OPERATOR_ID, direction="inbound")
+            .count()
+        )
+        follow_up_drafts = (
+            db.query(OutreachLog)
+            .filter(
+                OutreachLog.operator_id == OPERATOR_ID,
+                OutreachLog.dry_run == True,
+                OutreachLog.sequence_step > 0,
+            )
+            .count()
+        )
+        active_sequences = (
+            db.query(Customer)
+            .filter(
+                Customer.operator_id == OPERATOR_ID,
+                Customer.reactivation_status.in_(("outreach_sent", "sequence_step_2", "sequence_step_3")),
+            )
+            .count()
+        )
 
     return {
         "tone_profiler": {
@@ -580,9 +663,27 @@ def agent_status():
         },
         "reactivation": {
             "configured": True,
-            "last_run_at": last_run_at,
+            "last_run_at": last_reactivation_run,
             "queued_count": queued_count,
             "description": "Scans dormant customers and queues email drafts",
+        },
+        "customer_analyzer": {
+            "configured": True,
+            "profiles_built": customer_profiles,
+            "last_run_at": latest_analyzed.isoformat() if latest_analyzed else None,
+            "description": "Builds customer relationship profiles from prior correspondence",
+        },
+        "reply_detector": {
+            "configured": True,
+            "tracked_threads": tracked_threads,
+            "replies_detected": inbound_replies,
+            "description": "Detects customer replies using Gmail thread IDs",
+        },
+        "follow_up": {
+            "configured": True,
+            "active_sequences": active_sequences,
+            "drafts_queued": follow_up_drafts,
+            "description": "Queues context-aware follow-up drafts at Day 3/7/14",
         },
     }
 
@@ -594,15 +695,15 @@ def agents_page(request: Request):
         operator_data = _operator_data(op)
         tone_profile_set = bool(op.tone_profile) if op else False
 
-        latest_log = (
+        latest_reactivation_log = (
             db.query(OutreachLog)
-            .filter_by(operator_id=OPERATOR_ID, sequence_step=0)
+            .filter_by(operator_id=OPERATOR_ID, sequence_step=0, direction="outbound")
             .order_by(OutreachLog.created_at.desc())
             .first()
         )
-        total_drafted = (
+        total_reactivation_drafts = (
             db.query(OutreachLog)
-            .filter_by(operator_id=OPERATOR_ID, sequence_step=0)
+            .filter_by(operator_id=OPERATOR_ID, sequence_step=0, direction="outbound")
             .count()
         )
         queued_count = (
@@ -610,7 +711,74 @@ def agents_page(request: Request):
             .filter_by(operator_id=OPERATOR_ID, dry_run=True)
             .count()
         )
-        last_run_at = latest_log.created_at if latest_log else None
+        last_reactivation_run = latest_reactivation_log.created_at if latest_reactivation_log else None
+
+        analyzed_profiles = 0
+        with_history = 0
+        latest_analyzed_at = None
+        customers = db.query(Customer).filter_by(operator_id=OPERATOR_ID).all()
+        for customer in customers:
+            profile = _normalize_customer_profile(customer.customer_profile)
+            if not profile["analyzed_at"]:
+                continue
+            analyzed_profiles += 1
+            if profile["email_count"] > 0:
+                with_history += 1
+            if not latest_analyzed_at or profile["analyzed_at"] > latest_analyzed_at:
+                latest_analyzed_at = profile["analyzed_at"]
+
+        tracked_threads = (
+            db.query(OutreachLog.gmail_thread_id)
+            .filter(
+                OutreachLog.operator_id == OPERATOR_ID,
+                OutreachLog.dry_run == False,
+                OutreachLog.direction == "outbound",
+                OutreachLog.gmail_thread_id != None,
+            )
+            .distinct()
+            .count()
+        )
+        replies_detected = (
+            db.query(OutreachLog)
+            .filter_by(operator_id=OPERATOR_ID, direction="inbound")
+            .count()
+        )
+        latest_reply = (
+            db.query(OutreachLog)
+            .filter_by(operator_id=OPERATOR_ID, direction="inbound")
+            .order_by(OutreachLog.sent_at.desc(), OutreachLog.created_at.desc())
+            .first()
+        )
+        latest_reply_at = (latest_reply.sent_at or latest_reply.created_at) if latest_reply else None
+
+        follow_up_drafts = (
+            db.query(OutreachLog)
+            .filter(
+                OutreachLog.operator_id == OPERATOR_ID,
+                OutreachLog.dry_run == True,
+                OutreachLog.sequence_step > 0,
+            )
+            .count()
+        )
+        latest_follow_up = (
+            db.query(OutreachLog)
+            .filter(
+                OutreachLog.operator_id == OPERATOR_ID,
+                OutreachLog.sequence_step > 0,
+                OutreachLog.direction == "outbound",
+            )
+            .order_by(OutreachLog.created_at.desc())
+            .first()
+        )
+        latest_follow_up_at = latest_follow_up.created_at if latest_follow_up else None
+        active_sequences = (
+            db.query(Customer)
+            .filter(
+                Customer.operator_id == OPERATOR_ID,
+                Customer.reactivation_status.in_(("outreach_sent", "sequence_step_2", "sequence_step_3")),
+            )
+            .count()
+        )
 
     return templates.TemplateResponse("agents.html", {
         "request": request,
@@ -638,23 +806,52 @@ def agents_page(request: Request):
                 "description": "Scans for customers dormant 365+ days, ranks by priority score (days dormant × spend), generates personalized email drafts, and queues them for your review.",
                 "status": "active",
                 "status_label": "Active",
-                "last_run_at": last_run_at,
+                "last_run_at": last_reactivation_run,
                 "stat_label": "Drafts queued",
-                "stat_value": str(total_drafted),
+                "stat_value": str(total_reactivation_drafts),
                 "cli": "python -m agents.reactivation --operator-id 1 --limit 10",
                 "phase": "Phase 3",
+            },
+            {
+                "key": "customer_analyzer",
+                "name": "Customer Analyzer",
+                "icon": "🧠",
+                "description": "Builds a structured customer profile from prior Gmail correspondence and stores relationship context for more personalized drafts.",
+                "status": "active",
+                "status_label": "Active (auto-triggered)",
+                "last_run_at": latest_analyzed_at,
+                "stat_label": "Profiles built",
+                "stat_value": str(analyzed_profiles),
+                "stat_meta": f"{with_history} with prior email history",
+                "cli": "python -m agents.customer_analyzer --operator-id 1 --all",
+                "phase": "Phase 4",
+            },
+            {
+                "key": "reply_detector",
+                "name": "Reply Detector",
+                "icon": "📬",
+                "description": "Checks Gmail inbox by thread ID, logs inbound replies, marks customers as replied, and refreshes customer profiles from new context.",
+                "status": "active" if tracked_threads > 0 else "needs_setup",
+                "status_label": "Active (manual run)" if tracked_threads > 0 else "Waiting for sent Gmail threads",
+                "last_run_at": latest_reply_at,
+                "stat_label": "Replies detected",
+                "stat_value": str(replies_detected),
+                "stat_meta": f"{tracked_threads} tracked Gmail thread(s)",
+                "cli": "python -m agents.reply_detector --operator-id 1",
+                "phase": "Phase 4",
             },
             {
                 "key": "follow_up",
                 "name": "Follow-up Sequencer",
                 "icon": "🔁",
-                "description": "Sends follow-up emails at Day 3, Day 7, and Day 14 for customers who haven't replied. Stops automatically when a reply is detected.",
-                "status": "planned",
-                "status_label": "Planned — Phase 4",
-                "last_run_at": None,
-                "stat_label": None,
-                "stat_value": None,
-                "cli": None,
+                "description": "Queues follow-up drafts at Day 3, Day 7, and Day 14 using customer profile + thread context. Stops when a reply is detected.",
+                "status": "active",
+                "status_label": "Active (manual run)",
+                "last_run_at": latest_follow_up_at,
+                "stat_label": "Follow-ups queued",
+                "stat_value": str(follow_up_drafts),
+                "stat_meta": f"{active_sequences} customers in active sequence",
+                "cli": "python -m agents.follow_up --operator-id 1 --limit 20",
                 "phase": "Phase 4",
             },
             {

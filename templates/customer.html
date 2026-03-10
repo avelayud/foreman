@@ -104,6 +104,96 @@
 
 </div>
 
+{# ── CUSTOMER INTELLIGENCE PROFILE ── #}
+{% set profile = customer.customer_profile %}
+<div class="card" style="padding:22px 24px;margin-bottom:20px">
+  <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:14px">
+    <div>
+      <div style="font-size:11px;font-family:'IBM Plex Mono',monospace;letter-spacing:1.2px;text-transform:uppercase;color:var(--text-3);margin-bottom:4px">Customer Intelligence</div>
+      <div style="font-family:'Playfair Display',serif;font-size:22px;font-weight:700;color:var(--navy);line-height:1.15">Customer Analyzer Profile</div>
+    </div>
+    <div style="font-size:11px;color:var(--text-3);font-family:'IBM Plex Mono',monospace">
+      Source: Gmail correspondence + CRM history
+    </div>
+  </div>
+
+  <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:var(--border);border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-bottom:14px">
+    <div style="background:var(--surface);padding:12px 14px">
+      <div class="field-label">Emails Analyzed</div>
+      <div style="font-size:17px;font-weight:700;color:var(--navy);font-family:'Playfair Display',serif">{{ profile.email_count }}</div>
+    </div>
+    <div style="background:var(--surface);padding:12px 14px">
+      <div class="field-label">Last Analyzed</div>
+      <div style="font-size:12.5px;color:var(--text)">
+        {% if profile.analyzed_at %}
+          {{ profile.analyzed_at.strftime('%b %-d, %Y at %-I:%M %p') }} UTC
+        {% else %}
+          Not yet analyzed
+        {% endif %}
+      </div>
+    </div>
+    <div style="background:var(--surface);padding:12px 14px">
+      <div class="field-label">Customer Tone</div>
+      <div style="font-size:12.5px;color:var(--text)">{{ profile.customer_tone|default('unknown') }}</div>
+    </div>
+    <div style="background:var(--surface);padding:12px 14px">
+      <div class="field-label">Topics Captured</div>
+      <div style="font-size:17px;font-weight:700;color:var(--navy);font-family:'Playfair Display',serif">{{ profile.topics_discussed|length }}</div>
+    </div>
+  </div>
+
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+    <div style="padding:12px;border:1px solid var(--border);border-radius:8px;background:var(--bg)">
+      <div class="field-label">Relationship History</div>
+      <div style="font-size:12.8px;color:var(--text-2);line-height:1.55">
+        {{ profile.relationship_history or "No relationship narrative captured yet." }}
+      </div>
+    </div>
+    <div style="padding:12px;border:1px solid var(--border);border-radius:8px;background:var(--bg)">
+      <div class="field-label">Response Patterns</div>
+      <div style="font-size:12.8px;color:var(--text-2);line-height:1.55">
+        {{ profile.response_patterns or "No response pattern detected yet." }}
+      </div>
+    </div>
+    <div style="padding:12px;border:1px solid var(--border);border-radius:8px;background:var(--bg)">
+      <div class="field-label">Topics Discussed</div>
+      {% if profile.topics_discussed %}
+      <div style="display:flex;flex-wrap:wrap;gap:6px">
+        {% for topic in profile.topics_discussed %}
+        <span class="log-badge log-service">{{ topic }}</span>
+        {% endfor %}
+      </div>
+      {% else %}
+      <div style="font-size:12.8px;color:var(--text-3)">No topics captured yet.</div>
+      {% endif %}
+    </div>
+    <div style="padding:12px;border:1px solid var(--border);border-radius:8px;background:var(--bg)">
+      <div class="field-label">Prior Concerns</div>
+      {% if profile.prior_concerns %}
+      <div style="display:flex;flex-wrap:wrap;gap:6px">
+        {% for concern in profile.prior_concerns %}
+        <span class="log-badge log-email">{{ concern }}</span>
+        {% endfor %}
+      </div>
+      {% else %}
+      <div style="font-size:12.8px;color:var(--text-3)">No concerns captured yet.</div>
+      {% endif %}
+    </div>
+    <div style="padding:12px;border:1px solid var(--border);border-radius:8px;background:var(--bg)">
+      <div class="field-label">Interest Signals</div>
+      <div style="font-size:12.8px;color:var(--text-2);line-height:1.55">
+        {{ profile.interest_signals or "No specific intent signals detected yet." }}
+      </div>
+    </div>
+    <div style="padding:12px;border:1px solid var(--border);border-radius:8px;background:var(--bg)">
+      <div class="field-label">Context Notes</div>
+      <div style="font-size:12.8px;color:var(--text-2);line-height:1.55">
+        {{ profile.context_notes or "No additional context captured yet." }}
+      </div>
+    </div>
+  </div>
+</div>
+
 {# ── TWO-COLUMN LAYOUT ── #}
 <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;align-items:start">
 
