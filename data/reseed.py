@@ -142,6 +142,8 @@ Best, Arjuna"""
 def reseed(db_url=None):
     import os
     if db_url:
+        # NOTE: this only works if core modules haven't been imported yet.
+        # Prefer: DATABASE_URL="..." python -m data.reseed
         os.environ['DATABASE_URL'] = db_url
 
     init_db()
@@ -273,5 +275,8 @@ def reseed(db_url=None):
 
 if __name__ == "__main__":
     import sys
+    # DATABASE_URL must be set in the environment BEFORE importing core modules.
+    # Correct usage: DATABASE_URL="postgresql://..." python -m data.reseed
+    # The db_url arg is kept for backwards compat but env var is the reliable path.
     db_url = sys.argv[1] if len(sys.argv) > 1 else None
     reseed(db_url)
