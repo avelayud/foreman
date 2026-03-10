@@ -237,6 +237,20 @@ def customer_detail(request: Request, customer_id: int):
     })
 
 
+def _outreach_row(log, customer) -> dict:
+    return {
+        "log_id": log.id,
+        "customer_id": customer.id,
+        "customer_name": customer.name,
+        "subject": log.subject,
+        "content": log.content,
+        "created_at": log.created_at,
+        "sent_at": log.sent_at,
+        "dry_run": log.dry_run,
+        "sequence_step": log.sequence_step,
+    }
+
+
 @app.get("/outreach", response_class=HTMLResponse)
 def outreach_queue(request: Request):
     with get_db() as db:
@@ -244,34 +258,43 @@ def outreach_queue(request: Request):
         rows = (
             db.query(OutreachLog, Customer)
             .join(Customer, OutreachLog.customer_id == Customer.id)
-            .filter(OutreachLog.operator_id == OPERATOR_ID)
+            .filter(OutreachLog.operator_id == OPERATOR_ID, OutreachLog.dry_run == True)
             .order_by(OutreachLog.created_at.desc())
             .all()
         )
         operator_data = _operator_data(operator)
-
-        def _row(log, customer):
-            return {
-                "log_id": log.id,
-                "customer_id": customer.id,
-                "customer_name": customer.name,
-                "subject": log.subject,
-                "content": log.content,
-                "created_at": log.created_at,
-                "sent_at": log.sent_at,
-                "dry_run": log.dry_run,
-                "sequence_step": log.sequence_step,
-            }
-
-        pending = [_row(l, c) for l, c in rows if l.dry_run]
-        sent = [_row(l, c) for l, c in rows if not l.dry_run]
+        pending = [_outreach_row(l, c) for l, c in rows]
+        queue_count = len(pending)
 
     return templates.TemplateResponse("outreach.html", {
         "request": request,
         "active": "outreach",
         "operator": operator_data,
-        "queue_count": len(pending),
+        "queue_count": queue_count,
         "pending": pending,
+    })
+
+
+@app.get("/conversations", response_class=HTMLResponse)
+def conversations(request: Request):
+    with get_db() as db:
+        operator = db.query(Operator).filter_by(id=OPERATOR_ID).first()
+        rows = (
+            db.query(OutreachLog, Customer)
+            .join(Customer, OutreachLog.customer_id == Customer.id)
+            .filter(OutreachLog.operator_id == OPERATOR_ID, OutreachLog.dry_run == False)
+            .order_by(OutreachLog.sent_at.desc())
+            .all()
+        )
+        operator_data = _operator_data(operator)
+        queue_count = _get_queue_count(db)
+        sent = [_outreach_row(l, c) for l, c in rows]
+
+    return templates.TemplateResponse("conversations.html", {
+        "request": request,
+        "active": "conversations",
+        "operator": operator_data,
+        "queue_count": queue_count,
         "sent": sent,
     })
 
@@ -419,14 +442,22 @@ def generate_draft(customer_id: int, req: DraftRequest = None):
     return draft
 
 
-@app.post("/api/outreach/{log_id}/mark-sent")
-def mark_sent(log_id: int):
+class ApproveSendRequest(BaseModel):
+    subject: str
+    body: str
+
+
+@app.post("/api/outreach/{log_id}/approve-send")
+def approve_send(log_id: int, req: ApproveSendRequest):
+    """Save any edits and move draft from queue to Active Conversations."""
     with get_db() as db:
         log = db.query(OutreachLog).filter_by(id=log_id, operator_id=OPERATOR_ID).first()
         if not log:
             raise HTTPException(status_code=404, detail="Log entry not found")
+        log.subject = req.subject
+        log.content = req.body
         log.dry_run = False
-    return {"status": "sent", "log_id": log_id}
+    return {"status": "approved", "log_id": log_id}
 
 
 class ApproveRequest(BaseModel):

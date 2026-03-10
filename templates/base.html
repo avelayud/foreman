@@ -189,6 +189,9 @@
         <span style="margin-left:auto;background:var(--gold);color:#fff;font-size:9.5px;font-weight:600;font-family:'IBM Plex Mono',monospace;padding:1px 7px;border-radius:20px">{{ queue_count }}</span>
         {% endif %}
       </a>
+      <a href="/conversations" class="sb-link {% if active == 'conversations' %}active{% endif %}">
+        <span>💬</span> Conversations
+      </a>
       <div class="sb-section">Pipeline</div>
       <a href="/?tab=prime"     class="sb-link"><span style="font-size:11px">🎯</span> Prime Targets</a>
       <a href="/?tab=warming"   class="sb-link"><span style="font-size:11px">⚡</span> Warming Up</a>
