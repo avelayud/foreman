@@ -5,7 +5,7 @@ FastAPI application — serves the Foreman web UI and JSON API.
 Web pages:
   GET /               → Dashboard (metrics + customer categories)
   GET /customer/{id}  → Customer detail (history + draft outreach)
-  GET /outreach       → Outreach queue (approved drafts pending send)
+  GET /outreach       → Outreach queue (drafts pending approval/sending)
 
 JSON API:
   GET  /health
@@ -17,7 +17,9 @@ JSON API:
 """
 
 import json
-from datetime import datetime, timezone
+import threading
+import time
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import anthropic
@@ -36,6 +38,9 @@ TEMPLATES_DIR = Path(__file__).parent.parent / "templates"
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 
 OPERATOR_ID = 1  # Single-tenant for now
+SCHEDULE_POLL_SECONDS = 60
+_scheduled_sender_started = False
+_scheduled_sender_lock = threading.Lock()
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -51,7 +56,13 @@ def _operator_data(op) -> dict:
             "onboarding_complete": False,
             "voice_profiles": [],
             "tone_profile_set": False,
+            "outreach_mode": "dry_run",
+            "is_production_mode": False,
         }
+
+    outreach_mode = (op.outreach_mode or "dry_run").strip().lower()
+    if outreach_mode not in ("dry_run", "production"):
+        outreach_mode = "dry_run"
 
     return {
         "id": op.id,
@@ -61,11 +72,13 @@ def _operator_data(op) -> dict:
         "onboarding_complete": op.onboarding_complete,
         "voice_profiles": op.voice_profiles,
         "tone_profile_set": bool(op.tone_profile),
+        "outreach_mode": outreach_mode,
+        "is_production_mode": outreach_mode == "production",
     }
 
 
 def _get_queue_count(db) -> int:
-    """Count pending drafts (dry_run=True) for the sidebar badge."""
+    """Count unsent outreach items (dry_run=True) for the sidebar badge."""
     return db.query(OutreachLog).filter_by(
         operator_id=OPERATOR_ID, dry_run=True
     ).count()
@@ -81,6 +94,167 @@ def _parse_iso_datetime(value: str):
         return dt
     except (TypeError, ValueError):
         return None
+
+
+def _format_datetime_local(value: datetime | None) -> str:
+    if not value:
+        return ""
+    return value.strftime("%Y-%m-%dT%H:%M")
+
+
+def _next_business_send_time(now: datetime | None = None) -> datetime:
+    """
+    Choose a default send window during business hours.
+    - Weekdays only
+    - 9:00 AM to 5:00 PM local time
+    - Rounded to the next quarter hour
+    """
+    now = now or datetime.now()
+    candidate = now + timedelta(minutes=30)
+    candidate = candidate.replace(second=0, microsecond=0)
+
+    remainder = candidate.minute % 15
+    if remainder:
+        candidate += timedelta(minutes=(15 - remainder))
+
+    if candidate.hour < 9:
+        candidate = candidate.replace(hour=9, minute=0, second=0, microsecond=0)
+    elif candidate.hour >= 17:
+        candidate = (candidate + timedelta(days=1)).replace(
+            hour=9, minute=0, second=0, microsecond=0
+        )
+
+    while candidate.weekday() >= 5:
+        candidate = (candidate + timedelta(days=1)).replace(
+            hour=9, minute=0, second=0, microsecond=0
+        )
+
+    return candidate
+
+
+def _gmail_send_message(to: str, subject: str, body: str) -> str:
+    """Send a message through Gmail and return thread ID."""
+    from integrations.gmail import send_email as gmail_send
+
+    _, thread_id = gmail_send(to=to, subject=subject, body=body)
+    return thread_id
+
+
+def _deliver_outreach_log(
+    log_id: int,
+    *,
+    subject: str,
+    body: str,
+    customer_email: str | None,
+    scheduled_send_at: datetime | None = None,
+) -> tuple[str | None, str | None]:
+    """
+    Attempt to deliver an outreach message via Gmail and persist delivery status.
+    Returns (thread_id, send_error).
+    """
+    thread_id = None
+    send_error = None
+
+    if customer_email:
+        try:
+            thread_id = _gmail_send_message(
+                to=customer_email,
+                subject=subject,
+                body=body,
+            )
+        except Exception as exc:
+            send_error = str(exc)
+    else:
+        send_error = "Customer has no email address on file"
+
+    with get_db() as db:
+        log = db.query(OutreachLog).filter_by(id=log_id, operator_id=OPERATOR_ID).first()
+        if not log:
+            return None, "Log entry not found"
+
+        now_utc = datetime.utcnow()
+        log.approved_at = log.approved_at or now_utc
+
+        if thread_id:
+            log.dry_run = False
+            log.approval_status = "sent"
+            log.sent_at = now_utc
+            log.send_error = None
+            log.gmail_thread_id = thread_id
+        else:
+            log.dry_run = True
+            log.approval_status = "failed"
+            log.send_error = send_error or "Unknown send failure"
+
+        if scheduled_send_at is not None:
+            log.scheduled_send_at = scheduled_send_at
+
+    return thread_id, send_error
+
+
+def _process_scheduled_outreach_once():
+    """Send due scheduled outreach logs (production mode only)."""
+    now_utc = datetime.utcnow()
+    with get_db() as db:
+        due_rows = (
+            db.query(
+                OutreachLog.id,
+                OutreachLog.subject,
+                OutreachLog.content,
+                OutreachLog.scheduled_send_at,
+                Customer.email.label("customer_email"),
+            )
+            .join(Customer, OutreachLog.customer_id == Customer.id)
+            .join(Operator, OutreachLog.operator_id == Operator.id)
+            .filter(
+                OutreachLog.operator_id == OPERATOR_ID,
+                OutreachLog.dry_run == True,
+                OutreachLog.approval_status == "scheduled",
+                OutreachLog.scheduled_send_at != None,
+                OutreachLog.scheduled_send_at <= now_utc,
+                Operator.outreach_mode == "production",
+            )
+            .order_by(OutreachLog.scheduled_send_at.asc(), OutreachLog.id.asc())
+            .limit(25)
+            .all()
+        )
+
+    for row in due_rows:
+        thread_id, send_error = _deliver_outreach_log(
+            log_id=row.id,
+            subject=row.subject or "",
+            body=row.content or "",
+            customer_email=row.customer_email,
+            scheduled_send_at=row.scheduled_send_at,
+        )
+        if thread_id:
+            print(f"[scheduled_sender] Sent outreach log {row.id}")
+        else:
+            print(f"[scheduled_sender] Failed outreach log {row.id}: {send_error}")
+
+
+def _scheduled_sender_loop():
+    while True:
+        try:
+            _process_scheduled_outreach_once()
+        except Exception as exc:
+            print(f"[scheduled_sender] loop error: {exc}")
+        time.sleep(SCHEDULE_POLL_SECONDS)
+
+
+def _start_scheduled_sender():
+    global _scheduled_sender_started
+    with _scheduled_sender_lock:
+        if _scheduled_sender_started:
+            return
+        worker = threading.Thread(
+            target=_scheduled_sender_loop,
+            daemon=True,
+            name="scheduled-outreach-sender",
+        )
+        worker.start()
+        _scheduled_sender_started = True
+        print(f"✅ Scheduled outreach sender started (poll: {SCHEDULE_POLL_SECONDS}s)")
 
 
 def _normalize_customer_profile(profile: dict | None) -> dict:
@@ -210,6 +384,29 @@ FOLLOW_UP_DUE_DAYS = {
     "sequence_step_2": 7,
     "sequence_step_3": 14,
 }
+
+
+OUTREACH_STATUS_META = {
+    "pending": {"label": "Pending approval", "chip_cls": "pending", "rank": 1},
+    "approved": {"label": "Approved · waiting to send", "chip_cls": "approved", "rank": 2},
+    "scheduled": {"label": "Scheduled to send", "chip_cls": "scheduled", "rank": 3},
+    "failed": {"label": "Send failed · retry required", "chip_cls": "failed", "rank": 0},
+    "sent": {"label": "Sent", "chip_cls": "sent", "rank": 4},
+}
+
+
+def _outreach_status(log: OutreachLog) -> str:
+    status = (log.approval_status or "").strip().lower()
+    if status in OUTREACH_STATUS_META:
+        return status
+    return "pending" if log.dry_run else "sent"
+
+
+def _outreach_sequence_label(sequence_step: int | None) -> str:
+    step = int(sequence_step or 0)
+    if step <= 0:
+        return "Initial outreach"
+    return f"Follow-up {step}"
 
 
 def _conversation_stage(status: str) -> dict:
@@ -351,11 +548,144 @@ def _auto_next_steps(status: str, last_outbound_at, last_inbound_at):
     ]
 
 
+def _conversation_recap(customer: dict, stage: dict, health: dict, logs: list[dict], next_steps: list[dict]) -> dict:
+    """
+    Build an operator-ready briefing:
+    - What this thread has covered
+    - Known issues or sensitivities
+    - Current situation and immediate objective
+    - Practical talking points based on profile + pipeline analytics
+    """
+    profile = customer.get("customer_profile") or {}
+    outbound_logs = [entry for entry in logs if entry["direction"] == "outbound"]
+    inbound_logs = [entry for entry in logs if entry["direction"] == "inbound"]
+    latest = logs[0] if logs else None
+
+    topics = profile.get("topics_discussed") or []
+    concerns = profile.get("prior_concerns") or []
+    response_patterns = (profile.get("response_patterns") or "").strip()
+    context_notes = (profile.get("context_notes") or "").strip()
+    relationship_history = (profile.get("relationship_history") or "").strip()
+    tone = (profile.get("customer_tone") or "").strip()
+    interest_signals = (profile.get("interest_signals") or "").strip()
+
+    outbound_sample = [entry["summary"] for entry in outbound_logs[:2] if entry.get("summary")]
+    inbound_sample = [entry["summary"] for entry in inbound_logs[:2] if entry.get("summary")]
+
+    correspondence_bits = []
+    if isinstance(topics, list) and topics:
+        correspondence_bits.append(", ".join(str(topic) for topic in topics[:4]))
+    if inbound_sample:
+        correspondence_bits.append(f"customer replies mention: {' | '.join(inbound_sample[:2])}")
+    if outbound_sample:
+        correspondence_bits.append(f"outreach so far: {' | '.join(outbound_sample[:2])}")
+    if not correspondence_bits and logs:
+        correspondence_bits.append("message history exists, but no structured topic tags are available yet")
+    if not correspondence_bits:
+        correspondence_bits.append("no active correspondence has been logged yet")
+
+    issue_bits = []
+    if isinstance(concerns, list) and concerns:
+        issue_bits.extend(str(concern) for concern in concerns[:3])
+    if response_patterns:
+        issue_bits.append(response_patterns)
+    if context_notes:
+        issue_bits.append(context_notes)
+    if not issue_bits:
+        issue_bits.append("No explicit concerns captured yet.")
+
+    latest_actor = "customer" if latest and latest["direction"] == "inbound" else "agent"
+    latest_at = latest.get("at") if latest else None
+    latest_date = latest_at.strftime("%b %-d at %-I:%M %p") if latest_at else "no recent touch logged"
+    current_position = (
+        f"Stage: {stage['label']}. Health: {health['label']}. "
+        f"Thread currently has {len(outbound_logs)} outbound and {len(inbound_logs)} inbound message(s). "
+        f"Most recent touch was by {latest_actor} ({latest_date})."
+    )
+
+    primary_objective = next_steps[0]["title"] if next_steps else "Keep momentum and move toward booking."
+
+    briefing_rows = [
+        {
+            "label": "Correspondence So Far",
+            "value": "; ".join(correspondence_bits),
+        },
+        {
+            "label": "Known Issues / Sensitivities",
+            "value": "; ".join(issue_bits[:4]),
+        },
+        {
+            "label": "Current Situation",
+            "value": current_position,
+        },
+        {
+            "label": "Primary Objective For Next Touch",
+            "value": primary_objective,
+        },
+    ]
+
+    talking_points: list[str] = []
+    if health.get("needs_response"):
+        talking_points.append("Open by acknowledging their latest reply and answer the unresolved point first.")
+    elif health.get("needs_follow_up"):
+        talking_points.append("Lead with a short follow-up recap, then make one concrete ask for next action.")
+    else:
+        talking_points.append("Start with a concise recap of prior outreach and confirm if timing is right to proceed.")
+
+    opp_est = customer.get("opp_est")
+    opp_label = customer.get("opp_label")
+    if opp_est and opp_label:
+        talking_points.append(f"Anchor value: this looks like a {opp_est} {opp_label} opportunity.")
+
+    total_spend = float(customer.get("total_spend") or 0)
+    if total_spend >= 1500:
+        talking_points.append("Reference their strong history with your team and position this as proactive support.")
+
+    dormant_days = int(customer.get("days_dormant") or 0)
+    if dormant_days >= 365:
+        talking_points.append(f"Acknowledge that it has been {dormant_days} days since last service and re-establish urgency.")
+
+    if isinstance(concerns, list):
+        for concern in concerns[:2]:
+            talking_points.append(f"Proactively address concern: {concern}.")
+
+    if isinstance(topics, list) and topics:
+        talking_points.append(f"Use topic continuity: reconnect on {topics[0]}.")
+
+    if tone and tone.lower() != "unknown":
+        talking_points.append(f"Match customer tone ({tone}) to keep the call aligned.")
+
+    if relationship_history:
+        talking_points.append("Use relationship context to personalize: " + relationship_history[:120] + ("..." if len(relationship_history) > 120 else ""))
+
+    if interest_signals:
+        talking_points.append("Highlight interest signal: " + interest_signals[:120] + ("..." if len(interest_signals) > 120 else ""))
+
+    deduped_talking_points = []
+    seen = set()
+    for point in talking_points:
+        key = point.strip().lower()
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        deduped_talking_points.append(point)
+
+    return {
+        "operator_summary": (
+            f"This thread is currently {health['label'].lower()} and the next operator action is: "
+            f"{primary_objective}."
+        ),
+        "briefing_rows": briefing_rows,
+        "talking_points": deduped_talking_points[:7],
+    }
+
+
 # ── Startup ───────────────────────────────────────────────────────────────────
 
 @app.on_event("startup")
 def startup():
     init_db()
+    _start_scheduled_sender()
 
 
 # ── Web pages ─────────────────────────────────────────────────────────────────
@@ -482,16 +812,34 @@ def customer_detail(request: Request, customer_id: int):
 
 
 def _outreach_row(log, customer) -> dict:
+    queue_status = _outreach_status(log)
+    status_meta = OUTREACH_STATUS_META[queue_status]
+    conversation_stage = _conversation_stage(customer.reactivation_status)
+    suggested_send_at = _next_business_send_time()
+    scheduled_send_at = log.scheduled_send_at
+
     return {
         "log_id": log.id,
         "customer_id": customer.id,
         "customer_name": customer.name,
+        "customer_email": customer.email or "",
         "subject": log.subject,
         "content": log.content,
         "created_at": log.created_at,
         "sent_at": log.sent_at,
         "dry_run": log.dry_run,
         "sequence_step": log.sequence_step,
+        "sequence_label": _outreach_sequence_label(log.sequence_step),
+        "approval_status": queue_status,
+        "approval_status_label": status_meta["label"],
+        "approval_chip_cls": status_meta["chip_cls"],
+        "approval_rank": status_meta["rank"],
+        "approved_at": log.approved_at,
+        "scheduled_send_at": scheduled_send_at,
+        "scheduled_send_input": _format_datetime_local(scheduled_send_at or suggested_send_at),
+        "send_error": log.send_error,
+        "conversation_stage_label": conversation_stage["label"],
+        "conversation_stage_cls": conversation_stage["status_cls"],
     }
 
 
@@ -508,6 +856,13 @@ def outreach_queue(request: Request):
         )
         operator_data = _operator_data(operator)
         pending = [_outreach_row(l, c) for l, c in rows]
+        pending.sort(
+            key=lambda item: (
+                item["approval_rank"],
+                item["scheduled_send_at"] or datetime.max,
+                -(item["created_at"].timestamp() if item["created_at"] else 0),
+            )
+        )
         queue_count = len(pending)
 
     return templates.TemplateResponse("outreach.html", {
@@ -683,6 +1038,14 @@ def conversation_detail(request: Request, customer_id: int):
     if not opportunity_signals:
         opportunity_signals.append("No explicit intent signals yet")
 
+    recap = _conversation_recap(
+        customer=customer_data,
+        stage=stage,
+        health=health,
+        logs=log_entries,
+        next_steps=next_steps,
+    )
+
     return templates.TemplateResponse("conversation_detail.html", {
         "request": request,
         "active": "conversations",
@@ -698,6 +1061,7 @@ def conversation_detail(request: Request, customer_id: int):
         "outbound_count": outbound_count,
         "inbound_count": inbound_count,
         "opportunity_signals": opportunity_signals,
+        "conversation_recap": recap,
     })
 
 
@@ -847,48 +1211,96 @@ def generate_draft(customer_id: int, req: DraftRequest = None):
 class ApproveSendRequest(BaseModel):
     subject: str
     body: str
+    send_now: bool = False
+    scheduled_send_at: str | None = None
 
 
 @app.post("/api/outreach/{log_id}/approve-send")
 def approve_send(log_id: int, req: ApproveSendRequest):
     """
-    Save edits, send via Gmail API, store thread_id, move to Active Conversations.
-    Falls back gracefully if Gmail credentials are unavailable.
+    Save outreach edits and either:
+    - approve/schedule for later send, or
+    - send immediately (production mode only).
     """
+    now_utc = datetime.utcnow()
+    parsed_schedule = _parse_iso_datetime(req.scheduled_send_at)
+    if req.scheduled_send_at and parsed_schedule is None:
+        raise HTTPException(status_code=400, detail="Invalid scheduled_send_at datetime")
+
     with get_db() as db:
         log = db.query(OutreachLog).filter_by(id=log_id, operator_id=OPERATOR_ID).first()
         if not log:
             raise HTTPException(status_code=404, detail="Log entry not found")
+
+        operator = db.query(Operator).filter_by(id=OPERATOR_ID).first()
+        mode = (operator.outreach_mode or "dry_run").strip().lower() if operator else "dry_run"
+        if mode not in ("dry_run", "production"):
+            mode = "dry_run"
+
         customer = db.query(Customer).filter_by(id=log.customer_id).first()
         customer_email = customer.email if customer else None
         log.subject = req.subject
         log.content = req.body
 
-    # Attempt to send via Gmail API
-    thread_id = None
-    send_error = None
-    if customer_email:
-        try:
-            from integrations.gmail import send_email as gmail_send
-            _, thread_id = gmail_send(
-                to=customer_email,
-                subject=req.subject,
-                body=req.body,
-            )
-        except Exception as e:
-            send_error = str(e)
+    if not req.send_now:
+        scheduled_send_at = parsed_schedule or _next_business_send_time()
+        with get_db() as db:
+            log = db.query(OutreachLog).filter_by(id=log_id, operator_id=OPERATOR_ID).first()
+            log.approved_at = log.approved_at or now_utc
+            log.approval_status = "scheduled"
+            log.scheduled_send_at = scheduled_send_at
+            log.send_error = None
+            log.dry_run = True
 
-    with get_db() as db:
-        log = db.query(OutreachLog).filter_by(id=log_id, operator_id=OPERATOR_ID).first()
-        log.dry_run = False
-        if thread_id:
-            log.gmail_thread_id = thread_id
+        return {
+            "status": "scheduled",
+            "log_id": log_id,
+            "scheduled_send_at": scheduled_send_at.isoformat(),
+            "mode": mode,
+        }
 
-    result = {"status": "approved", "log_id": log_id}
+    if mode != "production":
+        scheduled_send_at = parsed_schedule or _next_business_send_time()
+        with get_db() as db:
+            log = db.query(OutreachLog).filter_by(id=log_id, operator_id=OPERATOR_ID).first()
+            log.approved_at = log.approved_at or now_utc
+            log.approval_status = "scheduled"
+            log.scheduled_send_at = scheduled_send_at
+            log.send_error = "Blocked by dry run mode"
+            log.dry_run = True
+
+        return JSONResponse(
+            status_code=409,
+            content={
+                "status": "dry_run_mode",
+                "detail": "Cannot send while Dry Run mode is active. Toggle to Production mode to send.",
+                "scheduled_send_at": scheduled_send_at.isoformat(),
+                "mode": mode,
+            },
+        )
+
+    thread_id, send_error = _deliver_outreach_log(
+        log_id=log_id,
+        subject=req.subject,
+        body=req.body,
+        customer_email=customer_email,
+        scheduled_send_at=parsed_schedule,
+    )
+
+    if not thread_id:
+        return JSONResponse(
+            status_code=502,
+            content={
+                "status": "failed",
+                "log_id": log_id,
+                "detail": send_error or "Send failed",
+                "mode": mode,
+            },
+        )
+
+    result = {"status": "sent", "log_id": log_id, "mode": mode}
     if thread_id:
         result["gmail_thread_id"] = thread_id
-    if send_error:
-        result["send_warning"] = f"Saved but Gmail send failed: {send_error}"
     return result
 
 
@@ -912,12 +1324,39 @@ def approve_draft(customer_id: int, req: ApproveRequest):
             subject=req.subject,
             content=req.body,
             dry_run=True,
+            approval_status="pending",
+            approved_at=None,
+            scheduled_send_at=None,
+            send_error=None,
             sequence_step=0,
         )
         db.add(log)
         customer.reactivation_status = "outreach_sent"
 
     return {"status": "approved", "customer_id": customer_id}
+
+
+class OutreachModeRequest(BaseModel):
+    mode: str
+
+
+@app.post("/api/operator/mode")
+def set_outreach_mode(req: OutreachModeRequest):
+    mode = (req.mode or "").strip().lower()
+    if mode not in ("dry_run", "production"):
+        raise HTTPException(status_code=400, detail="Mode must be 'dry_run' or 'production'")
+
+    with get_db() as db:
+        operator = db.query(Operator).filter_by(id=OPERATOR_ID).first()
+        if not operator:
+            raise HTTPException(status_code=404, detail="Operator not found")
+        operator.outreach_mode = mode
+
+    return {
+        "status": "ok",
+        "mode": mode,
+        "mode_label": "Production" if mode == "production" else "Dry Run",
+    }
 
 
 # ── Reactivation agent trigger ────────────────────────────────────────────────
@@ -1012,6 +1451,7 @@ def agent_status():
         )
 
     return {
+        "outreach_mode": (op.outreach_mode or "dry_run").strip().lower() if op else "dry_run",
         "tone_profiler": {
             "configured": tone_profile_set,
             "description": "Extracts your writing voice from sent Gmail",
@@ -1020,7 +1460,7 @@ def agent_status():
             "configured": True,
             "last_run_at": last_reactivation_run,
             "queued_count": queued_count,
-            "description": "Scans dormant customers and queues email drafts",
+            "description": "Identifies dormant customers and queues personalized outreach drafts",
         },
         "customer_analyzer": {
             "configured": True,
@@ -1156,9 +1596,9 @@ def agents_page(request: Request):
             },
             {
                 "key": "reactivation",
-                "name": "Reactivation Agent",
+                "name": "Reactivation Analyzer",
                 "icon": "🎯",
-                "description": "Scans for customers dormant 365+ days, ranks by priority score (days dormant × spend), generates personalized email drafts, and queues them for your review.",
+                "description": "Identifies customers dormant 365+ days, ranks by priority score (days dormant × spend), generates personalized email drafts, and queues them for your review.",
                 "status": "active",
                 "status_label": "Active",
                 "last_run_at": last_reactivation_run,

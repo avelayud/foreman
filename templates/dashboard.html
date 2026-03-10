@@ -126,11 +126,11 @@
         {% if queue_count > 0 %}
         <strong>Outreach Queue</strong> — {{ queue_count }} draft{{ 's' if queue_count != 1 }} queued for review
         {% else %}
-        <strong>Reactivation Agent</strong> — ready to scan for prime targets
+        <strong>Reactivation Analyzer</strong> — ready to scan for prime targets
         {% endif %}
       </div>
       <div class="agent-bar-meta" id="agentBarMeta">
-        {% if queue_count > 0 %}Drafts waiting in queue — review before sending{% else %}Finds dormant customers, drafts emails, queues for your approval{% endif %}
+        {% if queue_count > 0 %}Drafts waiting in queue — review before sending{% else %}Identifies dormant customers, drafts emails, queues for your approval{% endif %}
       </div>
     </div>
   </div>

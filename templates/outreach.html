@@ -3,19 +3,59 @@
 
 {% block extra_styles %}
 <style>
-  .draft-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow-sm);overflow:hidden;margin-bottom:16px}
-  .draft-header{padding:14px 22px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;background:var(--bg)}
-  .draft-meta{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
-  .draft-name{font-size:14px;font-weight:700;color:var(--navy);text-decoration:none;font-family:'Playfair Display',serif}
-  .draft-name:hover{text-decoration:underline}
-  .draft-sep{width:1px;height:14px;background:var(--border);display:inline-block}
-  .draft-info{font-size:11px;color:var(--text-3);font-family:'IBM Plex Mono',monospace}
-  .draft-body{padding:20px 22px;display:flex;flex-direction:column;gap:14px}
-  .draft-footer{padding:12px 22px;background:var(--bg);border-top:1px solid var(--border);display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+  .queue-card{background:var(--surface);border:1px solid var(--border);border-left-width:5px;border-radius:var(--radius);box-shadow:var(--shadow-sm);overflow:hidden;margin-bottom:14px}
+  .queue-card.state-pending{border-left-color:var(--amber)}
+  .queue-card.state-approved{border-left-color:var(--blue)}
+  .queue-card.state-scheduled{border-left-color:var(--blue)}
+  .queue-card.state-failed{border-left-color:var(--red)}
+  .queue-card.state-sent{border-left-color:var(--green)}
 
-  .tag-pending{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-family:'IBM Plex Mono',monospace;padding:3px 10px;border-radius:20px;background:var(--amber-pale);color:var(--amber);border:1px solid #fde68a}
+  .queue-header{padding:14px 22px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;background:var(--bg)}
+  .queue-meta{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+  .queue-name{font-size:16px;font-weight:700;color:var(--navy);text-decoration:none;font-family:'Playfair Display',serif}
+  .queue-name:hover{text-decoration:underline}
+  .queue-sep{width:1px;height:14px;background:var(--border);display:inline-block}
+  .queue-info{font-size:11px;color:var(--text-3);font-family:'IBM Plex Mono',monospace}
+  .reach-stage{display:inline-flex;align-items:center;font-size:11px;color:var(--navy);background:var(--navy-soft);border:1px solid var(--border);border-radius:20px;padding:3px 10px;font-family:'IBM Plex Mono',monospace}
 
-  .notice-bar{background:var(--navy-soft);border:1px solid var(--navy-rule);border-radius:8px;padding:10px 16px;font-size:12px;color:var(--text-2);display:flex;align-items:center;gap:8px;margin-bottom:22px}
+  .tag-status{display:inline-flex;align-items:center;gap:6px;font-size:11px;font-family:'IBM Plex Mono',monospace;padding:3px 10px;border-radius:20px;border:1px solid}
+  .tag-status::before{content:'';width:5px;height:5px;border-radius:50%}
+  .tag-pending{background:var(--amber-pale);color:var(--amber);border-color:#fde68a}
+  .tag-pending::before{background:var(--amber)}
+  .tag-approved{background:var(--blue-pale);color:var(--blue);border-color:#bfdbfe}
+  .tag-approved::before{background:var(--blue)}
+  .tag-scheduled{background:var(--blue-pale);color:var(--blue);border-color:#bfdbfe}
+  .tag-scheduled::before{background:var(--blue)}
+  .tag-failed{background:var(--red-pale);color:var(--red);border-color:#fecaca}
+  .tag-failed::before{background:var(--red)}
+  .tag-sent{background:var(--green-pale);color:var(--green);border-color:#a7f3d0}
+  .tag-sent::before{background:var(--green)}
+
+  .queue-body{padding:16px 18px}
+  .queue-layout{display:grid;grid-template-columns:minmax(0,1fr) minmax(220px,25%);gap:14px;align-items:stretch}
+  .queue-left{min-width:0;padding:2px 4px}
+  .queue-right{border-left:1px solid var(--border);padding-left:14px;display:flex;flex-direction:column;justify-content:flex-start;gap:12px}
+  .right-title{font-size:10px;font-family:'IBM Plex Mono',monospace;letter-spacing:1px;text-transform:uppercase;color:var(--text-3)}
+  .link-stack{display:flex;flex-direction:column;gap:8px}
+  .action-panel{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px}
+  .action-stack{display:flex;flex-direction:column;gap:8px}
+  .action-btn{width:100%;justify-content:center}
+  .send-at-compact{padding:7px 10px;font-size:12px}
+  .schedule-note{font-size:10.5px;color:var(--text-3);font-family:'IBM Plex Mono',monospace;line-height:1.45}
+  .inline-status{font-size:11px;font-family:'IBM Plex Mono',monospace}
+
+  .field-block{margin-bottom:12px}
+  .send-now-btn:disabled{opacity:0.55;cursor:not-allowed;transform:none}
+
+  .notice-bar{border-radius:8px;padding:10px 16px;font-size:12px;display:flex;align-items:center;gap:8px;margin-bottom:22px}
+  .notice-bar strong{font-weight:600}
+  .notice-dry{background:var(--amber-pale);border:1px solid #fde68a;color:var(--amber)}
+  .notice-production{background:var(--green-pale);border:1px solid #a7f3d0;color:var(--green)}
+
+  @media (max-width: 920px){
+    .queue-layout{grid-template-columns:1fr}
+    .queue-right{border-left:none;border-top:1px solid var(--border);padding-left:0;padding-top:12px}
+  }
 </style>
 {% endblock %}
 
@@ -27,62 +67,96 @@
     <h1 style="font-family:'Playfair Display',serif;font-size:28px;font-weight:700;color:var(--navy);line-height:1.2">Queue</h1>
   </div>
   <div style="display:flex;align-items:center;gap:10px">
-    <a href="/conversations" class="btn-ghost" style="text-decoration:none;font-size:12.5px">Active Conversations →</a>
-    <a href="/" class="btn-ghost" style="text-decoration:none;font-size:12px;font-family:'IBM Plex Mono',monospace;color:var(--text-3)">← Dashboard</a>
+    <a href="/conversations" class="btn-ghost" style="text-decoration:none;font-size:12.5px">Active Conversations</a>
+    <a href="/" class="btn-ghost" style="text-decoration:none;font-size:12px;font-family:'IBM Plex Mono',monospace;color:var(--text-3)">Dashboard</a>
   </div>
 </div>
 
-<div class="notice-bar">
-  <span>🔒</span>
-  Agents generate drafts only — no email is ever sent without your approval. Edit any draft below, then click <strong>Approve to Send</strong>.
+{% if operator.is_production_mode %}
+<div class="notice-bar notice-production">
+  <span>●</span>
+  <span><strong>Production mode is active.</strong> "Send now" delivers real email via Gmail.</span>
 </div>
+{% else %}
+<div class="notice-bar notice-dry">
+  <span>●</span>
+  <span><strong>Dry run mode is active.</strong> Approvals and schedules stay in queue until you switch to Production mode.</span>
+</div>
+{% endif %}
 
 {% if pending %}
 <div style="margin-bottom:8px;font-size:12px;color:var(--text-3);font-family:'IBM Plex Mono',monospace">
-  {{ pending|length }} draft{{ 's' if pending|length != 1 }} pending review
+  {{ pending|length }} queue item{{ 's' if pending|length != 1 }} waiting to be sent
 </div>
 
 {% for item in pending %}
-<div class="draft-card" id="card-{{ item.log_id }}">
-
-  <div class="draft-header">
-    <div class="draft-meta">
-      <a href="/customer/{{ item.customer_id }}" class="draft-name">{{ item.customer_name }}</a>
-      <span class="draft-sep"></span>
-      <span class="draft-info">Step {{ item.sequence_step + 1 }}</span>
-      <span class="draft-info">{{ item.created_at.strftime('%b %-d, %Y') if item.created_at else '' }}</span>
+<div class="queue-card state-{{ item.approval_chip_cls }}" id="card-{{ item.log_id }}">
+  <div class="queue-header">
+    <div class="queue-meta">
+      <a href="/customer/{{ item.customer_id }}" class="queue-name">{{ item.customer_name }}</a>
+      <span class="tag-status tag-{{ item.approval_chip_cls }}">{{ item.approval_status_label }}</span>
     </div>
-    <span class="tag-pending">
-      <span style="width:5px;height:5px;border-radius:50%;background:var(--amber);display:inline-block"></span>
-      Pending approval
-    </span>
-  </div>
-
-  <div class="draft-body">
-    <div>
-      <label class="field-label">Subject</label>
-      <input id="subject-{{ item.log_id }}" type="text" class="field-input"
-             value="{{ item.subject or '' }}" />
-    </div>
-    <div>
-      <label class="field-label">Body</label>
-      <textarea id="body-{{ item.log_id }}" rows="8" class="field-textarea">{{ item.content or '' }}</textarea>
+    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+      <span class="queue-info">Stage</span>
+      <span class="reach-stage">{{ item.sequence_label }}</span>
     </div>
   </div>
 
-  <div class="draft-footer">
-    <button onclick="approveToSend({{ item.log_id }})" class="btn-success" id="approve-btn-{{ item.log_id }}">
-      ✓ Approve to Send
-    </button>
-    <a href="/customer/{{ item.customer_id }}" class="btn-ghost" style="text-decoration:none">
-      View Customer
-    </a>
-    <span id="approve-label-{{ item.log_id }}" style="display:none;font-size:12.5px;color:var(--green);font-weight:500">
-      ✓ Moved to Active Conversations
-    </span>
-    <span id="approve-error-{{ item.log_id }}" style="display:none;font-size:12px;color:var(--red);font-family:'IBM Plex Mono',monospace"></span>
-  </div>
+  <div class="queue-body">
+    <div class="queue-layout">
+      <div class="queue-left">
+        <div class="field-block">
+          <label class="field-label">Customer</label>
+          <input type="text" class="field-input" value="{{ item.customer_name }}{% if item.customer_email %} · {{ item.customer_email }}{% endif %}" readonly />
+        </div>
+        <div class="field-block">
+          <label class="field-label">Subject</label>
+          <input id="subject-{{ item.log_id }}" type="text" class="field-input" value="{{ item.subject or '' }}" />
+        </div>
+        <div class="field-block">
+          <label class="field-label">Body</label>
+          <textarea id="body-{{ item.log_id }}" rows="7" class="field-textarea">{{ item.content or '' }}</textarea>
+        </div>
+      </div>
 
+      <div class="queue-right">
+        <div class="action-panel">
+          <div class="right-title" style="margin-bottom:8px">Actions</div>
+          <div class="action-stack">
+            <div>
+              <label class="field-label" style="margin-bottom:4px">Time to Send</label>
+              <input id="send-at-{{ item.log_id }}" type="datetime-local" class="field-input send-at-compact" value="{{ item.scheduled_send_input }}" />
+            </div>
+            <button onclick="approveAndSchedule({{ item.log_id }})" class="btn-success action-btn" id="approve-btn-{{ item.log_id }}">
+              {% if item.approval_status == 'pending' %}Approve + Schedule{% else %}Update Schedule{% endif %}
+            </button>
+            <button onclick="sendNow({{ item.log_id }})" class="btn-primary action-btn send-now-btn" id="send-btn-{{ item.log_id }}"
+                    {% if not operator.is_production_mode %}disabled title="Switch to Production mode to send real email"{% endif %}>
+              Send Now
+            </button>
+            <span class="schedule-note">
+              {% if item.scheduled_send_at %}
+                Scheduled for {{ item.scheduled_send_at.strftime('%b %-d, %Y · %-I:%M %p') }}
+              {% else %}
+                Defaults to following morning if saved outside business hours.
+              {% endif %}
+            </span>
+            {% if item.send_error %}
+            <span class="inline-status" style="color:var(--red)">Last send error: {{ item.send_error }}</span>
+            {% endif %}
+            <span id="action-label-{{ item.log_id }}" class="inline-status" style="display:none;color:var(--green)"></span>
+            <span id="action-error-{{ item.log_id }}" class="inline-status" style="display:none;color:var(--red)"></span>
+          </div>
+        </div>
+
+        <div class="right-title">Quick Links</div>
+        <div class="link-stack">
+          <a href="/customer/{{ item.customer_id }}" class="btn-ghost" style="text-decoration:none;text-align:center">Customer Page</a>
+          <a href="/conversations/{{ item.customer_id }}" class="btn-primary" style="text-decoration:none;text-align:center;padding:8px 14px">Open Conversation</a>
+        </div>
+      </div>
+    </div>
+  </div>
 </div>
 {% endfor %}
 
@@ -91,9 +165,9 @@
   <div style="font-size:40px;margin-bottom:16px;opacity:0.3">✉</div>
   <div style="font-family:'Playfair Display',serif;font-size:20px;font-weight:700;color:var(--navy);margin-bottom:8px">Queue is empty</div>
   <div style="font-size:13px;color:var(--text-3);margin-bottom:24px;max-width:320px;margin-left:auto;margin-right:auto;line-height:1.6">
-    Run the reactivation agent or generate a draft from a customer page.
+    Run the reactivation analyzer or generate a draft from a customer page.
   </div>
-  <a href="/" class="btn-primary" style="text-decoration:none">View Customers →</a>
+  <a href="/" class="btn-primary" style="text-decoration:none">View Customers</a>
 </div>
 {% endif %}
 
@@ -101,40 +175,69 @@
 
 {% block scripts %}
 <script>
-  async function approveToSend(logId) {
-    const btn = document.getElementById('approve-btn-' + logId);
-    const label = document.getElementById('approve-label-' + logId);
-    const errEl = document.getElementById('approve-error-' + logId);
+  async function submitQueueAction(logId, sendNowAction) {
+    const approveBtn = document.getElementById('approve-btn-' + logId);
+    const sendBtn = document.getElementById('send-btn-' + logId);
+    const label = document.getElementById('action-label-' + logId);
+    const errEl = document.getElementById('action-error-' + logId);
     const subject = document.getElementById('subject-' + logId).value;
     const body = document.getElementById('body-' + logId).value;
+    const scheduledSendAt = document.getElementById('send-at-' + logId).value;
 
-    btn.disabled = true;
-    btn.textContent = 'Approving…';
+    const oldApproveText = approveBtn.textContent;
+    const oldSendText = sendBtn.textContent;
+
+    approveBtn.disabled = true;
+    sendBtn.disabled = true;
+    approveBtn.textContent = sendNowAction ? 'Working...' : 'Saving...';
+    sendBtn.textContent = sendNowAction ? 'Sending...' : oldSendText;
     errEl.style.display = 'none';
+    label.style.display = 'none';
 
     try {
       const res = await fetch(`/api/outreach/${logId}/approve-send`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ subject, body }),
+        body: JSON.stringify({
+          subject,
+          body,
+          send_now: sendNowAction,
+          scheduled_send_at: scheduledSendAt || null,
+        }),
       });
+
+      const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
         throw new Error(data.detail || 'Server error');
       }
+
+      if (data.status === 'sent') {
+        label.textContent = 'Sent via Gmail. Removing from queue...';
+      } else if (data.status === 'scheduled') {
+        label.textContent = 'Approved and scheduled.';
+      } else {
+        label.textContent = 'Saved.';
+      }
       label.style.display = 'inline';
-      const card = document.getElementById('card-' + logId);
-      setTimeout(() => {
-        card.style.transition = 'opacity 0.4s';
-        card.style.opacity = '0';
-        setTimeout(() => card.remove(), 450);
-      }, 700);
+      setTimeout(() => window.location.reload(), 650);
     } catch (e) {
-      btn.disabled = false;
-      btn.textContent = '✓ Approve to Send';
+      approveBtn.disabled = false;
+      sendBtn.disabled = {{ 'false' if operator.is_production_mode else 'true' }};
+      approveBtn.textContent = oldApproveText;
+      sendBtn.textContent = oldSendText;
       errEl.textContent = '⚠ ' + e.message;
       errEl.style.display = 'inline';
     }
+  }
+
+  function approveAndSchedule(logId) {
+    submitQueueAction(logId, false);
+  }
+
+  function sendNow(logId) {
+    const ok = window.confirm('Send this message immediately? This will send a real email now.');
+    if (!ok) return;
+    submitQueueAction(logId, true);
   }
 </script>
 {% endblock %}

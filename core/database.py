@@ -21,6 +21,7 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 SCHEMA_PATCHES = {
     "operators": {
         "voice_profiles": "TEXT",
+        "outreach_mode": "VARCHAR",
     },
     "customers": {
         "assigned_voice_id": "VARCHAR",
@@ -28,6 +29,10 @@ SCHEMA_PATCHES = {
     },
     "outreach_logs": {
         "gmail_thread_id": "VARCHAR",
+        "approval_status": "VARCHAR",
+        "approved_at": "TIMESTAMP",
+        "scheduled_send_at": "TIMESTAMP",
+        "send_error": "TEXT",
     },
 }
 
@@ -54,6 +59,37 @@ def _apply_schema_patches():
                     )
                 )
                 print(f"✅ Added missing column {table_name}.{column_name}")
+
+        inspector = inspect(engine)
+
+        if "outreach_logs" in table_names:
+            outreach_columns = {col["name"] for col in inspector.get_columns("outreach_logs")}
+            if "approval_status" in outreach_columns:
+                conn.execute(
+                    text(
+                        """
+                        UPDATE outreach_logs
+                        SET approval_status = CASE
+                            WHEN approval_status IS NOT NULL THEN approval_status
+                            WHEN dry_run THEN 'pending'
+                            ELSE 'sent'
+                        END
+                        """
+                    )
+                )
+
+        if "operators" in table_names:
+            operator_columns = {col["name"] for col in inspector.get_columns("operators")}
+            if "outreach_mode" in operator_columns:
+                conn.execute(
+                    text(
+                        """
+                        UPDATE operators
+                        SET outreach_mode = 'dry_run'
+                        WHERE outreach_mode IS NULL OR outreach_mode = ''
+                        """
+                    )
+                )
 
 
 def init_db():

@@ -49,6 +49,11 @@ class Operator(Base):
     # Onboarding state
     onboarding_complete = Column(Boolean, default=False)
 
+    # Global delivery mode:
+    # dry_run    -> approvals/scheduling only, no Gmail sends
+    # production -> Gmail send actions are enabled
+    outreach_mode = Column(String, default="dry_run")
+
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -252,6 +257,17 @@ class OutreachLog(Base):
 
     # Was this a dry run (generated but not sent)?
     dry_run = Column(Boolean, default=False)
+
+    # Delivery workflow status:
+    # pending   -> generated draft, awaiting approval
+    # approved  -> approved by operator, waiting to be sent
+    # scheduled -> approved with a target send time
+    # sent      -> successfully delivered through Gmail API
+    # failed    -> send attempt failed, needs operator retry
+    approval_status = Column(String, default="pending")
+    approved_at = Column(DateTime)
+    scheduled_send_at = Column(DateTime)
+    send_error = Column(Text)
 
     # Gmail thread ID — populated after sending via Gmail API
     # Enables exact reply detection by thread rather than fuzzy address matching
