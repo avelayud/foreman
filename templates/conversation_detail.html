@@ -3,44 +3,59 @@
 
 {% block extra_styles %}
 <style>
-  .stage-wrap{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow-sm);padding:16px 18px;margin-bottom:14px}
-  .stage-meta{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
-  .stage-track{margin-top:11px;height:10px;background:var(--bg);border:1px solid var(--border);border-radius:999px;overflow:hidden}
-  .stage-fill{height:100%;background:linear-gradient(90deg,var(--navy) 0%,var(--gold) 100%);border-radius:999px}
-
-  .timeline-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow-sm);padding:18px 18px;margin-bottom:14px}
-  .timeline-list{display:flex;flex-direction:column;gap:10px}
-  .timeline-item{display:grid;grid-template-columns:24px 1fr;gap:10px;padding:10px;border:1px solid var(--border);background:var(--bg);border-radius:8px}
-  .timeline-dot{width:10px;height:10px;border-radius:50%;margin-top:5px}
-  .dot-appointment{background:var(--blue)}
-  .dot-outbound{background:var(--amber)}
-  .dot-inbound{background:var(--green)}
-
-  .content-grid{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(0,1fr);gap:14px;align-items:start}
+  .top-grid{display:grid;grid-template-columns:minmax(0,1.7fr) minmax(0,1fr);gap:14px;margin-bottom:14px;align-items:start}
   .panel{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow-sm);overflow:hidden}
   .panel-head{padding:14px 16px;border-bottom:1px solid var(--border);background:var(--bg)}
   .panel-title{font-size:12px;font-weight:600;color:var(--text);font-family:'IBM Plex Mono',monospace;letter-spacing:0.5px}
   .panel-body{padding:14px 16px}
 
-  .mail-list{display:flex;flex-direction:column;gap:10px}
-  .mail-card{border:1px solid var(--border);border-radius:9px;padding:12px 12px;background:var(--surface)}
-  .mail-card.outbound{border-color:#fde68a;background:var(--amber-pale)}
-  .mail-card.inbound{border-color:#a7f3d0;background:var(--green-pale)}
-  .mail-head{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:8px}
-  .mail-meta{font-size:11px;color:var(--text-3);font-family:'IBM Plex Mono',monospace}
-  .mail-subject{font-size:13px;font-weight:700;color:var(--navy);margin-bottom:6px}
-  .mail-content{font-size:13px;color:var(--text-2);line-height:1.6;white-space:pre-wrap}
+  .stage-chip{display:inline-flex;align-items:center;gap:6px;font-size:11px;font-family:'IBM Plex Mono',monospace;padding:3px 10px;border-radius:20px;border:1px solid}
+  .stage-needs-response{background:var(--red-pale);color:var(--red);border-color:#fecaca}
+  .stage-needs-follow-up{background:var(--amber-pale);color:var(--amber);border-color:#fde68a}
+  .stage-awaiting-reply{background:var(--blue-pale);color:var(--blue);border-color:#bfdbfe}
+  .stage-closed{background:var(--green-pale);color:var(--green);border-color:#a7f3d0}
+
+  .timeline-wrap{overflow-x:auto;padding-bottom:6px}
+  .timeline-track{display:flex;align-items:flex-start;gap:14px;position:relative;min-width:max-content;padding:28px 4px 4px}
+  .timeline-track::before{content:'';position:absolute;left:8px;right:8px;top:22px;height:2px;background:var(--border)}
+  .timeline-event{min-width:240px;max-width:240px;position:relative}
+  .timeline-event::before{content:'';position:absolute;top:-11px;left:16px;width:10px;height:10px;border-radius:50%;background:var(--navy);border:2px solid #fff;box-shadow:0 0 0 1px var(--border)}
+  .timeline-event.inbound::before{background:var(--green)}
+  .timeline-event.outbound::before{background:var(--amber)}
+  .timeline-event.appointment::before{background:var(--blue)}
+  .timeline-card{border:1px solid var(--border);background:var(--bg);border-radius:8px;padding:10px 11px}
+  .timeline-date{font-size:10px;color:var(--text-3);font-family:'IBM Plex Mono',monospace;margin-bottom:6px}
+  .timeline-title{font-size:12px;font-weight:700;color:var(--navy);margin-bottom:3px}
+  .timeline-detail{font-size:12px;color:var(--text-2);line-height:1.45}
 
   .metric-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-bottom:12px}
   .metric{border:1px solid var(--border);background:var(--bg);border-radius:8px;padding:10px}
   .metric-label{font-size:10px;font-family:'IBM Plex Mono',monospace;letter-spacing:1px;text-transform:uppercase;color:var(--text-3);margin-bottom:4px}
   .metric-value{font-size:18px;font-family:'Playfair Display',serif;color:var(--navy);font-weight:700}
-
-  .signal-list{display:flex;flex-direction:column;gap:7px}
   .signal{font-size:12px;color:var(--text-2);line-height:1.5;border:1px solid var(--border);background:var(--bg);border-radius:8px;padding:9px 10px}
 
+  .next-step-list{display:flex;flex-direction:column;gap:8px}
+  .next-step{border:1px solid var(--border);background:var(--bg);border-radius:8px;padding:9px 10px}
+  .next-step-title{font-size:12.5px;font-weight:700;color:var(--navy);margin-bottom:3px}
+  .next-step-meta{font-size:11px;color:var(--text-3);font-family:'IBM Plex Mono',monospace}
+
+  .chain-panel{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow-sm);overflow:hidden}
+  .chain-item{border-bottom:1px solid var(--border);background:var(--surface)}
+  .chain-item:last-child{border-bottom:none}
+  .chain-item > summary{list-style:none;cursor:pointer;padding:12px 14px;display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
+  .chain-item > summary::-webkit-details-marker{display:none}
+  .chain-left{min-width:0}
+  .sender-chip{display:inline-flex;align-items:center;gap:5px;font-size:10.5px;font-family:'IBM Plex Mono',monospace;padding:2px 8px;border-radius:20px;border:1px solid;margin-bottom:6px}
+  .sender-agent{background:var(--amber-pale);border-color:#fde68a;color:var(--amber)}
+  .sender-human{background:var(--green-pale);border-color:#a7f3d0;color:var(--green)}
+  .chain-subject{font-size:13px;font-weight:700;color:var(--navy);line-height:1.35;margin-bottom:3px}
+  .chain-summary{font-size:12px;color:var(--text-2);line-height:1.45}
+  .chain-meta{font-size:11px;color:var(--text-3);font-family:'IBM Plex Mono',monospace;white-space:nowrap}
+  .chain-content{padding:0 14px 14px}
+  .chain-content-box{font-size:13px;color:var(--text-2);line-height:1.6;white-space:pre-wrap;border:1px solid var(--border);background:var(--bg);border-radius:8px;padding:10px 11px}
+
   @media (max-width: 980px){
-    .content-grid{grid-template-columns:1fr}
+    .top-grid{grid-template-columns:1fr}
   }
 </style>
 {% endblock %}
@@ -58,85 +73,39 @@
   </div>
 </div>
 
-<div class="stage-wrap">
-  <div class="stage-meta">
-    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-      <span class="status-pill {{ stage.status_cls }}">{{ stage.label }}</span>
-      <span style="font-size:11px;color:var(--text-3);font-family:'IBM Plex Mono',monospace">Outbound {{ outbound_count }}</span>
-      <span style="font-size:11px;color:var(--text-3);font-family:'IBM Plex Mono',monospace">Inbound {{ inbound_count }}</span>
-      <span style="font-size:11px;color:var(--text-3);font-family:'IBM Plex Mono',monospace">Appointments {{ jobs_count }}</span>
-    </div>
-    <div style="font-size:11px;color:var(--text-3);font-family:'IBM Plex Mono',monospace">Opportunity {{ customer.opp_est }} · {{ customer.opp_label }}</div>
-  </div>
-  <div class="stage-track">
-    <div class="stage-fill" style="width:{{ stage.progress_pct }}%"></div>
-  </div>
-</div>
-
-<div class="timeline-card">
-  <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:8px">
-    <div class="panel-title">Timeline · Appointments + Outreach Events</div>
-    <div style="font-size:11px;color:var(--text-3);font-family:'IBM Plex Mono',monospace">{{ timeline|length }} events</div>
-  </div>
-
-  {% if timeline %}
-  <div class="timeline-list">
-    {% for event in timeline %}
-    <div class="timeline-item">
-      <div class="timeline-dot dot-{{ event.type }}"></div>
-      <div>
-        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">
-          <div style="font-size:13px;font-weight:700;color:var(--navy)">{{ event.title }}</div>
-          <div style="font-size:11px;color:var(--text-3);font-family:'IBM Plex Mono',monospace">
-            {% if event.at %}{{ event.at.strftime('%b %-d, %Y · %-I:%M %p') }}{% else %}Unknown date{% endif %}
-          </div>
-        </div>
-        <div style="font-size:12px;color:var(--text-2);margin-top:2px">{{ event.detail }}</div>
-      </div>
-    </div>
-    {% endfor %}
-  </div>
-  {% else %}
-  <div style="font-size:13px;color:var(--text-3)">No appointments or outreach events on record yet.</div>
-  {% endif %}
-</div>
-
-<div class="content-grid">
+<div class="top-grid">
   <div class="panel">
-    <div class="panel-head">
-      <div class="panel-title">Response Log + Email History</div>
+    <div class="panel-head" style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">
+      <div class="panel-title">Conversation Timeline</div>
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+        <span class="status-pill {{ stage.status_cls }}">{{ stage.label }}</span>
+        <span class="stage-chip stage-{{ health.chip_cls }}">{{ health.label }}</span>
+      </div>
     </div>
     <div class="panel-body">
-      {% if logs %}
-      <div class="mail-list">
-        {% for log in logs %}
-        <div class="mail-card {{ log.direction }}">
-          <div class="mail-head">
-            <div style="display:flex;align-items:center;gap:7px">
-              <span class="log-badge {% if log.direction == 'inbound' %}log-reply{% else %}log-email{% endif %}">
-                {{ 'Inbound Reply' if log.direction == 'inbound' else 'Outbound Email' }}
-              </span>
-              <span class="mail-meta">Step {{ log.sequence_step }}</span>
+      {% if timeline_events %}
+      <div class="timeline-wrap">
+        <div class="timeline-track">
+          {% for event in timeline_events %}
+          <div class="timeline-event {{ event.type }}">
+            <div class="timeline-card">
+              <div class="timeline-date">{% if event.at %}{{ event.at.strftime('%b %-d, %Y · %-I:%M %p') }}{% else %}Unknown date{% endif %}</div>
+              <div class="timeline-title">{{ event.title }}</div>
+              <div class="timeline-detail">{{ event.detail }}</div>
             </div>
-            <span class="mail-meta">{% if log.at %}{{ log.at.strftime('%b %-d, %Y · %-I:%M %p') }}{% else %}Unknown date{% endif %}</span>
           </div>
-          <div class="mail-subject">{{ log.subject }}</div>
-          <div class="mail-content">{{ log.content }}</div>
-          {% if log.gmail_thread_id %}
-          <div class="mail-meta" style="margin-top:7px">Thread: {{ log.gmail_thread_id }}</div>
-          {% endif %}
+          {% endfor %}
         </div>
-        {% endfor %}
       </div>
       {% else %}
-      <div style="font-size:13px;color:var(--text-3)">No sent or received conversation entries yet.</div>
+      <div style="font-size:13px;color:var(--text-3)">No appointments or outreach events on record yet.</div>
       {% endif %}
     </div>
   </div>
 
   <div class="panel">
     <div class="panel-head">
-      <div class="panel-title">Opportunity Snapshot</div>
+      <div class="panel-title">Opportunity Snapshot + Next Steps</div>
     </div>
     <div class="panel-body">
       <div class="metric-grid">
@@ -145,12 +114,12 @@
           <div class="metric-value">{{ customer.opp_est }}</div>
         </div>
         <div class="metric">
-          <div class="metric-label">Lifetime Value</div>
-          <div class="metric-value">${{ "{:,.0f}".format(customer.total_spend) }}</div>
+          <div class="metric-label">Likely Job Type</div>
+          <div class="metric-value" style="font-size:15px">{{ customer.opp_label|title }}</div>
         </div>
         <div class="metric">
-          <div class="metric-label">Dormant Days</div>
-          <div class="metric-value">{{ customer.days_dormant }}</div>
+          <div class="metric-label">Outbound / Inbound</div>
+          <div class="metric-value">{{ outbound_count }} / {{ inbound_count }}</div>
         </div>
         <div class="metric">
           <div class="metric-label">Appointment Rev.</div>
@@ -158,21 +127,52 @@
         </div>
       </div>
 
+      <div class="field-label" style="margin-bottom:7px">Auto Next Steps</div>
+      <div class="next-step-list" style="margin-bottom:12px">
+        {% for step in next_steps %}
+        <div class="next-step">
+          <div class="next-step-title">{{ step.title }}</div>
+          <div class="next-step-meta">{{ step.owner }} · {{ step.timing }}</div>
+        </div>
+        {% endfor %}
+      </div>
+
       <div class="field-label" style="margin-bottom:7px">Signals</div>
-      <div class="signal-list" style="margin-bottom:12px">
+      <div style="display:flex;flex-direction:column;gap:7px">
         {% for signal in opportunity_signals %}
         <div class="signal">{{ signal }}</div>
         {% endfor %}
       </div>
-
-      <div class="field-label" style="margin-bottom:7px">Analyzer Context</div>
-      <div class="signal-list">
-        <div class="signal"><strong>Relationship history:</strong> {{ customer.customer_profile.relationship_history or 'No relationship history captured yet.' }}</div>
-        <div class="signal"><strong>Customer tone:</strong> {{ customer.customer_profile.customer_tone or 'unknown' }}</div>
-        <div class="signal"><strong>Response patterns:</strong> {{ customer.customer_profile.response_patterns or 'No response patterns captured yet.' }}</div>
-      </div>
     </div>
   </div>
+</div>
+
+<div class="chain-panel">
+  <div class="panel-head">
+    <div class="panel-title">Conversation Chain (Compact)</div>
+  </div>
+  {% if logs %}
+  {% for log in logs|reverse %}
+  <details class="chain-item" {% if loop.last %}open{% endif %}>
+    <summary>
+      <div class="chain-left">
+        <span class="sender-chip sender-{{ log.sender_key }}">{{ log.sender_label }}</span>
+        <div class="chain-subject">{{ log.subject }}</div>
+        <div class="chain-summary">{{ log.summary }}</div>
+      </div>
+      <div class="chain-meta">
+        {% if log.at %}{{ log.at.strftime('%b %-d · %-I:%M %p') }}{% else %}Unknown date{% endif %}
+      </div>
+    </summary>
+    <div class="chain-content">
+      <div class="chain-content-box">{{ log.content }}</div>
+      <div class="chain-meta" style="margin-top:6px">Step {{ log.sequence_step }}{% if log.gmail_thread_id %} · Thread {{ log.gmail_thread_id }}{% endif %}</div>
+    </div>
+  </details>
+  {% endfor %}
+  {% else %}
+  <div class="panel-body" style="font-size:13px;color:var(--text-3)">No sent or received conversation entries yet.</div>
+  {% endif %}
 </div>
 
 {% endblock %}

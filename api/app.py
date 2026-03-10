@@ -197,6 +197,21 @@ CONVERSATION_STAGE_META = {
 }
 
 
+CONVERSATION_HEALTH_META = {
+    "needs_response": {"label": "Needs Response", "chip_cls": "needs-response", "rank": 0},
+    "needs_follow_up": {"label": "Needs Follow-up", "chip_cls": "needs-follow-up", "rank": 1},
+    "awaiting_reply": {"label": "Awaiting Reply", "chip_cls": "awaiting-reply", "rank": 2},
+    "closed": {"label": "Closed", "chip_cls": "closed", "rank": 3},
+}
+
+
+FOLLOW_UP_DUE_DAYS = {
+    "outreach_sent": 3,
+    "sequence_step_2": 7,
+    "sequence_step_3": 14,
+}
+
+
 def _conversation_stage(status: str) -> dict:
     return CONVERSATION_STAGE_META.get(
         status,
@@ -204,12 +219,136 @@ def _conversation_stage(status: str) -> dict:
     )
 
 
+def _conversation_health(status: str, last_outbound_at, last_inbound_at):
+    if status in ("booked", "sequence_complete", "unsubscribed"):
+        key = "closed"
+        meta = CONVERSATION_HEALTH_META[key]
+        return {
+            "key": key,
+            "label": meta["label"],
+            "chip_cls": meta["chip_cls"],
+            "rank": meta["rank"],
+            "needs_response": False,
+            "needs_follow_up": False,
+        }
+
+    if last_inbound_at and (not last_outbound_at or last_inbound_at > last_outbound_at):
+        key = "needs_response"
+        meta = CONVERSATION_HEALTH_META[key]
+        return {
+            "key": key,
+            "label": meta["label"],
+            "chip_cls": meta["chip_cls"],
+            "rank": meta["rank"],
+            "needs_response": True,
+            "needs_follow_up": False,
+        }
+
+    due_days = FOLLOW_UP_DUE_DAYS.get(status)
+    if due_days and last_outbound_at and days_since(last_outbound_at) >= due_days:
+        key = "needs_follow_up"
+        meta = CONVERSATION_HEALTH_META[key]
+        return {
+            "key": key,
+            "label": meta["label"],
+            "chip_cls": meta["chip_cls"],
+            "rank": meta["rank"],
+            "needs_response": False,
+            "needs_follow_up": True,
+        }
+
+    key = "awaiting_reply"
+    meta = CONVERSATION_HEALTH_META[key]
+    return {
+        "key": key,
+        "label": meta["label"],
+        "chip_cls": meta["chip_cls"],
+        "rank": meta["rank"],
+        "needs_response": False,
+        "needs_follow_up": False,
+    }
+
+
 def _log_timestamp(log) -> datetime | None:
+    if not log:
+        return None
     return log.sent_at or log.created_at
 
 
 def _timeline_date_key(item: dict) -> datetime:
     return item.get("at") or datetime.min
+
+
+def _compact_summary(content: str, max_len: int = 140) -> str:
+    text = (content or "").strip().replace("\n", " ")
+    if not text:
+        return "No message content."
+    text = " ".join(text.split())
+
+    for sep in (". ", "? ", "! "):
+        if sep in text:
+            first_sentence = text.split(sep, 1)[0].strip()
+            if len(first_sentence) >= 32:
+                return first_sentence[:max_len] + ("..." if len(first_sentence) > max_len else "")
+
+    return text[:max_len] + ("..." if len(text) > max_len else "")
+
+
+def _auto_next_steps(status: str, last_outbound_at, last_inbound_at):
+    if last_inbound_at and (not last_outbound_at or last_inbound_at > last_outbound_at):
+        return [
+            {"title": "Reply to customer", "timing": "Within 12 hours", "owner": "Human"},
+            {"title": "Capture intent + booking notes", "timing": "After reply", "owner": "Agent"},
+        ]
+
+    if status == "outreach_sent":
+        elapsed = days_since(last_outbound_at) if last_outbound_at else 0
+        if elapsed >= 3:
+            return [
+                {"title": "Generate Follow-up 1 draft", "timing": "Due now", "owner": "Agent"},
+                {"title": "Review + send follow-up", "timing": "Today", "owner": "Human"},
+            ]
+        return [
+            {"title": "Monitor for inbound response", "timing": f"In {max(3 - elapsed, 0)} day(s)", "owner": "Agent"},
+            {"title": "Keep queue clear for new sends", "timing": "Daily", "owner": "Human"},
+        ]
+
+    if status == "sequence_step_2":
+        elapsed = days_since(last_outbound_at) if last_outbound_at else 0
+        if elapsed >= 7:
+            return [
+                {"title": "Generate Follow-up 2 draft", "timing": "Due now", "owner": "Agent"},
+                {"title": "Send follow-up if approved", "timing": "Today", "owner": "Human"},
+            ]
+        return [
+            {"title": "Wait for response before step 3", "timing": f"In {max(7 - elapsed, 0)} day(s)", "owner": "Agent"},
+        ]
+
+    if status == "sequence_step_3":
+        elapsed = days_since(last_outbound_at) if last_outbound_at else 0
+        if elapsed >= 14:
+            return [
+                {"title": "Close-loop this sequence", "timing": "Due now", "owner": "Agent"},
+            ]
+        return [
+            {"title": "Final wait window", "timing": f"In {max(14 - elapsed, 0)} day(s)", "owner": "Agent"},
+        ]
+
+    if status == "replied":
+        return [
+            {"title": "Move toward booking", "timing": "Today", "owner": "Human"},
+            {"title": "Tag conversation as warm opportunity", "timing": "After response", "owner": "Agent"},
+        ]
+
+    if status == "booked":
+        return [
+            {"title": "Confirm appointment details", "timing": "Now", "owner": "Human"},
+            {"title": "Trigger reminder sequence", "timing": "24h before visit", "owner": "Agent"},
+        ]
+
+    return [
+        {"title": "No immediate action required", "timing": "Monitor", "owner": "Agent"},
+    ]
 
 
 # ── Startup ───────────────────────────────────────────────────────────────────
@@ -358,6 +497,7 @@ def conversations(request: Request):
         customers = db.query(Customer).filter_by(operator_id=OPERATOR_ID).all()
 
         conversations_data = []
+        health_counts = {key: 0 for key in CONVERSATION_HEALTH_META}
         for customer in customers:
             logs = (
                 db.query(OutreachLog)
@@ -375,25 +515,36 @@ def conversations(request: Request):
             logs_sorted = sorted(logs, key=lambda log: _log_timestamp(log) or datetime.min, reverse=True)
             outbound_logs = [log for log in logs_sorted if log.direction == "outbound"]
             inbound_logs = [log for log in logs_sorted if log.direction == "inbound"]
-            last_log = logs_sorted[0]
+            last_touch_log = logs_sorted[0]
+            latest_outbound = outbound_logs[0] if outbound_logs else None
+            latest_inbound = inbound_logs[0] if inbound_logs else None
+            last_outbound_at = _log_timestamp(latest_outbound)
+            last_inbound_at = _log_timestamp(latest_inbound)
             stage = _conversation_stage(customer.reactivation_status)
+            health = _conversation_health(customer.reactivation_status, last_outbound_at, last_inbound_at)
             summary = add_segment(enrich(customer))
+            health_counts[health["key"]] += 1
+
+            preview_source = latest_outbound or last_touch_log
 
             conversations_data.append({
                 "customer_id": customer.id,
                 "customer_name": customer.name,
                 "customer_email": customer.email,
                 "status_label": stage["label"],
-                "status_cls": stage["status_cls"],
-                "progress_pct": stage["progress_pct"],
+                "health_label": health["label"],
+                "health_chip_cls": health["chip_cls"],
+                "health_rank": health["rank"],
                 "reactivation_status": customer.reactivation_status,
                 "outbound_count": len(outbound_logs),
                 "inbound_count": len(inbound_logs),
-                "last_touch_at": _log_timestamp(last_log),
-                "last_subject": last_log.subject or "(no subject)",
-                "last_preview": (last_log.content or "").strip()[:180],
-                "last_direction": last_log.direction,
-                "latest_sequence_step": (outbound_logs[0].sequence_step + 1) if outbound_logs else 0,
+                "last_touch_at": _log_timestamp(last_touch_log),
+                "last_touch_direction": last_touch_log.direction,
+                "last_outbound_at": last_outbound_at,
+                "last_outbound_subject": (preview_source.subject or "(no subject)") if preview_source else "(no subject)",
+                "last_outbound_preview": _compact_summary(preview_source.content if preview_source else "", 180),
+                "needs_response": health["needs_response"],
+                "needs_follow_up": health["needs_follow_up"],
                 "opp_est": summary.get("opp_est"),
                 "opp_label": summary.get("opp_label"),
                 "days_dormant": summary.get("days_dormant"),
@@ -401,8 +552,7 @@ def conversations(request: Request):
             })
 
     conversations_data.sort(key=lambda row: row["last_touch_at"] or datetime.min, reverse=True)
-    awaiting_reply_count = sum(1 for row in conversations_data if row["inbound_count"] == 0)
-    replied_count = sum(1 for row in conversations_data if row["inbound_count"] > 0)
+    conversations_data.sort(key=lambda row: row["health_rank"])
 
     return templates.TemplateResponse("conversations.html", {
         "request": request,
@@ -410,8 +560,9 @@ def conversations(request: Request):
         "operator": operator_data,
         "queue_count": queue_count,
         "conversations": conversations_data,
-        "awaiting_reply_count": awaiting_reply_count,
-        "replied_count": replied_count,
+        "awaiting_reply_count": health_counts["awaiting_reply"],
+        "needs_response_count": health_counts["needs_response"],
+        "needs_follow_up_count": health_counts["needs_follow_up"],
     })
 
 
@@ -447,21 +598,32 @@ def conversation_detail(request: Request, customer_id: int):
         log_entries = []
         for log in logs:
             logged_at = _log_timestamp(log)
+            sender_key = "human" if log.direction == "inbound" else "agent"
             log_entries.append({
                 "id": log.id,
                 "direction": log.direction,
                 "channel": log.channel,
                 "subject": log.subject or "(no subject)",
                 "content": log.content or "",
+                "summary": _compact_summary(log.content or "", 170),
+                "sender_key": sender_key,
+                "sender_label": "Human" if sender_key == "human" else "Agent",
                 "sequence_step": (log.sequence_step or 0) + 1,
                 "at": logged_at,
                 "gmail_thread_id": log.gmail_thread_id,
             })
 
-        timeline = []
+        latest_outbound = next((log for log in logs if log.direction == "outbound"), None)
+        latest_inbound = next((log for log in logs if log.direction == "inbound"), None)
+        last_outbound_at = _log_timestamp(latest_outbound)
+        last_inbound_at = _log_timestamp(latest_inbound)
+        health = _conversation_health(customer.reactivation_status, last_outbound_at, last_inbound_at)
+        next_steps = _auto_next_steps(customer.reactivation_status, last_outbound_at, last_inbound_at)
+
+        timeline_events = []
         for job in jobs:
             appointment_at = job.completed_at or job.scheduled_at or job.created_at
-            timeline.append({
+            timeline_events.append({
                 "type": "appointment",
                 "title": f"{job.service_type} appointment",
                 "detail": f"${job.amount:,.0f} · {job.status.replace('_', ' ')}",
@@ -469,15 +631,15 @@ def conversation_detail(request: Request, customer_id: int):
             })
 
         for entry in log_entries:
-            direction_label = "Inbound reply" if entry["direction"] == "inbound" else "Outbound outreach"
-            timeline.append({
+            direction_label = "Inbound reply" if entry["direction"] == "inbound" else "Outbound email"
+            timeline_events.append({
                 "type": "inbound" if entry["direction"] == "inbound" else "outbound",
                 "title": direction_label,
-                "detail": f"Step {entry['sequence_step']} · {entry['subject']}",
+                "detail": f"{entry['sender_label']} · Step {entry['sequence_step']}",
                 "at": entry["at"],
             })
 
-    timeline.sort(key=_timeline_date_key, reverse=True)
+    timeline_events.sort(key=_timeline_date_key)
 
     outbound_count = sum(1 for entry in log_entries if entry["direction"] == "outbound")
     inbound_count = sum(1 for entry in log_entries if entry["direction"] == "inbound")
@@ -500,8 +662,10 @@ def conversation_detail(request: Request, customer_id: int):
         "queue_count": queue_count,
         "customer": customer_data,
         "stage": stage,
+        "health": health,
+        "next_steps": next_steps,
         "logs": log_entries,
-        "timeline": timeline,
+        "timeline_events": timeline_events,
         "outbound_count": outbound_count,
         "inbound_count": inbound_count,
         "jobs_count": jobs_count,
