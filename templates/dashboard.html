@@ -284,10 +284,11 @@
       <thead>
         <tr>
           <th>Customer</th>
-          <th>Segment</th>
-          <th>Dormant</th>
           <th>Last Service</th>
-          <th>Lifetime $</th>
+          <th>Dormant</th>
+          <th>Service Type</th>
+          <th>Segment</th>
+          <th>Spend</th>
           <th>Status</th>
           <th></th>
         </tr>
@@ -310,15 +311,16 @@
             <div style="font-weight:600;color:var(--navy);font-size:13px">{{ c.name }}</div>
             <div style="font-size:11px;color:var(--text-3);font-family:'IBM Plex Mono',monospace;margin-top:1px">{{ c.email }}</div>
           </td>
-          <td><span class="pill {{ c.segment_cls }}">{{ c.segment_label }}</span></td>
-          <td class="{% if c.days_dormant >= 365 %}days-red{% elif c.days_dormant >= 180 %}days-amber{% else %}days-normal{% endif %}">{{ c.days_dormant }}d</td>
           <td style="font-size:12px;color:var(--text-3);font-family:'IBM Plex Mono',monospace">
             {% if c.last_service_date %}{{ c.last_service_date.strftime('%b %-d, %Y') }}{% else %}—{% endif %}
           </td>
-          <td style="font-weight:600;font-family:'IBM Plex Mono',monospace;font-size:12px">${{ "{:,.0f}".format(c.total_spend) }}</td>
+          <td class="{% if c.days_dormant >= 365 %}days-red{% elif c.days_dormant >= 180 %}days-amber{% else %}days-normal{% endif %}">{{ c.days_dormant }}d</td>
+          <td style="font-size:12.5px;color:var(--text-2)">{{ c.last_service_type or '—' }}</td>
+          <td><span class="pill {{ c.segment_cls }}">{{ c.segment_label }}</span></td>
+          <td style="font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--text-2)">${{ "{:,.0f}".format(c.total_spend) }}</td>
           <td><span class="status-pill {{ s_cls }}">{{ s_txt }}</span></td>
           <td style="text-align:right">
-            <a href="/customer/{{ c.id }}" style="font-size:12px;font-weight:600;color:var(--gold);text-decoration:none" onclick="event.stopPropagation()">Draft →</a>
+            <a href="/customer/{{ c.id }}" style="font-size:12px;font-weight:600;color:var(--gold);text-decoration:none" onclick="event.stopPropagation()">View →</a>
           </td>
         </tr>
         {% endfor %}
