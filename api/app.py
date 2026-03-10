@@ -718,10 +718,43 @@ def startup():
     t.start()
 
 
+_STARTING_UP_HTML = """<!DOCTYPE html>
+<html><head><meta charset="utf-8">
+<meta http-equiv="refresh" content="4">
+<title>Foreman — Starting up</title>
+<style>body{font-family:system-ui,sans-serif;display:flex;align-items:center;
+justify-content:center;height:100vh;margin:0;background:#f9fafb;}
+.box{text-align:center;color:#374151;}
+h2{font-size:1.5rem;margin-bottom:.5rem;}
+p{color:#6b7280;font-size:.95rem;}
+</style></head>
+<body><div class="box">
+<h2>Foreman is starting up&hellip;</h2>
+<p>Connecting to the database. This page will refresh automatically.</p>
+{error_line}
+</div></body></html>"""
+
+
+def _db_starting_response() -> HTMLResponse | None:
+    """Return a fast holding page if the DB is not yet ready, else None."""
+    if _db_ready:
+        return None
+    error_line = (
+        f'<p style="color:#ef4444;font-size:.85rem;">DB error: {_db_init_error}</p>'
+        if _db_init_error else ""
+    )
+    return HTMLResponse(
+        _STARTING_UP_HTML.format(error_line=error_line),
+        status_code=503,
+    )
+
+
 # ── Web pages ─────────────────────────────────────────────────────────────────
 
 @app.get("/", response_class=HTMLResponse)
 def dashboard(request: Request):
+    if (guard := _db_starting_response()):
+        return guard
     with get_db() as db:
         operator = db.query(Operator).filter_by(id=OPERATOR_ID).first()
         raw_customers = db.query(Customer).filter_by(operator_id=OPERATOR_ID).all()
@@ -779,6 +812,8 @@ def dashboard(request: Request):
 
 @app.get("/customer/{customer_id}", response_class=HTMLResponse)
 def customer_detail(request: Request, customer_id: int):
+    if (guard := _db_starting_response()):
+        return guard
     with get_db() as db:
         customer = db.query(Customer).filter_by(id=customer_id, operator_id=OPERATOR_ID).first()
         if not customer:
@@ -875,6 +910,8 @@ def _outreach_row(log, customer) -> dict:
 
 @app.get("/outreach", response_class=HTMLResponse)
 def outreach_queue(request: Request):
+    if (guard := _db_starting_response()):
+        return guard
     with get_db() as db:
         operator = db.query(Operator).filter_by(id=OPERATOR_ID).first()
         rows = (
@@ -906,6 +943,8 @@ def outreach_queue(request: Request):
 
 @app.get("/conversations", response_class=HTMLResponse)
 def conversations(request: Request):
+    if (guard := _db_starting_response()):
+        return guard
     with get_db() as db:
         operator = db.query(Operator).filter_by(id=OPERATOR_ID).first()
         operator_data = _operator_data(operator)
@@ -985,6 +1024,8 @@ def conversations(request: Request):
 
 @app.get("/conversations/{customer_id}", response_class=HTMLResponse)
 def conversation_detail(request: Request, customer_id: int):
+    if (guard := _db_starting_response()):
+        return guard
     with get_db() as db:
         operator = db.query(Operator).filter_by(id=OPERATOR_ID).first()
         customer = db.query(Customer).filter_by(id=customer_id, operator_id=OPERATOR_ID).first()
@@ -1519,6 +1560,8 @@ def agent_status():
 
 @app.get("/agents", response_class=HTMLResponse)
 def agents_page(request: Request):
+    if (guard := _db_starting_response()):
+        return guard
     with get_db() as db:
         op = db.query(Operator).filter_by(id=OPERATOR_ID).first()
         operator_data = _operator_data(op)
