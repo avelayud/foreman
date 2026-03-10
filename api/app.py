@@ -447,3 +447,28 @@ def approve_draft(customer_id: int, req: ApproveRequest):
         customer.reactivation_status = "outreach_sent"
 
     return {"status": "approved", "customer_id": customer_id}
+
+
+# ── Reactivation agent trigger ────────────────────────────────────────────────
+
+class AgentRunRequest(BaseModel):
+    limit: int = 10
+    threshold_days: int = None
+
+
+@app.post("/api/agent/run")
+def run_agent(req: AgentRunRequest = None):
+    req = req or AgentRunRequest()
+    from agents.reactivation import run as run_reactivation
+    import threading
+
+    def _run():
+        run_reactivation(
+            operator_id=OPERATOR_ID,
+            limit=req.limit,
+            threshold_days=req.threshold_days,
+        )
+
+    t = threading.Thread(target=_run, daemon=True)
+    t.start()
+    return {"status": "started", "limit": req.limit}

@@ -118,18 +118,29 @@
 {% endif %}
 
 {# ── AGENT BAR ── #}
-{% if queue_count > 0 %}
 <div class="agent-bar">
   <div class="agent-bar-left">
-    <div class="agent-dot"></div>
+    <div class="agent-dot" id="agentDot"></div>
     <div>
-      <div class="agent-bar-text"><strong>Outreach Queue</strong> — {{ queue_count }} draft{{ 's' if queue_count != 1 }} ready for review</div>
-      <div class="agent-bar-meta">Approved and waiting to send</div>
+      <div class="agent-bar-text" id="agentBarText">
+        {% if queue_count > 0 %}
+        <strong>Outreach Queue</strong> — {{ queue_count }} draft{{ 's' if queue_count != 1 }} queued for review
+        {% else %}
+        <strong>Reactivation Agent</strong> — ready to scan for prime targets
+        {% endif %}
+      </div>
+      <div class="agent-bar-meta" id="agentBarMeta">
+        {% if queue_count > 0 %}Drafts waiting in queue — review before sending{% else %}Finds dormant customers, drafts emails, queues for your approval{% endif %}
+      </div>
     </div>
   </div>
-  <a href="/outreach" class="btn-ghost" style="font-size:11.5px;text-decoration:none">Review Queue →</a>
+  <div style="display:flex;gap:8px;align-items:center">
+    {% if queue_count > 0 %}
+    <a href="/outreach" class="btn-ghost" style="font-size:11.5px;text-decoration:none">Review Queue →</a>
+    {% endif %}
+    <button class="btn-primary" id="runAgentBtn" onclick="runAgent()" style="font-size:11.5px;padding:6px 14px">Run Agent</button>
+  </div>
 </div>
-{% endif %}
 
 {# ── METRIC STRIP ── #}
 <div class="metric-strip">
@@ -367,5 +378,43 @@
 
   const urlTab = new URLSearchParams(window.location.search).get('tab');
   if (urlTab && TAB_KEYS.includes(urlTab)) showTab(urlTab);
+
+  async function runAgent() {
+    const btn = document.getElementById('runAgentBtn');
+    const dot = document.getElementById('agentDot');
+    const text = document.getElementById('agentBarText');
+    const meta = document.getElementById('agentBarMeta');
+
+    btn.disabled = true;
+    btn.textContent = 'Running…';
+    dot.style.background = 'var(--gold)';
+    text.innerHTML = '<strong>Agent Running</strong> — scanning for prime targets and generating drafts…';
+    meta.textContent = 'This may take 15–30 seconds';
+
+    try {
+      const res = await fetch('/api/agent/run', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({limit: 10}),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        text.innerHTML = '<strong>Agent Started</strong> — drafts will appear in the outreach queue';
+        meta.textContent = 'Refresh the page in ~30s to see new queue items';
+        btn.textContent = 'Refresh';
+        btn.disabled = false;
+        btn.onclick = () => window.location.reload();
+        dot.style.background = 'var(--green)';
+      } else {
+        throw new Error(data.detail || 'Unknown error');
+      }
+    } catch (err) {
+      text.innerHTML = '<strong>Agent Error</strong> — ' + err.message;
+      meta.textContent = 'Check server logs for details';
+      btn.textContent = 'Run Agent';
+      btn.disabled = false;
+      dot.style.background = 'var(--red)';
+    }
+  }
 </script>
 {% endblock %}

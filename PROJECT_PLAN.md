@@ -6,11 +6,10 @@
 
 ## Current Status
 
-**Active Phase:** Phase 2 ✅ Complete. Dashboard UI live. Phase 3 next.
-**Current Step:** All Phase 2 code shipped and live on Railway. Dashboard UI being iterated in Claude.ai before Phase 3 build starts.
-**Last Updated:** 2026-03-09
+**Active Phase:** Phase 3 🟡 In Progress — Reactivation Agent.
+**Current Step:** Phase 2 fully complete (dashboard, voice profiles, segment engine, 40-customer synthetic data on Railway). Starting Phase 3: automated reactivation agent with approval queue.
+**Last Updated:** 2026-03-10
 **Live URL:** https://web-production-3df3a.up.railway.app
-**GitHub:** https://github.com/avelayud/foreman
 **GitHub:** https://github.com/avelayud/foreman
 
 ---
@@ -34,7 +33,7 @@
 |---|---|---|---|
 | 1 | Foundation (models, config, DB) | ✅ Complete | Week 1 |
 | 2 | Tone Profiler Agent | ✅ Complete | Week 1-2 |
-| 3 | Reactivation Outreach Agent (Email) | ⬜ Not Started | Week 2 |
+| 3 | Reactivation Outreach Agent (Email) | 🟡 In Progress | Week 2 |
 | 4 | Follow-up Sequence Engine | ⬜ Not Started | Week 2 |
 | 5 | SMS Channel (Twilio) | ⬜ Not Started | Week 3 |
 | 6 | Booking Page + Slot Management | ⬜ Not Started | Week 3-4 |
@@ -62,55 +61,52 @@ All core infrastructure is built and verified:
 
 ---
 
-## Phase 2 — Tone Profiler Agent ✅ COMPLETE
+## Phase 2 — Tone Profiler + Dashboard UI ✅ COMPLETE
 
-**Goal:** Read the operator's existing sent Gmail, extract their writing style, store a "voice profile" used by all future outreach.
+**Goal:** Extract operator voice from sent Gmail, build full dashboard UI with segment engine and reactivation workflow.
 
-**File:** `agents/tone_profiler.py`
-**Depends on:** Gmail OAuth (`integrations/gmail.py`)
-
-### What it does
-1. Authenticates with Gmail via OAuth
-2. Reads last 25-30 sent emails
-3. Sends samples to Claude with a voice extraction prompt that identifies:
-   - Formality level (casual / semi-formal / formal)
-   - Greeting style ("Hey John" vs "Hi John," vs "Hello")
-   - Sign-off style ("Thanks, Mike" vs "Best, Mike")
-   - Sentence length and structure tendency
-   - Use of humor or regional phrasing
-   - Emoji usage
-4. Stores voice profile as JSON on the Operator record
-5. Generates 2-3 sample outreach messages using that profile for review
-
-### Tasks
-- [x] `integrations/gmail.py` — OAuth flow + read sent mail
-- [x] `agents/tone_profiler.py` — core profiling logic
-- [x] Voice extraction prompt (system prompt for Claude)
-- [x] "Write in this voice" prefix prompt (reused by all agents)
-- [x] Store profile in Operator.tone_profile in DB
-- [x] CLI test: `python -m agents.tone_profiler --operator-id 1`
+### Completed
+- [x] `integrations/gmail.py` — Gmail OAuth + read sent mail
+- [x] `agents/tone_profiler.py` — Claude voice extraction, stores tone_profile on Operator
+- [x] Voice profiles — JSON array on Operator (assignable per customer at draft time)
+- [x] Segment engine — classifies customers: high_value / end_of_life / new_lead / maintenance / referral
+- [x] Priority scoring — `days_dormant × (total_spend / 1000 + 0.5)`
+- [x] Dashboard — metric strip, segment shelf, top-6 prospects table, browse-all tabs
+- [x] Customer detail — service history, voice picker, inline draft generation
+- [x] Outreach queue page
+- [x] Alembic migrations — voice_profiles (Operator) + assigned_voice_id (Customer)
+- [x] 40-customer synthetic dataset (`data/reseed.py`) with varied statuses, jobs, logs
+- [x] Railway Postgres live with Arjuna as operator + voice profile
+- [x] Navy/gold design system (IBM Plex Sans/Mono + Playfair Display, CSS variables)
 
 ---
 
-## Phase 3 — Reactivation Outreach Agent (Email)
+## Phase 3 — Reactivation Outreach Agent (Email) 🟡 IN PROGRESS
 
-**Goal:** Agent autonomously identifies dormant customers, drafts personalized reactivation emails in the operator's voice, sends on schedule.
+**Goal:** Agent autonomously scans for dormant customers, scores + ranks them, drafts personalized emails in the operator's voice, queues for approval.
 
 **File:** `agents/reactivation.py`
 
-### Logic
-- Runs daily via APScheduler
-- Targets customers where last_service_date > 365 days ago AND reactivation_status == 'never_contacted'
-- Calls Claude with operator tone profile + customer service history
-- Sends via Gmail (if connected) or SendGrid fallback
-- Logs everything to OutreachLog
+### Design
+- Targets customers: `reactivation_status == 'never_contacted'` AND `days_dormant >= 365`
+- Ranks by priority_score (days_dormant × spend factor), picks top N per run
+- Calls Claude with operator tone profile + customer segment context
+- Saves drafts to OutreachLog with `dry_run=True` — operator reviews in /outreach queue
+- Actual send triggered manually via "Mark Sent" in UI (or future Gmail integration)
+- APScheduler for daily automation (or manual trigger via CLI)
 
 ### Tasks
-- [ ] `agents/reactivation.py`
-- [ ] `integrations/sendgrid.py`
-- [ ] Reactivation email generation prompt
-- [ ] APScheduler daily trigger
-- [ ] Dry-run mode (generate + print, don't send)
+- [ ] `agents/reactivation.py` — scan → rank → draft → save to OutreachLog
+- [ ] CLI: `python -m agents.reactivation --operator-id 1 [--limit N] [--dry-run]`
+- [ ] Reactivation prompt (uses existing DRAFT_SYSTEM/DRAFT_USER from app.py — extract to shared module)
+- [ ] APScheduler daily trigger in `main.py`
+- [ ] `/api/agent/run` POST endpoint to trigger from UI
+- [ ] Dashboard "Run Agent" button (agent bar) wired to endpoint
+- [ ] `integrations/sendgrid.py` — SendGrid fallback send (Phase 3b or Phase 4)
+
+### Backlog (post-Phase 3)
+- [ ] Voice profile config screen — operator fine-tunes each voice beyond sent-mail analysis
+- [ ] Voice profiles generated from operator's actual sent Gmail (currently seeded manually)
 
 ---
 
@@ -192,6 +188,9 @@ After job:       Review request (24hrs post-complete)
 | 2026-03-08 | DB for dev | SQLite → Postgres for prod |
 | 2026-03-09 | Deployment | Railway (Python-native) over Vercel for backend |
 | 2026-03-09 | Frontend | Defer React dashboard. SMS + email summaries as UI substitute early. |
+| 2026-03-10 | Dashboard | Full v4 redesign — navy/gold, segment shelf, top prospects, priority scoring |
+| 2026-03-10 | Voice profiles | Each profile assignable per customer; generated from Gmail, not random |
+| 2026-03-10 | Reactivation flow | Approval queue model confirmed: drafts land in /outreach, operator clicks "Send" |
 
 ---
 

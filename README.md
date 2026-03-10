@@ -17,19 +17,23 @@ Foreman helps field service business owners win back dormant customers by:
 
 ---
 
-## Current State — Phase 2 Complete
+## Current State — Phase 2 Complete, Phase 3 Next
 
 | Feature | Status |
 |---|---|
 | Database models (Operator, Customer, Job, Booking, OutreachLog) | ✅ |
 | Config and environment management | ✅ |
-| Sample data seed (20 HVAC customers) | ✅ |
+| Synthetic data seed (40 HVAC customers, varied statuses/history) | ✅ |
 | Gmail OAuth + sent email reader | ✅ |
 | Tone profiler agent (Claude-powered voice extraction) | ✅ |
-| Dashboard UI (customer categories, metrics) | ✅ |
-| Customer detail view (service history, outreach history) | ✅ |
-| Outreach draft generation (Claude, inline approval) | ✅ |
+| Voice profiles (JSON on Operator, assignable per customer) | ✅ |
+| Dashboard UI — segment shelf, top prospects, metric strip | ✅ |
+| Customer detail view (service history, outreach history, voice picker) | ✅ |
+| Outreach draft generation (Claude, voice-aware, inline approval) | ✅ |
 | Outreach queue page | ✅ |
+| Segment engine (high_value / end_of_life / new_lead / maintenance / referral) | ✅ |
+| Priority scoring (days_dormant × spend factor) | ✅ |
+| Alembic migrations | ✅ |
 | Railway deployment (Postgres) | ✅ |
 
 ---
@@ -41,7 +45,7 @@ Foreman helps field service business owners win back dormant customers by:
 | Language | Python 3.12 |
 | AI / LLM | Anthropic Claude (`claude-sonnet-4-20250514`) |
 | Web framework | FastAPI + Jinja2 |
-| Frontend | Tailwind CSS (CDN) |
+| Frontend | Custom CSS (IBM Plex Sans/Mono + Playfair Display, navy/gold design system) |
 | Database | SQLite (dev) → PostgreSQL (prod via Railway) |
 | Email reading | Gmail API (OAuth2) |
 | Email sending | SendGrid (Phase 3) |
@@ -64,7 +68,8 @@ foreman/
 │   ├── database.py         # SQLAlchemy session management
 │   └── models.py           # ORM models
 ├── data/
-│   └── seed.py             # Sample HVAC data seed
+│   ├── seed.py             # Original seed (skip-safe)
+│   └── reseed.py           # Full wipe + 40-customer synthetic dataset
 ├── integrations/
 │   └── gmail.py            # Gmail OAuth + sent mail reader
 ├── templates/
@@ -100,8 +105,10 @@ venv/bin/pip install -r requirements.txt
 cp .env.example .env
 # Fill in: ANTHROPIC_API_KEY, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET
 
-venv/bin/python main.py --seed          # Seed sample data
-venv/bin/uvicorn api.app:app --reload   # Start web server → http://localhost:8000
+venv/bin/python main.py --seed              # Seed original sample data
+# OR for full 40-customer synthetic dataset:
+venv/bin/python -m data.reseed
+venv/bin/uvicorn api.app:app --reload       # Start web server → http://localhost:8000
 ```
 
 ## CLI Agents
