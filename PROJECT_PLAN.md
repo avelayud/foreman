@@ -1,247 +1,211 @@
 # Foreman — Project Plan & Status Tracker
 
-> **How to use this file:** At the start of every new chat session, share this file. It tells the AI assistant exactly where we are, what's built, what's next, and all relevant context so we can keep building without re-explaining.
+> Share this file at the start of a new chat so work can resume with correct context.
 
 ---
 
 ## Current Status
 
-**Active Phase:** Phase 4 🟡 In Progress — Gmail Send + Intelligent Follow-up.
-**Current Step:** Phase 3 complete (reactivation agent, outreach queue, approve-to-send). Phase 4 in build: Gmail API send, customer analyzer, reply detector, follow-up agent.
-**Last Updated:** 2026-03-10
-**Live URL:** https://web-production-3df3a.up.railway.app
-**GitHub:** https://github.com/avelayud/foreman
+- **Active Phase:** Phase 4 (Gmail send + intelligent follow-up + operator UX)  
+- **State:** Core workflows are built and usable; deploy stability is being finalized on Railway.
+- **Last Updated:** 2026-03-10
+- **Live URL:** https://web-production-3df3a.up.railway.app
+- **Repo:** https://github.com/avelayud/foreman
 
 ---
 
-## Non-Code Setup Checklist (Complete Before Building)
+## Recently Completed (2026-03-10)
 
-- [ ] Regenerate Anthropic API key (previous one was exposed — do this at console.anthropic.com)
-- [ ] Create `.env` from `.env.example` and paste new API key
-- [ ] Run `pip install -r requirements.txt` inside activated venv
-- [ ] Run `python main.py --seed` — confirm 20 customers load
-- [ ] Run `python main.py` — confirm clean startup
-- [ ] Google Cloud Console: create project `foreman-dev`, enable Gmail API, create OAuth credentials, download `credentials.json`
-- [ ] Add `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` to `.env`
-- [ ] Railway: sign up at railway.app with GitHub, link to `avelayud/foreman`
+### Agent + workflow coverage
+- Added/confirmed agent coverage in app + menu:
+  - Tone Profiler
+  - Reactivation Analyzer
+  - Customer Analyzer
+  - Reply Detector
+  - Follow-up Sequencer
+- Added `/agents` page status cards for each agent, with live stats and CLI commands.
+- Added `/api/agent/status` for aggregate runtime/coverage metrics.
+
+### Outreach operating model
+- Added Dry Run vs Production mode toggle in app (`/api/operator/mode`).
+- Built `approve + schedule` and `send now` flows for queue items (`/api/outreach/{log_id}/approve-send`).
+- Queue behavior now supports:
+  - pending approval
+  - approved/scheduled waiting to send
+  - sent
+  - failed
+- Added scheduled send default logic (business-hour aware) and due-message sender worker.
+- Kept scheduled items in queue until actually sent.
+
+### Conversation UX
+- Reworked **Active Conversations** cards for operational triage:
+  - color-coded by conversation health
+  - last outbound snapshot
+  - needs-response/follow-up signal
+  - opportunity estimate and job type
+- Built separate **Conversation Detail** page (`/conversations/{customer_id}`):
+  - operator recap section in plain English
+  - discussion summary + structured briefing fields
+  - talking points + operator tips
+  - conversation-only vertical timeline (message events only)
+  - expandable selected-message panel
+  - opportunity snapshot + auto next steps
+- Moved account-life timeline concerns to customer context (not conversation timeline).
+
+### Data model / DB alignment
+- Added/used `customers.customer_profile` with fields:
+  - `relationship_history`
+  - `topics_discussed`
+  - `customer_tone`
+  - `prior_concerns`
+  - `response_patterns`
+  - `interest_signals`
+  - `context_notes`
+  - `analyzed_at`
+- Added/used `outreach_logs.gmail_thread_id` for thread-based reply detection.
+- Confirmed schema patching path in app startup.
+
+### Deployment hardening
+- Updated Procfile entrypoint to `python -m api.run`.
+- Added `api/run.py` to resolve `PORT` robustly in Railway.
+- Normalized DB URLs in `core/database.py` (supports `postgres://` → `postgresql://`).
+- Added startup DB init retry loop in `api/app.py` for transient DB boot races.
+- Added env trimming in config parser to reduce whitespace misconfiguration failures.
 
 ---
 
 ## Build Phases Overview
 
-| Phase | Name | Status | Est. Time |
+| Phase | Name | Status | Notes |
 |---|---|---|---|
-| 1 | Foundation (models, config, DB) | ✅ Complete | Week 1 |
-| 2 | Tone Profiler Agent | ✅ Complete | Week 1-2 |
-| 3 | Reactivation Outreach Agent (Email) | ✅ Complete | Week 2 |
-| 4 | Intelligent Follow-up + Gmail Send | 🟡 In Progress | Week 2-3 |
-| 5 | SMS Channel (Twilio) | ⬜ Not Started | Week 3 |
-| 6 | Booking Page + Slot Management | ⬜ Not Started | Week 3-4 |
-| 7 | Confirmation + Reminder Loop | ⬜ Not Started | Week 4 |
-| 8 | Google Calendar OAuth Sync | ⬜ Not Started | Week 5 |
-| 9 | Review Solicitation Agent | ⬜ Not Started | Week 5 |
-| 10 | Operator Dashboard (basic) | ⬜ Not Started | Week 6-7 |
-| 11 | Dynamic Onboarding Flow | ⬜ Not Started | Week 7-8 |
-| 12 | Niche Config Layer (expansion) | ⬜ Not Started | Week 9+ |
-
-**Status legend:** ✅ Done | 🟡 In Progress | ⬜ Not Started | 🔴 Blocked
+| 1 | Foundation (models/config/DB) | ✅ Complete | Stable |
+| 2 | Tone Profiler + Dashboard UI | ✅ Complete | Stable |
+| 3 | Reactivation Analyzer + Approval Queue | ✅ Complete | Stable |
+| 4 | Gmail Send + Follow-up Intelligence | 🟡 In Progress | Core done, scheduler automation + deploy polish pending |
+| 5 | SMS Channel (Twilio) | ⬜ Not Started | Planned |
+| 6 | Booking + Slot Management | ⬜ Not Started | Planned |
+| 7+ | Reminders, Calendar sync, onboarding expansion | ⬜ Planned | Future |
 
 ---
 
-## Phase 1 — Foundation ✅ COMPLETE
+## Phase 4 Breakdown
 
-All core infrastructure is built and verified:
-- Project directory structure
-- SQLAlchemy models: Operator, Customer, Job, Booking, OutreachLog
-- DB initialization and session management
-- Config and environment variable management
-- Sample data seed script (20 HVAC customers)
-- Entry point (main.py) with --seed and --dry-run flags
-- README.md, .env.example, .gitignore, requirements.txt
+### Implemented
+- [x] Gmail send path on approval/send-now
+- [x] Thread ID persistence on outbound logs
+- [x] Customer Analyzer agent (`agents/customer_analyzer.py`)
+- [x] Reply Detector agent (`agents/reply_detector.py`)
+- [x] Follow-up Sequencer agent (`agents/follow_up.py`)
+- [x] Reactivation agent integrated with analyzer context
+- [x] Active Conversations page
+- [x] Conversation Detail page (recap + timeline + opportunity/next steps)
+- [x] Outreach queue redesign + action grouping
+- [x] Production/dry-run toggle in UI
+- [x] Scheduled send worker loop in app
 
----
-
-## Phase 2 — Tone Profiler + Dashboard UI ✅ COMPLETE
-
-**Goal:** Extract operator voice from sent Gmail, build full dashboard UI with segment engine and reactivation workflow.
-
-### Completed
-- [x] `integrations/gmail.py` — Gmail OAuth + read sent mail
-- [x] `agents/tone_profiler.py` — Claude voice extraction, stores tone_profile on Operator
-- [x] Voice profiles — JSON array on Operator (assignable per customer at draft time)
-- [x] Segment engine — classifies customers: high_value / end_of_life / new_lead / maintenance / referral
-- [x] Priority scoring — `days_dormant × (total_spend / 1000 + 0.5)`
-- [x] Dashboard — metric strip, segment shelf, top-6 prospects table, browse-all tabs
-- [x] Customer detail — service history, voice picker, inline draft generation
-- [x] Outreach queue page
-- [x] Alembic migrations — voice_profiles (Operator) + assigned_voice_id (Customer)
-- [x] 40-customer synthetic dataset (`data/reseed.py`) with varied statuses, jobs, logs
-- [x] Railway Postgres live with Arjuna as operator + voice profile
-- [x] Navy/gold design system (IBM Plex Sans/Mono + Playfair Display, CSS variables)
+### Remaining for Phase 4 closeout
+- [ ] Add reliable recurring scheduler wiring for `reply_detector` + `follow_up` (currently manual/CLI)
+- [ ] Add operator-facing run controls for non-reactivation agents (optional polish)
+- [ ] Finish Railway deploy debugging and verify healthy boots + web responses after fresh deploy
+- [ ] Rotate exposed secrets after successful deploy validation
 
 ---
 
-## Phase 3 — Reactivation Outreach Agent ✅ COMPLETE
+## Deployment Debug Checklist (Current Priority)
 
-**Goal:** Agent autonomously scans for dormant customers, scores + ranks them, drafts personalized emails in the operator's voice, queues for approval.
-
-**File:** `agents/reactivation.py`
-
-### Design
-- Targets customers: `reactivation_status == 'never_contacted'` AND `days_dormant >= 365`
-- Ranks by priority_score (days_dormant × spend factor), picks top N per run
-- Calls Claude with operator tone profile + customer segment context
-- Saves drafts to OutreachLog with `dry_run=True` — operator reviews in /outreach queue
-- Actual send triggered manually via "Mark Sent" in UI (or future Gmail integration)
-- APScheduler for daily automation (or manual trigger via CLI)
-
-### Tasks
-- [ ] `agents/reactivation.py` — scan → rank → draft → save to OutreachLog
-- [ ] CLI: `python -m agents.reactivation --operator-id 1 [--limit N] [--dry-run]`
-- [ ] Reactivation prompt (uses existing DRAFT_SYSTEM/DRAFT_USER from app.py — extract to shared module)
-- [ ] APScheduler daily trigger in `main.py`
-- [ ] `/api/agent/run` POST endpoint to trigger from UI
-- [ ] Dashboard "Run Agent" button (agent bar) wired to endpoint
-- [ ] `integrations/sendgrid.py` — SendGrid fallback send (Phase 3b or Phase 4)
-
-### Backlog (post-Phase 3)
-- [ ] Voice profile config screen — operator fine-tunes each voice beyond sent-mail analysis
-- [ ] Voice profiles generated from operator's actual sent Gmail (currently seeded manually)
+1. Confirm Railway **Web** service variables:
+   - `DATABASE_URL` = internal Railway URL (`postgres.railway.internal`)
+   - `ANTHROPIC_API_KEY`
+   - `GOOGLE_CLIENT_ID`
+   - `GOOGLE_CLIENT_SECRET`
+2. Do not set a custom `PORT`; Railway injects it.
+3. Confirm deploy includes:
+   - `Procfile` using `python -m api.run`
+   - `api/run.py`
+   - DB URL normalization + startup retry code
+4. If app still fails:
+   - capture first traceback from Railway deploy/runtime logs
+   - capture request ID from the Railway error page
+   - verify DB connectivity from Railway runtime context
 
 ---
 
-## Phase 4 — Intelligent Follow-up + Gmail Send 🟡 IN PROGRESS
+## Local Run Modes
 
-**Goal:** Close the full automation loop — send via Gmail API, detect replies by thread ID,
-build customer profiles from correspondence, generate context-aware follow-ups.
-
-### Architecture
-```
-Pre-outreach:   Customer Analyzer → reads prior Gmail history → builds CustomerProfile
-Send:           Approve to Send → Gmail API → stores gmail_thread_id on OutreachLog
-Reply check:    Reply Detector (every few hours) → matches inbox by thread_id → logs inbound
-Follow-up:      Follow-up Agent (daily) → reads CustomerProfile + thread → drafts next step
+### Local (SQLite)
+```bash
+DATABASE_URL=sqlite:///./foreman.db venv/bin/python -m api.run
 ```
 
-### New files
-- `agents/customer_analyzer.py` ✅ — pre-outreach profile builder
-- `agents/reply_detector.py` ✅ — thread-based inbox polling
-- `agents/follow_up.py` ✅ — profile-informed sequence runner
-
-### Updated files
-- `integrations/gmail.py` ✅ — added send_email(), get_thread(), get_correspondence(), get_inbox_replies()
-- `agents/reactivation.py` ✅ — runs customer_analyzer before drafting
-- `api/app.py` ✅ — approve-send sends via Gmail API, stores thread_id
-- DB migration ✅ — customers.customer_profile + outreach_logs.gmail_thread_id
-
-### Remaining
-- [ ] Wire reply_detector + follow_up to APScheduler in main.py
-- [ ] Show reply content in Conversations page when detected
-- [ ] Re-authorize Gmail OAuth with new scopes (gmail.send + gmail.modify) — delete token.json
-
----
-
-## Phase 5 — SMS Channel (Twilio)
-
-**Goal:** All outreach and replies work via SMS. Blue-collar operators live in text.
-
-### Tasks
-- [ ] `integrations/twilio_sms.py`
-- [ ] `api/routes.py` — Twilio inbound webhook
-- [ ] Two-way reply handling
-- [ ] Operator alert SMS on key events
-
----
-
-## Phase 6 — Booking Page + Slot Management
-
-**Goal:** Customers can self-book from a hosted page. Agent sends booking links in outreach.
-
-### Tasks
-- [ ] Slot availability model
-- [ ] Booking API endpoints
-- [ ] Simple hosted booking page
-- [ ] Conflict detection
-
----
-
-## Phase 7 — Confirmation + Reminder Loop
-
-### Sequence
+### Local against Railway public DB
+```bash
+DATABASE_URL=postgresql://<user>:<pass>@hopper.proxy.rlwy.net:<port>/railway venv/bin/python -m api.run
 ```
-On booking:      Confirmation SMS + email
-24hrs before:    Reminder SMS with CONFIRM/RESCHEDULE option
-2hrs before:     On-my-way trigger
-After job:       Review request (24hrs post-complete)
+
+### Manual agent runs
+```bash
+venv/bin/python -m agents.tone_profiler --operator-id 1
+venv/bin/python -m agents.reactivation --operator-id 1 --limit 10
+venv/bin/python -m agents.customer_analyzer --operator-id 1 --all
+venv/bin/python -m agents.reply_detector --operator-id 1
+venv/bin/python -m agents.follow_up --operator-id 1 --limit 20
 ```
 
 ---
 
-## Phases 8-12 (Future — see earlier phases for detail)
+## Environment Variables
 
-- Phase 8: Google Calendar OAuth sync
-- Phase 9: Review solicitation agent
-- Phase 10: Operator dashboard (mobile-first)
-- Phase 11: Dynamic onboarding flow
-- Phase 12: Niche config layer (expand beyond HVAC)
+```bash
+ANTHROPIC_API_KEY
+GOOGLE_CLIENT_ID
+GOOGLE_CLIENT_SECRET
+GOOGLE_REDIRECT_URI
+DATABASE_URL
+APP_ENV
+APP_PORT
+DRY_RUN
+SENDGRID_API_KEY
+SENDGRID_FROM_EMAIL
+TWILIO_ACCOUNT_SID
+TWILIO_AUTH_TOKEN
+TWILIO_FROM_NUMBER
+```
 
 ---
 
-## Decisions & Context Log
+## Decisions Log
 
 | Date | Topic | Decision |
 |---|---|---|
-| 2026-03-08 | Product name | Foreman |
-| 2026-03-08 | Niche focus | HVAC/plumbing first. Infrastructure designed to expand. |
-| 2026-03-08 | Build order | Reactivation agent (Product A) before full OS (Product B) |
-| 2026-03-08 | SMS vs email | SMS is primary channel. Email is fallback/supplement. |
-| 2026-03-08 | Calendar conflict | Soft-confirm for AI bookings. Hard block on any booking. |
-| 2026-03-08 | Pricing target | $29-49/mo. Below Jobber. |
-| 2026-03-08 | DB for dev | SQLite → Postgres for prod |
-| 2026-03-09 | Deployment | Railway (Python-native) over Vercel for backend |
-| 2026-03-09 | Frontend | Defer React dashboard. SMS + email summaries as UI substitute early. |
-| 2026-03-10 | Dashboard | Full v4 redesign — navy/gold, segment shelf, top prospects, priority scoring |
-| 2026-03-10 | Voice profiles | Each profile assignable per customer; generated from Gmail, not random |
-| 2026-03-10 | Reactivation flow | Approval queue model confirmed: drafts land in /outreach, operator clicks "Send" |
+| 2026-03-08 | Product direction | Reactivation-first wedge before full FSM stack |
+| 2026-03-09 | Deployment platform | Railway for Python + Postgres simplicity |
+| 2026-03-10 | Agent naming | “Reactivation” renamed in UI to **Reactivation Analyzer** |
+| 2026-03-10 | Operator safety | Added Dry Run / Production mode toggle |
+| 2026-03-10 | Queue behavior | Approved but unsent drafts remain visible as scheduled/pending |
+| 2026-03-10 | Conversation UX | Separate conversation page; conversation-only timeline |
+| 2026-03-10 | Deploy hardening | Added startup retries, DB URL normalization, and Python launcher |
 
 ---
 
-## Environment Variables Required
+## Known Risks
 
-```
-ANTHROPIC_API_KEY        # Claude API — get from console.anthropic.com
-SENDGRID_API_KEY         # Email sending — sendgrid.com (Phase 3)
-TWILIO_ACCOUNT_SID       # SMS — twilio.com (Phase 5)
-TWILIO_AUTH_TOKEN        # SMS
-TWILIO_FROM_NUMBER       # Provisioned SMS number
-GOOGLE_CLIENT_ID         # Gmail + Calendar OAuth
-GOOGLE_CLIENT_SECRET     # Gmail + Calendar OAuth
-DATABASE_URL             # Default: sqlite:///./foreman.db
-```
+- Secrets were exposed in chat/local env during troubleshooting and must be rotated.
+- Railway app still reported “Application failed to respond” after one deploy; pending log-based root-cause confirmation.
+- `reply_detector` and `follow_up` are not yet wired into a durable recurring scheduler pipeline.
 
 ---
 
-## How to Resume in a New Chat
+## New Chat Resume Prompt (General)
 
-1. Share `PROJECT_PLAN.md` with the new session
-2. Say: *"I'm continuing to build Foreman. Here's the project plan. Current step: [copy from Current Status above]. Let's work on [next task]."*
-3. The assistant will have full context and can keep building.
+Use this when resuming build work:
 
----
+```text
+I’m continuing Foreman from PROJECT_PLAN.md (attached).
+Current focus: Phase 4 closeout and deploy stabilization.
 
-## Starter Prompt for Claude Code
-
-Once your environment is set up and you're in Claude Code, use this to kick off Phase 2:
-
-```
-I'm building Foreman — an AI reengagement platform for HVAC/plumbing contractors.
-Phase 1 (foundation) is complete. Here is the PROJECT_PLAN.md: [paste file]
-
-We are starting Phase 2: the Tone Profiler Agent.
-The repo is at https://github.com/avelayud/foreman
-Local path: /Users/arjunavelayudam/Desktop/Coding/foreman
-
-Start by building integrations/gmail.py (Gmail OAuth + read sent emails),
-then agents/tone_profiler.py (send emails to Claude, extract voice profile, store on Operator).
-Use dry-run mode. I want to run this against my own Gmail and see my voice profile output.
+Please:
+1) Read PROJECT_PLAN.md and README.md first.
+2) Verify implemented features against code (agents, conversations UI, outreach queue workflow, dry-run/production mode).
+3) Continue from the “Remaining for Phase 4 closeout” checklist.
+4) Make code changes directly, run validation, and summarize exactly what changed.
 ```

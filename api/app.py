@@ -44,6 +44,8 @@ DB_STARTUP_MAX_ATTEMPTS = max(1, int(os.getenv("DB_STARTUP_MAX_ATTEMPTS", "8")))
 DB_STARTUP_RETRY_SECONDS = max(1, int(os.getenv("DB_STARTUP_RETRY_SECONDS", "3")))
 _scheduled_sender_started = False
 _scheduled_sender_lock = threading.Lock()
+_db_ready = False
+_db_init_error: Exception | None = None
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -685,26 +687,35 @@ def _conversation_recap(customer: dict, stage: dict, health: dict, logs: list[di
 
 # ── Startup ───────────────────────────────────────────────────────────────────
 
-@app.on_event("startup")
-def startup():
-    last_error = None
+def _init_db_background():
+    """
+    Initialise the database in a background thread so uvicorn can bind to PORT
+    immediately. Railway starts Postgres and the web service in parallel, so a
+    transient connection failure at boot time must not crash the process.
+    """
+    global _db_ready, _db_init_error
     for attempt in range(1, DB_STARTUP_MAX_ATTEMPTS + 1):
         try:
             init_db()
-            last_error = None
-            break
+            _db_ready = True
+            _db_init_error = None
+            print("✅ Database ready.")
+            _start_scheduled_sender()
+            return
         except Exception as exc:
-            last_error = exc
+            _db_init_error = exc
             print(
                 f"[startup] init_db attempt {attempt}/{DB_STARTUP_MAX_ATTEMPTS} failed: {exc}"
             )
             if attempt < DB_STARTUP_MAX_ATTEMPTS:
                 time.sleep(DB_STARTUP_RETRY_SECONDS)
+    print(f"[startup] FATAL: DB init failed after all retries: {_db_init_error}")
 
-    if last_error:
-        raise last_error
 
-    _start_scheduled_sender()
+@app.on_event("startup")
+def startup():
+    t = threading.Thread(target=_init_db_background, daemon=True, name="db-init")
+    t.start()
 
 
 # ── Web pages ─────────────────────────────────────────────────────────────────
@@ -1088,7 +1099,11 @@ def conversation_detail(request: Request, customer_id: int):
 
 @app.get("/health")
 def health():
-    return {"status": "ok"}
+    return {
+        "status": "ok",
+        "db_ready": _db_ready,
+        "db_error": str(_db_init_error) if _db_init_error else None,
+    }
 
 
 @app.get("/api/operator/{operator_id}")

@@ -1,40 +1,42 @@
 # Foreman
 
-AI-powered customer reengagement and scheduling platform for small field service contractors (HVAC, plumbing, etc.).
+AI-powered customer reengagement and scheduling workflow for small field service businesses (HVAC, plumbing, electrical, etc.).
 
-**Live:** https://web-production-3df3a.up.railway.app
+**Live:** https://web-production-3df3a.up.railway.app  
 **Repo:** https://github.com/avelayud/foreman
 
 ---
 
-## What it does
+## What It Does
 
-Foreman helps field service business owners win back dormant customers by:
-1. Reading the operator's sent Gmail to learn their natural writing voice
-2. Identifying customers who are overdue for service (365+ days dormant)
-3. Drafting personalized reactivation emails written in the operator's exact tone
-4. Presenting emails for review and approval before sending
+Foreman helps an operator run outbound reactivation with agent support:
+
+1. Learns operator voice from sent Gmail (Tone Profiler)
+2. Finds dormant customers and drafts personalized outreach (Reactivation Analyzer)
+3. Builds customer context from correspondence (Customer Analyzer)
+4. Tracks replies by Gmail thread and feeds follow-up logic (Reply Detector + Follow-up Sequencer)
+5. Keeps the operator in control through approval, scheduling, and send actions
 
 ---
 
-## Current State — Phase 2 Complete, Phase 3 Next
+## Current Product State (as of 2026-03-10)
 
-| Feature | Status |
+| Area | Status |
 |---|---|
-| Database models (Operator, Customer, Job, Booking, OutreachLog) | ✅ |
-| Config and environment management | ✅ |
-| Synthetic data seed (40 HVAC customers, varied statuses/history) | ✅ |
-| Gmail OAuth + sent email reader | ✅ |
-| Tone profiler agent (Claude-powered voice extraction) | ✅ |
-| Voice profiles (JSON on Operator, assignable per customer) | ✅ |
-| Dashboard UI — segment shelf, top prospects, metric strip | ✅ |
-| Customer detail view (service history, outreach history, voice picker) | ✅ |
-| Outreach draft generation (Claude, voice-aware, inline approval) | ✅ |
-| Outreach queue page | ✅ |
-| Segment engine (high_value / end_of_life / new_lead / maintenance / referral) | ✅ |
-| Priority scoring (days_dormant × spend factor) | ✅ |
-| Alembic migrations | ✅ |
-| Railway deployment (Postgres) | ✅ |
+| Core models + DB (Operator, Customer, Job, Booking, OutreachLog) | ✅ |
+| Tone Profiler agent (Gmail + Claude voice extraction) | ✅ |
+| Reactivation Analyzer agent (dormant customer targeting + draft queueing) | ✅ |
+| Customer Analyzer agent (relationship profile fields on customer) | ✅ |
+| Reply Detector agent (thread-based reply capture) | ✅ |
+| Follow-up Sequencer agent (context-aware follow-up drafts) | ✅ (manual run) |
+| Dry Run / Production mode toggle in-app | ✅ |
+| Outreach queue with approve + schedule + send-now flow | ✅ |
+| Scheduled sender worker (sends due scheduled items in production mode) | ✅ |
+| Active Conversations page (operator-friendly cards + health state) | ✅ |
+| Individual Conversation page (operator recap + message timeline + selected message view) | ✅ |
+| Agents page with status cards and CLI commands | ✅ |
+| Railway deploy with Postgres | ✅ |
+| Railway startup hardening (DB URL normalization, startup retries, robust port launcher) | ✅ |
 
 ---
 
@@ -43,54 +45,62 @@ Foreman helps field service business owners win back dormant customers by:
 | Layer | Tool |
 |---|---|
 | Language | Python 3.12 |
-| AI / LLM | Anthropic Claude (`claude-sonnet-4-20250514`) |
-| Web framework | FastAPI + Jinja2 |
-| Frontend | Custom CSS (IBM Plex Sans/Mono + Playfair Display, navy/gold design system) |
-| Database | SQLite (dev) → PostgreSQL (prod via Railway) |
-| Email reading | Gmail API (OAuth2) |
-| Email sending | SendGrid (Phase 3) |
-| SMS | Twilio (Phase 5) |
-| Scheduling | APScheduler (Phase 3) |
+| Web | FastAPI + Jinja2 |
+| DB | SQLAlchemy + PostgreSQL (Railway) / SQLite (local) |
+| AI | Anthropic Claude (`claude-sonnet-4-20250514`) |
+| Email integration | Gmail API (OAuth2) |
+| Scheduling | APScheduler + internal background polling worker |
 | Deployment | Railway |
 
 ---
 
 ## Project Structure
 
-```
+```text
 foreman/
 ├── api/
-│   └── app.py              # FastAPI — web UI + JSON API
+│   ├── app.py                 # FastAPI app (pages + JSON API)
+│   └── run.py                 # Railway-safe launcher (reads PORT)
 ├── agents/
-│   └── tone_profiler.py    # Gmail → Claude voice extraction
+│   ├── tone_profiler.py
+│   ├── reactivation.py
+│   ├── customer_analyzer.py
+│   ├── reply_detector.py
+│   └── follow_up.py
 ├── core/
-│   ├── config.py           # Environment variable management
-│   ├── database.py         # SQLAlchemy session management
-│   └── models.py           # ORM models
-├── data/
-│   ├── seed.py             # Original seed (skip-safe)
-│   └── reseed.py           # Full wipe + 40-customer synthetic dataset
+│   ├── config.py              # Env parsing / settings
+│   ├── database.py            # Engine/session/init + schema patches
+│   └── models.py              # ORM models
 ├── integrations/
-│   └── gmail.py            # Gmail OAuth + sent mail reader
+│   └── gmail.py
 ├── templates/
-│   ├── base.html           # Shared layout + sidebar
-│   ├── dashboard.html      # Customer overview + categories
-│   ├── customer.html       # Customer detail + draft generation
-│   └── outreach.html       # Outreach queue
-├── main.py                 # CLI entry point
-├── Procfile                # Railway web process
-└── requirements.txt
+│   ├── base.html
+│   ├── dashboard.html
+│   ├── customer.html
+│   ├── conversations.html
+│   ├── conversation_detail.html
+│   ├── outreach.html
+│   └── agents.html
+├── data/
+│   ├── seed.py
+│   └── reseed.py
+├── Procfile
+├── requirements.txt
+└── PROJECT_PLAN.md
 ```
 
 ---
 
-## Pages
+## Key Pages
 
 | URL | Description |
 |---|---|
-| `/` | Dashboard — metrics + customers by reactivation category |
-| `/customer/{id}` | Customer detail — service history, outreach log, draft email |
-| `/outreach` | Outreach queue — drafted emails awaiting review/send |
+| `/` | Dashboard: pipeline metrics, segments, top prospects |
+| `/customer/{id}` | Customer detail: account context + account timeline |
+| `/conversations` | Active conversations with latest interaction + queue context |
+| `/conversations/{id}` | Conversation workspace: recap, talking points, message timeline, selected email |
+| `/outreach` | Outreach queue: review/edit drafts, approve/schedule, send now |
+| `/agents` | Agent catalog with status/coverage and manual run cues |
 
 ---
 
@@ -99,59 +109,93 @@ foreman/
 ```bash
 git clone https://github.com/avelayud/foreman
 cd foreman
+
 python3 -m venv venv
 venv/bin/pip install -r requirements.txt
 
 cp .env.example .env
-# Fill in: ANTHROPIC_API_KEY, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET
+# Fill in at minimum:
+# - ANTHROPIC_API_KEY
+# - GOOGLE_CLIENT_ID
+# - GOOGLE_CLIENT_SECRET
+# - DATABASE_URL
 
-venv/bin/python main.py --seed              # Seed original sample data
-# OR for full 40-customer synthetic dataset:
+# Seed data (optional)
 venv/bin/python -m data.reseed
-venv/bin/uvicorn api.app:app --reload       # Start web server → http://localhost:8000
+
+# Run app (same entrypoint shape used on Railway)
+venv/bin/python -m api.run
+# Opens on http://localhost:8000 by default
 ```
 
-## CLI Agents
+Alternative dev command:
 
 ```bash
-# Extract voice profile from Gmail (run once per operator)
-venv/bin/python -m agents.tone_profiler --operator-id 1
+venv/bin/uvicorn api.app:app --reload
 ```
 
 ---
 
-## Environment Variables
+## Important Environment Variables
 
-```
-ANTHROPIC_API_KEY       # Required — console.anthropic.com
-DATABASE_URL            # Default: sqlite:///./foreman.db
-APP_ENV                 # development | production
-DRY_RUN                 # true = generate but don't send
-GOOGLE_CLIENT_ID        # Gmail OAuth
-GOOGLE_CLIENT_SECRET    # Gmail OAuth
+```bash
+ANTHROPIC_API_KEY
+GOOGLE_CLIENT_ID
+GOOGLE_CLIENT_SECRET
+GOOGLE_REDIRECT_URI
+
+DATABASE_URL
+# Local machine: use sqlite or Railway public proxy URL
+# Railway runtime: use Railway internal URL (postgres.railway.internal)
+
+APP_ENV
+APP_PORT
+DRY_RUN
+
+SENDGRID_API_KEY
+SENDGRID_FROM_EMAIL
+TWILIO_ACCOUNT_SID
+TWILIO_AUTH_TOKEN
+TWILIO_FROM_NUMBER
 ```
 
 ---
 
-## Core Philosophy
+## Railway Notes
 
-- **Operator voice** — AI learns how the operator writes. Emails sound like them, not a marketing agency.
-- **SMS-native** — field operators live in text (Phase 5)
-- **Prove ROI fast** — first win is a reactivated customer. Everything else is downstream.
-- **Agnostic** — works with what the operator already has (Gmail, Google Cal)
+- `Procfile` uses `web: python -m api.run`
+- `api/run.py` reads `PORT` safely from env and starts uvicorn
+- Startup includes DB init retries to avoid transient boot race conditions
+- DB URL normalization handles legacy `postgres://` inputs
+
+Recommended Railway Web service vars:
+
+```bash
+DATABASE_URL=<internal Railway Postgres URL>
+ANTHROPIC_API_KEY=<value>
+GOOGLE_CLIENT_ID=<value>
+GOOGLE_CLIENT_SECRET=<value>
+```
 
 ---
 
-## Roadmap
+## Security Note
 
-See `PROJECT_PLAN.md` for the full phase-by-phase breakdown.
+If secrets are ever pasted in logs/chat or committed by accident, rotate them immediately:
+
+- Anthropic API key
+- Google OAuth client secret
+- Postgres password/connection credentials
+
+---
+
+## Roadmap Snapshot
 
 | Phase | Name | Status |
 |---|---|---|
-| 1 | Foundation (models, DB, config) | ✅ Complete |
-| 2 | Tone Profiler + Dashboard UI | ✅ Complete |
-| 3 | Reactivation Outreach Agent | 🟡 Next |
-| 4 | Follow-up Sequence Engine | ⬜ |
-| 5 | SMS Channel (Twilio) | ⬜ |
-| 6 | Booking Page + Slot Management | ⬜ |
-| 7–12 | Confirmations, Cal sync, Dashboard, Onboarding | ⬜ |
+| 1 | Foundation | ✅ Complete |
+| 2 | Tone Profiler + Core UI | ✅ Complete |
+| 3 | Reactivation Analyzer + Queue | ✅ Complete |
+| 4 | Gmail Send + Follow-up Intelligence | 🟡 In Progress (core built, scheduler polish/deploy stabilization) |
+| 5 | SMS channel (Twilio) | ⬜ Not Started |
+| 6+ | Booking, reminders, calendar sync, broader niche support | ⬜ Planned |
