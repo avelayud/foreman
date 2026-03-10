@@ -79,6 +79,47 @@ def enrich(c) -> dict:
     }
 
 
+SEGMENT_INFO = {
+    'referral':    ('👥 Referral Ready', 'pill-ref'),
+    'high_value':  ('🔥 High Value',     'pill-hv'),
+    'end_of_life': ('⚠️ End-of-Life',    'pill-eol'),
+    'new_lead':    ('🆕 New Lead',        'pill-new'),
+    'maintenance': ('🔧 Maintenance Due', 'pill-maint'),
+}
+
+def get_segment_key(c: dict) -> str:
+    if c['reactivation_status'] in ('replied', 'booked'):
+        return 'referral'
+    if c['total_spend'] >= 1500:
+        return 'high_value'
+    if c['days_dormant'] >= 730:
+        return 'end_of_life'
+    svc = (c.get('last_service_type') or '').lower()
+    if c['total_jobs'] == 1 or 'install' in svc:
+        return 'new_lead'
+    return 'maintenance'
+
+def add_segment(c: dict) -> dict:
+    key = get_segment_key(c)
+    label, cls = SEGMENT_INFO[key]
+    avg_job = c['total_spend'] / max(c['total_jobs'], 1)
+    opp_map = {
+        'end_of_life': (avg_job * 3.5, 'system replacement'),
+        'high_value':  (avg_job,        'seasonal service'),
+        'new_lead':    (avg_job * 0.6,  'maintenance plan'),
+        'referral':    (400,            'referral value'),
+        'maintenance': (avg_job * 0.75, 'tune-up'),
+    }
+    opp_val, opp_label = opp_map[key]
+    c['segment_key']    = key
+    c['segment_label']  = label
+    c['segment_cls']    = cls
+    c['opp_est']        = f"~${opp_val:,.0f}"
+    c['opp_label']      = opp_label
+    c['priority_score'] = c['days_dormant'] * (c['total_spend'] / 1000 + 0.5)
+    return c
+
+
 # ── Startup ───────────────────────────────────────────────────────────────────
 
 @app.on_event("startup")
@@ -93,6 +134,9 @@ def dashboard(request: Request):
     with get_db() as db:
         operator = db.query(Operator).filter_by(id=OPERATOR_ID).first()
         raw_customers = db.query(Customer).filter_by(operator_id=OPERATOR_ID).all()
+        queue_count = db.query(OutreachLog).filter_by(
+            operator_id=OPERATOR_ID, dry_run=True
+        ).count()
         operator_data = {
             "id": operator.id,
             "name": operator.name,
@@ -101,7 +145,10 @@ def dashboard(request: Request):
             "onboarding_complete": operator.onboarding_complete,
             "voice_profiles": operator.voice_profiles,
         }
-        customers = sorted([enrich(c) for c in raw_customers], key=lambda x: x["days_dormant"], reverse=True)
+        customers = sorted(
+            [add_segment(enrich(c)) for c in raw_customers],
+            key=lambda x: x["days_dormant"], reverse=True
+        )
 
     cats = {k: [] for k in ("prime", "warming", "in_sequence", "converted", "recent", "unsubscribed")}
     for c in customers:
@@ -110,6 +157,16 @@ def dashboard(request: Request):
     prime = cats["prime"]
     prime_revenue = sum(c["total_spend"] for c in prime)
     avg_dormant = int(sum(c["days_dormant"] for c in prime) / len(prime)) if prime else 0
+
+    seg_counts = {k: 0 for k in SEGMENT_INFO}
+    for c in customers:
+        if c['category'] != 'unsubscribed':
+            seg_counts[c['segment_key']] += 1
+
+    top_prospects = sorted(
+        [c for c in customers if c['category'] not in ('unsubscribed', 'converted')],
+        key=lambda x: x['priority_score'], reverse=True
+    )[:6]
 
     stats = {
         "total_customers": len(customers),
@@ -121,12 +178,18 @@ def dashboard(request: Request):
         "avg_days_dormant": avg_dormant,
     }
 
+    today_str = datetime.utcnow().strftime('%A, %B %-d, %Y')
+
     return templates.TemplateResponse("dashboard.html", {
         "request": request,
         "active": "dashboard",
         "operator": operator_data,
         "stats": stats,
+        "seg_counts": seg_counts,
         "categories": cats,
+        "top_prospects": top_prospects,
+        "queue_count": queue_count,
+        "today_str": today_str,
     })
 
 
@@ -149,6 +212,7 @@ def customer_detail(request: Request, customer_id: int):
             "voice_profiles": operator.voice_profiles,
         }
         customer_data = enrich(customer)
+        customer_data = add_segment(customer_data)
         customer_data["assigned_voice_id"] = customer.assigned_voice_id
         jobs = [{"service_type": j.service_type, "completed_at": j.completed_at,
                  "status": j.status, "amount": j.amount} for j in jobs_raw]
