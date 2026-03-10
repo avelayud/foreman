@@ -3,77 +3,112 @@
 
 {% block extra_styles %}
 <style>
-  .conv-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow-sm);overflow:hidden;margin-bottom:14px}
-  .conv-header{padding:14px 22px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;background:var(--bg)}
-  .conv-meta{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
-  .conv-name{font-size:14px;font-weight:700;color:var(--navy);text-decoration:none;font-family:'Playfair Display',serif}
-  .conv-name:hover{text-decoration:underline}
-  .conv-sep{width:1px;height:14px;background:var(--border);display:inline-block}
-  .conv-info{font-size:11px;color:var(--text-3);font-family:'IBM Plex Mono',monospace}
-  .conv-body{padding:20px 22px}
-  .conv-footer{padding:12px 22px;background:var(--bg);border-top:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px}
+  .kpi-row{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-bottom:16px}
+  .kpi{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow-sm);padding:14px 16px}
+  .kpi-label{font-size:10px;font-family:'IBM Plex Mono',monospace;letter-spacing:1.1px;text-transform:uppercase;color:var(--text-3);margin-bottom:5px}
+  .kpi-value{font-size:23px;color:var(--navy);font-family:'Playfair Display',serif;font-weight:700;line-height:1}
 
-  .tag-sent{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-family:'IBM Plex Mono',monospace;padding:3px 10px;border-radius:20px;background:var(--green-pale);color:var(--green);border:1px solid #a7f3d0}
-  .email-preview{font-size:13px;color:var(--text-2);line-height:1.7;white-space:pre-wrap;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:16px 20px;font-family:'IBM Plex Sans',sans-serif;opacity:0.8}
+  .conv-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow-sm);padding:16px 18px;margin-bottom:12px}
+  .conv-top{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap}
+  .conv-name{font-size:18px;font-family:'Playfair Display',serif;color:var(--navy);font-weight:700;text-decoration:none}
+  .conv-name:hover{text-decoration:underline}
+  .conv-meta{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:4px}
+  .conv-meta-item{font-size:11px;color:var(--text-3);font-family:'IBM Plex Mono',monospace}
+
+  .prog-wrap{margin:13px 0 12px}
+  .prog-track{height:8px;background:var(--bg);border:1px solid var(--border);border-radius:999px;overflow:hidden}
+  .prog-fill{height:100%;background:linear-gradient(90deg,var(--navy) 0%,var(--gold) 100%);border-radius:999px}
+  .prog-label{margin-top:6px;font-size:11px;color:var(--text-3);font-family:'IBM Plex Mono',monospace}
+
+  .conv-preview{font-size:13px;color:var(--text-2);line-height:1.6;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:12px 13px}
+  .conv-footer{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-top:12px}
+  .opp-chip{font-size:11px;color:var(--text-2);font-family:'IBM Plex Mono',monospace;background:var(--gold-pale);border:1px solid var(--gold-rule);border-radius:20px;padding:4px 10px}
+
+  @media (max-width: 1024px){
+    .kpi-row{grid-template-columns:repeat(2,minmax(0,1fr))}
+  }
+  @media (max-width: 680px){
+    .kpi-row{grid-template-columns:1fr}
+  }
 </style>
 {% endblock %}
 
 {% block content %}
 
-<div style="display:flex;align-items:flex-end;justify-content:space-between;margin-bottom:28px;flex-wrap:wrap;gap:12px">
+<div style="display:flex;align-items:flex-end;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:12px">
   <div>
     <div style="font-size:10.5px;font-family:'IBM Plex Mono',monospace;letter-spacing:1.5px;text-transform:uppercase;color:var(--text-3);margin-bottom:6px">Outreach</div>
     <h1 style="font-family:'Playfair Display',serif;font-size:28px;font-weight:700;color:var(--navy);line-height:1.2">Active Conversations</h1>
   </div>
   <div style="display:flex;align-items:center;gap:10px">
     {% if queue_count > 0 %}
-    <a href="/outreach" class="btn-primary" style="text-decoration:none;font-size:12.5px">
-      Queue ({{ queue_count }}) →
-    </a>
+    <a href="/outreach" class="btn-primary" style="text-decoration:none;font-size:12.5px">Queue ({{ queue_count }}) →</a>
     {% else %}
-    <a href="/outreach" class="btn-ghost" style="text-decoration:none;font-size:12.5px">← Outreach Queue</a>
+    <a href="/outreach" class="btn-ghost" style="text-decoration:none;font-size:12.5px">Outreach Queue</a>
     {% endif %}
   </div>
 </div>
 
-{% if sent %}
-<div style="margin-bottom:12px;font-size:12px;color:var(--text-3);font-family:'IBM Plex Mono',monospace">
-  {{ sent|length }} sent · awaiting reply
+{% if conversations %}
+<div class="kpi-row">
+  <div class="kpi">
+    <div class="kpi-label">Active Threads</div>
+    <div class="kpi-value">{{ conversations|length }}</div>
+  </div>
+  <div class="kpi">
+    <div class="kpi-label">Awaiting Reply</div>
+    <div class="kpi-value">{{ awaiting_reply_count }}</div>
+  </div>
+  <div class="kpi">
+    <div class="kpi-label">Replied</div>
+    <div class="kpi-value">{{ replied_count }}</div>
+  </div>
+  <div class="kpi">
+    <div class="kpi-label">Queued Drafts</div>
+    <div class="kpi-value">{{ queue_count }}</div>
+  </div>
 </div>
 
-{% for item in sent %}
+{% for item in conversations %}
 <div class="conv-card">
-  <div class="conv-header">
-    <div class="conv-meta">
-      <a href="/customer/{{ item.customer_id }}" class="conv-name">{{ item.customer_name }}</a>
-      <span class="conv-sep"></span>
-      <span class="conv-info">Step {{ item.sequence_step + 1 }}</span>
-      <span class="conv-info">Sent {{ item.sent_at.strftime('%b %-d, %Y') if item.sent_at else '' }}</span>
+  <div class="conv-top">
+    <div>
+      <a href="/conversations/{{ item.customer_id }}" class="conv-name">{{ item.customer_name }}</a>
+      <div class="conv-meta">
+        <span class="status-pill {{ item.status_cls }}">{{ item.status_label }}</span>
+        <span class="conv-meta-item">Outbound {{ item.outbound_count }}</span>
+        <span class="conv-meta-item">Inbound {{ item.inbound_count }}</span>
+        <span class="conv-meta-item">Dormant {{ item.days_dormant }}d</span>
+      </div>
     </div>
-    <span class="tag-sent">
-      <span style="width:5px;height:5px;border-radius:50%;background:var(--green);display:inline-block"></span>
-      Sent · awaiting reply
-    </span>
+    <div style="text-align:right">
+      <div class="conv-meta-item">Last touch</div>
+      <div style="font-size:12px;color:var(--text);font-family:'IBM Plex Mono',monospace">
+        {% if item.last_touch_at %}{{ item.last_touch_at.strftime('%b %-d, %Y · %-I:%M %p') }}{% else %}—{% endif %}
+      </div>
+    </div>
   </div>
 
-  <div class="conv-body">
-    <div style="margin-bottom:14px">
-      <div class="field-label">Subject</div>
-      <div style="font-size:14px;font-weight:600;color:var(--navy)">{{ item.subject or '(no subject)' }}</div>
+  <div class="prog-wrap">
+    <div class="prog-track">
+      <div class="prog-fill" style="width:{{ item.progress_pct }}%"></div>
     </div>
-    <div>
-      <div class="field-label">Message sent</div>
-      <div class="email-preview">{{ item.content }}</div>
+    <div class="prog-label">Sequence progress · Step {{ item.latest_sequence_step if item.latest_sequence_step else '0' }} of 4</div>
+  </div>
+
+  <div class="conv-preview">
+    <div style="font-size:11px;color:var(--text-3);font-family:'IBM Plex Mono',monospace;margin-bottom:5px">
+      {{ "Last inbound reply" if item.last_direction == "inbound" else "Last outbound email" }} · {{ item.last_subject }}
     </div>
+    {{ item.last_preview if item.last_preview else "No message body available." }}
   </div>
 
   <div class="conv-footer">
-    <a href="/customer/{{ item.customer_id }}" class="btn-ghost" style="text-decoration:none;font-size:12px">
-      View Customer →
-    </a>
-    <span style="font-size:11px;color:var(--text-4);font-family:'IBM Plex Mono',monospace;font-style:italic">
-      Auto follow-up — Phase 4
-    </span>
+    <div class="opp-chip">Opportunity {{ item.opp_est }} · {{ item.opp_label }}</div>
+    <div style="display:flex;gap:8px">
+      <a href="/customer/{{ item.customer_id }}" class="btn-ghost" style="text-decoration:none;font-size:12px">Customer</a>
+      <a href="/conversations/{{ item.customer_id }}" class="btn-primary" style="text-decoration:none;font-size:12px;padding:8px 14px">Open Conversation →</a>
+    </div>
   </div>
 </div>
 {% endfor %}
@@ -82,8 +117,8 @@
 <div class="card" style="padding:72px 40px;text-align:center">
   <div style="font-size:40px;margin-bottom:16px;opacity:0.3">💬</div>
   <div style="font-family:'Playfair Display',serif;font-size:20px;font-weight:700;color:var(--navy);margin-bottom:8px">No active conversations yet</div>
-  <div style="font-size:13px;color:var(--text-3);margin-bottom:24px;max-width:320px;margin-left:auto;margin-right:auto;line-height:1.6">
-    Approve a draft in the outreach queue to move it here.
+  <div style="font-size:13px;color:var(--text-3);margin-bottom:24px;max-width:340px;margin-left:auto;margin-right:auto;line-height:1.6">
+    Send or approve outreach to start tracking conversation progress, replies, and timeline context here.
   </div>
   <a href="/outreach" class="btn-primary" style="text-decoration:none">Go to Queue →</a>
 </div>

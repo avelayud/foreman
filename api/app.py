@@ -185,6 +185,33 @@ def add_segment(c: dict) -> dict:
     return c
 
 
+CONVERSATION_STAGE_META = {
+    "never_contacted": {"label": "Not Started", "progress_pct": 0, "status_cls": "s-none"},
+    "outreach_sent": {"label": "Initial Outreach Sent", "progress_pct": 25, "status_cls": "s-sent"},
+    "sequence_step_2": {"label": "Follow-up 1 Sent", "progress_pct": 50, "status_cls": "s-warm"},
+    "sequence_step_3": {"label": "Follow-up 2 Sent", "progress_pct": 75, "status_cls": "s-warm"},
+    "replied": {"label": "Customer Replied", "progress_pct": 100, "status_cls": "s-ok"},
+    "booked": {"label": "Booked", "progress_pct": 100, "status_cls": "s-ok"},
+    "sequence_complete": {"label": "Sequence Complete", "progress_pct": 100, "status_cls": "s-none"},
+    "unsubscribed": {"label": "Unsubscribed", "progress_pct": 0, "status_cls": "s-none"},
+}
+
+
+def _conversation_stage(status: str) -> dict:
+    return CONVERSATION_STAGE_META.get(
+        status,
+        {"label": status.replace("_", " ").title(), "progress_pct": 0, "status_cls": "s-none"},
+    )
+
+
+def _log_timestamp(log) -> datetime | None:
+    return log.sent_at or log.created_at
+
+
+def _timeline_date_key(item: dict) -> datetime:
+    return item.get("at") or datetime.min
+
+
 # ── Startup ───────────────────────────────────────────────────────────────────
 
 @app.on_event("startup")
@@ -326,23 +353,160 @@ def outreach_queue(request: Request):
 def conversations(request: Request):
     with get_db() as db:
         operator = db.query(Operator).filter_by(id=OPERATOR_ID).first()
-        rows = (
-            db.query(OutreachLog, Customer)
-            .join(Customer, OutreachLog.customer_id == Customer.id)
-            .filter(OutreachLog.operator_id == OPERATOR_ID, OutreachLog.dry_run == False)
-            .order_by(OutreachLog.sent_at.desc())
-            .all()
-        )
         operator_data = _operator_data(operator)
         queue_count = _get_queue_count(db)
-        sent = [_outreach_row(l, c) for l, c in rows]
+        customers = db.query(Customer).filter_by(operator_id=OPERATOR_ID).all()
+
+        conversations_data = []
+        for customer in customers:
+            logs = (
+                db.query(OutreachLog)
+                .filter_by(
+                    operator_id=OPERATOR_ID,
+                    customer_id=customer.id,
+                    dry_run=False,
+                )
+                .order_by(OutreachLog.sent_at.desc(), OutreachLog.created_at.desc())
+                .all()
+            )
+            if not logs:
+                continue
+
+            logs_sorted = sorted(logs, key=lambda log: _log_timestamp(log) or datetime.min, reverse=True)
+            outbound_logs = [log for log in logs_sorted if log.direction == "outbound"]
+            inbound_logs = [log for log in logs_sorted if log.direction == "inbound"]
+            last_log = logs_sorted[0]
+            stage = _conversation_stage(customer.reactivation_status)
+            summary = add_segment(enrich(customer))
+
+            conversations_data.append({
+                "customer_id": customer.id,
+                "customer_name": customer.name,
+                "customer_email": customer.email,
+                "status_label": stage["label"],
+                "status_cls": stage["status_cls"],
+                "progress_pct": stage["progress_pct"],
+                "reactivation_status": customer.reactivation_status,
+                "outbound_count": len(outbound_logs),
+                "inbound_count": len(inbound_logs),
+                "last_touch_at": _log_timestamp(last_log),
+                "last_subject": last_log.subject or "(no subject)",
+                "last_preview": (last_log.content or "").strip()[:180],
+                "last_direction": last_log.direction,
+                "latest_sequence_step": (outbound_logs[0].sequence_step + 1) if outbound_logs else 0,
+                "opp_est": summary.get("opp_est"),
+                "opp_label": summary.get("opp_label"),
+                "days_dormant": summary.get("days_dormant"),
+                "total_spend": summary.get("total_spend"),
+            })
+
+    conversations_data.sort(key=lambda row: row["last_touch_at"] or datetime.min, reverse=True)
+    awaiting_reply_count = sum(1 for row in conversations_data if row["inbound_count"] == 0)
+    replied_count = sum(1 for row in conversations_data if row["inbound_count"] > 0)
 
     return templates.TemplateResponse("conversations.html", {
         "request": request,
         "active": "conversations",
         "operator": operator_data,
         "queue_count": queue_count,
-        "sent": sent,
+        "conversations": conversations_data,
+        "awaiting_reply_count": awaiting_reply_count,
+        "replied_count": replied_count,
+    })
+
+
+@app.get("/conversations/{customer_id}", response_class=HTMLResponse)
+def conversation_detail(request: Request, customer_id: int):
+    with get_db() as db:
+        operator = db.query(Operator).filter_by(id=OPERATOR_ID).first()
+        customer = db.query(Customer).filter_by(id=customer_id, operator_id=OPERATOR_ID).first()
+        if not customer:
+            raise HTTPException(status_code=404, detail="Customer not found")
+
+        logs = (
+            db.query(OutreachLog)
+            .filter_by(operator_id=OPERATOR_ID, customer_id=customer_id, dry_run=False)
+            .order_by(OutreachLog.sent_at.desc(), OutreachLog.created_at.desc())
+            .all()
+        )
+        jobs = (
+            db.query(Job)
+            .filter_by(operator_id=OPERATOR_ID, customer_id=customer_id)
+            .order_by(Job.completed_at.desc(), Job.scheduled_at.desc(), Job.created_at.desc())
+            .all()
+        )
+        jobs_count = len(jobs)
+        total_appointment_value = round(sum((job.amount or 0) for job in jobs), 2)
+
+        operator_data = _operator_data(operator)
+        queue_count = _get_queue_count(db)
+        customer_data = add_segment(enrich(customer))
+        customer_data["customer_profile"] = _normalize_customer_profile(customer.customer_profile)
+        stage = _conversation_stage(customer.reactivation_status)
+
+        log_entries = []
+        for log in logs:
+            logged_at = _log_timestamp(log)
+            log_entries.append({
+                "id": log.id,
+                "direction": log.direction,
+                "channel": log.channel,
+                "subject": log.subject or "(no subject)",
+                "content": log.content or "",
+                "sequence_step": (log.sequence_step or 0) + 1,
+                "at": logged_at,
+                "gmail_thread_id": log.gmail_thread_id,
+            })
+
+        timeline = []
+        for job in jobs:
+            appointment_at = job.completed_at or job.scheduled_at or job.created_at
+            timeline.append({
+                "type": "appointment",
+                "title": f"{job.service_type} appointment",
+                "detail": f"${job.amount:,.0f} · {job.status.replace('_', ' ')}",
+                "at": appointment_at,
+            })
+
+        for entry in log_entries:
+            direction_label = "Inbound reply" if entry["direction"] == "inbound" else "Outbound outreach"
+            timeline.append({
+                "type": "inbound" if entry["direction"] == "inbound" else "outbound",
+                "title": direction_label,
+                "detail": f"Step {entry['sequence_step']} · {entry['subject']}",
+                "at": entry["at"],
+            })
+
+    timeline.sort(key=_timeline_date_key, reverse=True)
+
+    outbound_count = sum(1 for entry in log_entries if entry["direction"] == "outbound")
+    inbound_count = sum(1 for entry in log_entries if entry["direction"] == "inbound")
+    opportunity_signals = []
+    if customer_data["days_dormant"] >= 365:
+        opportunity_signals.append(f"Dormant for {customer_data['days_dormant']} days")
+    if customer_data["total_spend"] >= 1500:
+        opportunity_signals.append(f"High historical value (${customer_data['total_spend']:,.0f})")
+    if customer_data["customer_profile"]["interest_signals"]:
+        opportunity_signals.append(customer_data["customer_profile"]["interest_signals"])
+    if inbound_count > 0:
+        opportunity_signals.append("Customer has already replied")
+    if not opportunity_signals:
+        opportunity_signals.append("No explicit intent signals yet")
+
+    return templates.TemplateResponse("conversation_detail.html", {
+        "request": request,
+        "active": "conversations",
+        "operator": operator_data,
+        "queue_count": queue_count,
+        "customer": customer_data,
+        "stage": stage,
+        "logs": log_entries,
+        "timeline": timeline,
+        "outbound_count": outbound_count,
+        "inbound_count": inbound_count,
+        "jobs_count": jobs_count,
+        "total_appointment_value": total_appointment_value,
+        "opportunity_signals": opportunity_signals,
     })
 
 
