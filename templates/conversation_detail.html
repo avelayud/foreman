@@ -3,7 +3,7 @@
 
 {% block extra_styles %}
 <style>
-  .top-grid{display:grid;grid-template-columns:minmax(0,1.7fr) minmax(0,1fr);gap:14px;margin-bottom:14px;align-items:start}
+  .top-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.25fr);gap:14px;margin-bottom:14px;align-items:start}
   .panel{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow-sm);overflow:hidden}
   .panel-head{padding:14px 16px;border-bottom:1px solid var(--border);background:var(--bg)}
   .panel-title{font-size:12px;font-weight:600;color:var(--text);font-family:'IBM Plex Mono',monospace;letter-spacing:0.5px}
@@ -15,18 +15,19 @@
   .stage-awaiting-reply{background:var(--blue-pale);color:var(--blue);border-color:#bfdbfe}
   .stage-closed{background:var(--green-pale);color:var(--green);border-color:#a7f3d0}
 
-  .timeline-wrap{overflow-x:auto;padding-bottom:6px}
-  .timeline-track{display:flex;align-items:flex-start;gap:14px;position:relative;min-width:max-content;padding:28px 4px 4px}
-  .timeline-track::before{content:'';position:absolute;left:8px;right:8px;top:22px;height:2px;background:var(--border)}
-  .timeline-event{min-width:240px;max-width:240px;position:relative}
-  .timeline-event::before{content:'';position:absolute;top:-11px;left:16px;width:10px;height:10px;border-radius:50%;background:var(--navy);border:2px solid #fff;box-shadow:0 0 0 1px var(--border)}
-  .timeline-event.inbound::before{background:var(--green)}
-  .timeline-event.outbound::before{background:var(--amber)}
-  .timeline-event.appointment::before{background:var(--blue)}
-  .timeline-card{border:1px solid var(--border);background:var(--bg);border-radius:8px;padding:10px 11px}
-  .timeline-date{font-size:10px;color:var(--text-3);font-family:'IBM Plex Mono',monospace;margin-bottom:6px}
-  .timeline-title{font-size:12px;font-weight:700;color:var(--navy);margin-bottom:3px}
-  .timeline-detail{font-size:12px;color:var(--text-2);line-height:1.45}
+  .vtl{position:relative;padding-left:22px}
+  .vtl::before{content:'';position:absolute;left:8px;top:0;bottom:0;width:2px;background:var(--border)}
+  .vtl-event{position:relative;margin-bottom:10px}
+  .vtl-event:last-child{margin-bottom:0}
+  .vtl-event button{all:unset;display:block;cursor:pointer;width:100%}
+  .vtl-dot{position:absolute;left:-18px;top:14px;width:10px;height:10px;border-radius:50%;border:2px solid #fff;box-shadow:0 0 0 1px var(--border)}
+  .vtl-dot.inbound{background:var(--green)}
+  .vtl-dot.outbound{background:var(--amber)}
+  .vtl-card{border:1px solid var(--border);background:var(--bg);border-radius:8px;padding:10px 11px;transition:border-color 0.12s, background 0.12s}
+  .vtl-event.active .vtl-card,.vtl-event button:hover .vtl-card{border-color:var(--navy);background:var(--surface)}
+  .vtl-date{font-size:10px;color:var(--text-3);font-family:'IBM Plex Mono',monospace;margin-bottom:5px}
+  .vtl-title{font-size:12px;font-weight:700;color:var(--navy);margin-bottom:3px}
+  .vtl-detail{font-size:12px;color:var(--text-2);line-height:1.45}
 
   .metric-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-bottom:12px}
   .metric{border:1px solid var(--border);background:var(--bg);border-radius:8px;padding:10px}
@@ -39,20 +40,7 @@
   .next-step-title{font-size:12.5px;font-weight:700;color:var(--navy);margin-bottom:3px}
   .next-step-meta{font-size:11px;color:var(--text-3);font-family:'IBM Plex Mono',monospace}
 
-  .chain-panel{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow-sm);overflow:hidden}
-  .chain-item{border-bottom:1px solid var(--border);background:var(--surface)}
-  .chain-item:last-child{border-bottom:none}
-  .chain-item > summary{list-style:none;cursor:pointer;padding:12px 14px;display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
-  .chain-item > summary::-webkit-details-marker{display:none}
-  .chain-left{min-width:0}
-  .sender-chip{display:inline-flex;align-items:center;gap:5px;font-size:10.5px;font-family:'IBM Plex Mono',monospace;padding:2px 8px;border-radius:20px;border:1px solid;margin-bottom:6px}
-  .sender-agent{background:var(--amber-pale);border-color:#fde68a;color:var(--amber)}
-  .sender-human{background:var(--green-pale);border-color:#a7f3d0;color:var(--green)}
-  .chain-subject{font-size:13px;font-weight:700;color:var(--navy);line-height:1.35;margin-bottom:3px}
-  .chain-summary{font-size:12px;color:var(--text-2);line-height:1.45}
-  .chain-meta{font-size:11px;color:var(--text-3);font-family:'IBM Plex Mono',monospace;white-space:nowrap}
-  .chain-content{padding:0 14px 14px}
-  .chain-content-box{font-size:13px;color:var(--text-2);line-height:1.6;white-space:pre-wrap;border:1px solid var(--border);background:var(--bg);border-radius:8px;padding:10px 11px}
+  .message-box{font-size:13px;color:var(--text-2);line-height:1.65;white-space:pre-wrap;border:1px solid var(--border);background:var(--bg);border-radius:8px;padding:10px 11px}
 
   @media (max-width: 980px){
     .top-grid{grid-template-columns:1fr}
@@ -69,7 +57,7 @@
   </div>
   <div style="display:flex;gap:8px">
     <a href="/customer/{{ customer.id }}" class="btn-ghost" style="text-decoration:none;font-size:12px">Customer Page</a>
-    <a href="/conversations" class="btn-ghost" style="text-decoration:none;font-size:12px">← Active Conversations</a>
+    <a href="/conversations" class="btn-ghost" style="text-decoration:none;font-size:12px">Active Conversations</a>
   </div>
 </div>
 
@@ -84,21 +72,22 @@
     </div>
     <div class="panel-body">
       {% if timeline_events %}
-      <div class="timeline-wrap">
-        <div class="timeline-track">
-          {% for event in timeline_events %}
-          <div class="timeline-event {{ event.type }}">
-            <div class="timeline-card">
-              <div class="timeline-date">{% if event.at %}{{ event.at.strftime('%b %-d, %Y · %-I:%M %p') }}{% else %}Unknown date{% endif %}</div>
-              <div class="timeline-title">{{ event.title }}</div>
-              <div class="timeline-detail">{{ event.detail }}</div>
+      <div class="vtl" id="timeline-list">
+        {% for event in timeline_events %}
+        <div class="vtl-event {% if loop.first %}active{% endif %}" data-index="{{ loop.index0 }}">
+          <button type="button" onclick="selectTimelineEvent({{ loop.index0 }})">
+            <span class="vtl-dot {{ event.type }}"></span>
+            <div class="vtl-card">
+              <div class="vtl-date">{% if event.at %}{{ event.at.strftime('%b %-d, %Y · %-I:%M %p') }}{% else %}Unknown date{% endif %}</div>
+              <div class="vtl-title">{{ event.title }} · {{ event.sender_label }}</div>
+              <div class="vtl-detail">{{ event.summary }}</div>
             </div>
-          </div>
-          {% endfor %}
+          </button>
         </div>
+        {% endfor %}
       </div>
       {% else %}
-      <div style="font-size:13px;color:var(--text-3)">No appointments or outreach events on record yet.</div>
+      <div style="font-size:13px;color:var(--text-3)">No conversation messages on record yet.</div>
       {% endif %}
     </div>
   </div>
@@ -122,8 +111,8 @@
           <div class="metric-value">{{ outbound_count }} / {{ inbound_count }}</div>
         </div>
         <div class="metric">
-          <div class="metric-label">Appointment Rev.</div>
-          <div class="metric-value">${{ "{:,.0f}".format(total_appointment_value) }}</div>
+          <div class="metric-label">Dormant Days</div>
+          <div class="metric-value">{{ customer.days_dormant }}</div>
         </div>
       </div>
 
@@ -147,32 +136,47 @@
   </div>
 </div>
 
-<div class="chain-panel">
+<div class="panel">
   <div class="panel-head">
-    <div class="panel-title">Conversation Chain (Compact)</div>
+    <div class="panel-title">Selected Message</div>
   </div>
-  {% if logs %}
-  {% for log in logs|reverse %}
-  <details class="chain-item" {% if loop.last %}open{% endif %}>
-    <summary>
-      <div class="chain-left">
-        <span class="sender-chip sender-{{ log.sender_key }}">{{ log.sender_label }}</span>
-        <div class="chain-subject">{{ log.subject }}</div>
-        <div class="chain-summary">{{ log.summary }}</div>
+  <div class="panel-body">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:8px">
+      <div>
+        <div style="font-size:13px;font-weight:700;color:var(--navy)" id="msg-subject">Select a timeline item</div>
+        <div style="font-size:11px;color:var(--text-3);font-family:'IBM Plex Mono',monospace" id="msg-meta"></div>
       </div>
-      <div class="chain-meta">
-        {% if log.at %}{{ log.at.strftime('%b %-d · %-I:%M %p') }}{% else %}Unknown date{% endif %}
-      </div>
-    </summary>
-    <div class="chain-content">
-      <div class="chain-content-box">{{ log.content }}</div>
-      <div class="chain-meta" style="margin-top:6px">Step {{ log.sequence_step }}{% if log.gmail_thread_id %} · Thread {{ log.gmail_thread_id }}{% endif %}</div>
     </div>
-  </details>
-  {% endfor %}
-  {% else %}
-  <div class="panel-body" style="font-size:13px;color:var(--text-3)">No sent or received conversation entries yet.</div>
-  {% endif %}
+    <div class="message-box" id="msg-content">Click any message in the timeline to view the full email body.</div>
+  </div>
 </div>
+{% endblock %}
 
+{% block scripts %}
+<script>
+  const TIMELINE_EVENTS = {{ timeline_events_json|tojson }};
+
+  function selectTimelineEvent(index) {
+    const event = TIMELINE_EVENTS[index];
+    if (!event) return;
+
+    document.querySelectorAll('.vtl-event').forEach(el => el.classList.remove('active'));
+    const selected = document.querySelector(`.vtl-event[data-index="${index}"]`);
+    if (selected) selected.classList.add('active');
+
+    const subjectEl = document.getElementById('msg-subject');
+    const metaEl = document.getElementById('msg-meta');
+    const contentEl = document.getElementById('msg-content');
+
+    subjectEl.textContent = event.subject || '(no subject)';
+    const dateText = event.at ? new Date(event.at).toLocaleString() : 'Unknown date';
+    const threadText = event.gmail_thread_id ? ` · Thread ${event.gmail_thread_id}` : '';
+    metaEl.textContent = `${event.sender_label} · Step ${event.sequence_step} · ${dateText}${threadText}`;
+    contentEl.textContent = event.content || 'No message content.';
+  }
+
+  if (TIMELINE_EVENTS.length > 0) {
+    selectTimelineEvent(0);
+  }
+</script>
 {% endblock %}

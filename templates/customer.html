@@ -197,40 +197,29 @@
 {# ── TWO-COLUMN LAYOUT ── #}
 <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;align-items:start">
 
-  {# Service history #}
+  {# Account life timeline #}
   <div class="card" style="overflow:hidden">
     <div style="padding:16px 20px;border-bottom:1px solid var(--border);background:var(--bg)">
-      <span style="font-size:12px;font-weight:600;color:var(--text);font-family:'IBM Plex Mono',monospace;letter-spacing:0.5px">Service History</span>
+      <span style="font-size:12px;font-weight:600;color:var(--text);font-family:'IBM Plex Mono',monospace;letter-spacing:0.5px">Account Timeline</span>
     </div>
-    {% if jobs %}
-    <table class="data-table">
-      <thead>
-        <tr>
-          <th>Service</th>
-          <th>Date</th>
-          <th>Amount</th>
-          <th>Status</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for job in jobs %}
-        <tr style="cursor:default">
-          <td style="font-weight:500;color:var(--text)">{{ job.service_type }}</td>
-          <td style="font-family:'IBM Plex Mono',monospace;font-size:12px">
-            {% if job.completed_at %}{{ job.completed_at.strftime('%b %-d, %Y') }}{% else %}Scheduled{% endif %}
-          </td>
-          <td style="font-weight:600;font-family:'IBM Plex Mono',monospace">${{ "{:,.0f}".format(job.amount) }}</td>
-          <td>
-            <span class="status-pill {% if job.status == 'complete' %}s-ok{% elif job.status == 'cancelled' %}s-none{% else %}s-sent{% endif %}">
-              {{ job.status }}
-            </span>
-          </td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
+    {% if account_events %}
+    <div style="position:relative;padding:14px 16px 14px 28px">
+      <div style="position:absolute;left:15px;top:14px;bottom:14px;width:2px;background:var(--border)"></div>
+      {% for event in account_events %}
+      <div style="position:relative;padding-bottom:10px;{% if loop.last %}padding-bottom:0{% endif %}">
+        <div style="position:absolute;left:-17px;top:8px;width:10px;height:10px;border-radius:50%;background:
+          {% if event.type == 'service' %}var(--blue){% elif event.type == 'reply' %}var(--green){% elif event.type == 'queued' %}var(--amber){% else %}var(--gold){% endif %};
+          border:2px solid #fff;box-shadow:0 0 0 1px var(--border)"></div>
+        <div style="font-size:11px;color:var(--text-3);font-family:'IBM Plex Mono',monospace;margin-bottom:4px">
+          {% if event.at %}{{ event.at.strftime('%b %-d, %Y · %-I:%M %p') }}{% else %}Unknown date{% endif %}
+        </div>
+        <div style="font-size:13px;font-weight:700;color:var(--navy);margin-bottom:2px">{{ event.title }}</div>
+        <div style="font-size:12px;color:var(--text-2);line-height:1.45">{{ event.detail }}</div>
+      </div>
+      {% endfor %}
+    </div>
     {% else %}
-    <div class="empty">No job history on file.</div>
+    <div class="empty">No account events on file yet.</div>
     {% endif %}
   </div>
 

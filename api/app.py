@@ -436,8 +436,38 @@ def customer_detail(request: Request, customer_id: int):
         jobs = [{"service_type": j.service_type, "completed_at": j.completed_at,
                  "status": j.status, "amount": j.amount} for j in jobs_raw]
         logs = [{"id": l.id, "subject": l.subject, "content": l.content,
-                 "sent_at": l.sent_at, "dry_run": l.dry_run, "sequence_step": l.sequence_step}
+                 "sent_at": l.sent_at, "dry_run": l.dry_run, "sequence_step": l.sequence_step,
+                 "direction": l.direction, "channel": l.channel}
                 for l in logs_raw]
+
+        account_events = []
+        for j in jobs_raw:
+            event_at = j.completed_at or j.scheduled_at or j.created_at
+            account_events.append({
+                "type": "service",
+                "title": f"{j.service_type}",
+                "detail": f"${j.amount:,.0f} · {j.status.replace('_', ' ')}",
+                "at": event_at,
+            })
+        for l in logs_raw:
+            event_at = l.sent_at or l.created_at
+            if l.direction == "inbound":
+                title = f"Inbound {l.channel} reply"
+                event_type = "reply"
+            elif l.dry_run:
+                title = f"Queued {l.channel} draft"
+                event_type = "queued"
+            else:
+                title = f"Outbound {l.channel}"
+                event_type = "outreach"
+            account_events.append({
+                "type": event_type,
+                "title": title,
+                "detail": (l.subject or "(no subject)")[:120],
+                "at": event_at,
+            })
+
+    account_events.sort(key=lambda item: item["at"] or datetime.min, reverse=True)
 
     return templates.TemplateResponse("customer.html", {
         "request": request,
@@ -447,6 +477,7 @@ def customer_detail(request: Request, customer_id: int):
         "customer": customer_data,
         "jobs": jobs,
         "logs": logs,
+        "account_events": account_events,
     })
 
 
@@ -532,6 +563,7 @@ def conversations(request: Request):
                 "customer_name": customer.name,
                 "customer_email": customer.email,
                 "status_label": stage["label"],
+                "last_interaction_label": "Customer reply" if last_touch_log.direction == "inbound" else "Agent outreach",
                 "health_label": health["label"],
                 "health_chip_cls": health["chip_cls"],
                 "health_rank": health["rank"],
@@ -580,15 +612,6 @@ def conversation_detail(request: Request, customer_id: int):
             .order_by(OutreachLog.sent_at.desc(), OutreachLog.created_at.desc())
             .all()
         )
-        jobs = (
-            db.query(Job)
-            .filter_by(operator_id=OPERATOR_ID, customer_id=customer_id)
-            .order_by(Job.completed_at.desc(), Job.scheduled_at.desc(), Job.created_at.desc())
-            .all()
-        )
-        jobs_count = len(jobs)
-        total_appointment_value = round(sum((job.amount or 0) for job in jobs), 2)
-
         operator_data = _operator_data(operator)
         queue_count = _get_queue_count(db)
         customer_data = add_segment(enrich(customer))
@@ -621,25 +644,30 @@ def conversation_detail(request: Request, customer_id: int):
         next_steps = _auto_next_steps(customer.reactivation_status, last_outbound_at, last_inbound_at)
 
         timeline_events = []
-        for job in jobs:
-            appointment_at = job.completed_at or job.scheduled_at or job.created_at
-            timeline_events.append({
-                "type": "appointment",
-                "title": f"{job.service_type} appointment",
-                "detail": f"${job.amount:,.0f} · {job.status.replace('_', ' ')}",
-                "at": appointment_at,
-            })
-
         for entry in log_entries:
             direction_label = "Inbound reply" if entry["direction"] == "inbound" else "Outbound email"
             timeline_events.append({
+                "id": entry["id"],
                 "type": "inbound" if entry["direction"] == "inbound" else "outbound",
                 "title": direction_label,
                 "detail": f"{entry['sender_label']} · Step {entry['sequence_step']}",
+                "subject": entry["subject"],
+                "summary": entry["summary"],
+                "content": entry["content"],
+                "sender_label": entry["sender_label"],
+                "sequence_step": entry["sequence_step"],
+                "gmail_thread_id": entry["gmail_thread_id"],
                 "at": entry["at"],
             })
 
-    timeline_events.sort(key=_timeline_date_key)
+    timeline_events.sort(key=_timeline_date_key, reverse=True)
+    timeline_events_json = [
+        {
+            **event,
+            "at": event["at"].isoformat() if event.get("at") else None,
+        }
+        for event in timeline_events
+    ]
 
     outbound_count = sum(1 for entry in log_entries if entry["direction"] == "outbound")
     inbound_count = sum(1 for entry in log_entries if entry["direction"] == "inbound")
@@ -666,10 +694,9 @@ def conversation_detail(request: Request, customer_id: int):
         "next_steps": next_steps,
         "logs": log_entries,
         "timeline_events": timeline_events,
+        "timeline_events_json": timeline_events_json,
         "outbound_count": outbound_count,
         "inbound_count": inbound_count,
-        "jobs_count": jobs_count,
-        "total_appointment_value": total_appointment_value,
         "opportunity_signals": opportunity_signals,
     })
 
