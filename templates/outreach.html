@@ -1,70 +1,79 @@
 {% extends "base.html" %}
-{% block page_title %}Outreach Queue{% endblock %}
+{% block page_title %}Outreach{% endblock %}
+
+{% block extra_styles %}
+<style>
+  .section-hd{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:14px;gap:12px}
+  .section-hd h2{font-size:14px;font-weight:700;color:var(--navy);font-family:'IBM Plex Mono',monospace;letter-spacing:0.3px}
+  .section-count{font-size:11px;font-family:'IBM Plex Mono',monospace;color:var(--text-3)}
+
+  .conv-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow-sm);overflow:hidden;margin-bottom:14px}
+  .conv-header{padding:14px 22px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;background:var(--bg)}
+  .conv-meta{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+  .conv-name{font-size:14px;font-weight:700;color:var(--navy);text-decoration:none;font-family:'Playfair Display',serif}
+  .conv-name:hover{text-decoration:underline}
+  .conv-sep{width:1px;height:14px;background:var(--border);display:inline-block}
+  .conv-step{font-size:11px;color:var(--text-3);font-family:'IBM Plex Mono',monospace}
+  .conv-date{font-size:11px;color:var(--text-3);font-family:'IBM Plex Mono',monospace}
+  .conv-body{padding:20px 22px}
+  .conv-footer{padding:12px 22px;background:var(--bg);border-top:1px solid var(--border);display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+
+  .tag-pending{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-family:'IBM Plex Mono',monospace;padding:3px 10px;border-radius:20px;background:var(--amber-pale);color:var(--amber);border:1px solid #fde68a}
+  .tag-sent{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-family:'IBM Plex Mono',monospace;padding:3px 10px;border-radius:20px;background:var(--green-pale);color:var(--green);border:1px solid #a7f3d0}
+  .tag-dot{width:5px;height:5px;border-radius:50%}
+
+  .email-preview{font-size:13px;color:var(--text-2);line-height:1.7;white-space:pre-wrap;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:16px 20px;font-family:'IBM Plex Sans',sans-serif}
+
+  .notice-bar{background:var(--navy-soft);border:1px solid var(--navy-rule);border-radius:8px;padding:10px 16px;font-size:12px;color:var(--text-2);display:flex;align-items:center;gap:8px;margin-bottom:22px}
+  .notice-bar span{font-size:14px}
+</style>
+{% endblock %}
 
 {% block content %}
 
-<div style="display:flex;align-items:flex-end;justify-content:space-between;margin-bottom:28px;flex-wrap:wrap;gap:12px">
-  <div>
-    <h1 style="font-family:'Playfair Display',serif;font-size:26px;font-weight:700;color:var(--navy);margin-bottom:4px">Outreach Queue</h1>
-    <div style="font-size:12.5px;color:var(--text-3)">
-      <span style="font-weight:600;color:var(--text)">{{ items|length }} item{{ 's' if items|length != 1 }}</span> drafted and approved · ready to send
-    </div>
-  </div>
-  <a href="/" style="font-size:12px;font-family:'IBM Plex Mono',monospace;color:var(--text-3);text-decoration:none;transition:color 0.15s" onmouseover="this.style.color='var(--navy)'" onmouseout="this.style.color='var(--text-3)'">
-    ← Back to Dashboard
-  </a>
+<div style="margin-bottom:28px">
+  <div style="font-size:10.5px;font-family:'IBM Plex Mono',monospace;letter-spacing:1.5px;text-transform:uppercase;color:var(--text-3);margin-bottom:6px">Outreach</div>
+  <h1 style="font-family:'Playfair Display',serif;font-size:28px;font-weight:700;color:var(--navy);line-height:1.2">Queue &amp; Conversations</h1>
 </div>
 
-{% if items %}
-<div style="display:flex;flex-direction:column;gap:16px">
-  {% for item in items %}
-  <div class="card" id="item-{{ item.log_id }}" style="overflow:hidden;transition:opacity 0.3s">
+<div class="notice-bar">
+  <span>🔒</span>
+  No email is ever sent automatically. Agents draft only — you review and approve every message before it leaves your outbox.
+</div>
 
-    {# Card header #}
-    <div style="padding:16px 24px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;background:var(--bg)">
-      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
-        <a href="/customer/{{ item.customer_id }}"
-           style="font-size:14px;font-weight:700;color:var(--navy);text-decoration:none;font-family:'Playfair Display',serif">
-          {{ item.customer_name }}
-        </a>
-        <span style="width:1px;height:14px;background:var(--border);display:inline-block"></span>
-        <span style="font-size:11px;color:var(--text-3);font-family:'IBM Plex Mono',monospace">
-          Step {{ item.sequence_step + 1 }}
-        </span>
-        <span style="font-size:11px;color:var(--text-3);font-family:'IBM Plex Mono',monospace">
-          {{ item.created_at.strftime('%b %-d, %Y') if item.created_at else '' }}
-        </span>
+{# ── PENDING APPROVAL ── #}
+<div class="section-hd">
+  <h2>Pending Approval</h2>
+  <span class="section-count">{{ pending|length }} draft{{ 's' if pending|length != 1 }} awaiting review</span>
+</div>
 
-        {# Voice attribution if available #}
-        {% if item.voice_name %}
-        <span style="display:inline-flex;align-items:center;gap:5px;font-size:11px;color:var(--text-3);font-family:'IBM Plex Mono',monospace">
-          <span style="width:16px;height:16px;border-radius:50%;background:#dbeafe;color:var(--blue);border:1px solid #93c5fd;display:inline-flex;align-items:center;justify-content:center;font-size:8px;font-weight:700">{{ item.voice_name[0]|upper }}</span>
-          {{ item.voice_name }}
-        </span>
-        {% endif %}
+{% if pending %}
+<div style="margin-bottom:36px">
+  {% for item in pending %}
+  <div class="conv-card" id="item-{{ item.log_id }}">
+    <div class="conv-header">
+      <div class="conv-meta">
+        <a href="/customer/{{ item.customer_id }}" class="conv-name">{{ item.customer_name }}</a>
+        <span class="conv-sep"></span>
+        <span class="conv-step">Step {{ item.sequence_step + 1 }}</span>
+        <span class="conv-date">{{ item.created_at.strftime('%b %-d, %Y') if item.created_at else '' }}</span>
       </div>
-
-      <span style="display:inline-flex;align-items:center;gap:6px;font-size:11px;font-family:'IBM Plex Mono',monospace;padding:4px 12px;border-radius:20px;{% if item.dry_run %}background:var(--amber-pale);color:var(--amber);border:1px solid #fde68a{% else %}background:var(--green-pale);color:var(--green);border:1px solid #a7f3d0{% endif %}">
-        <span style="width:6px;height:6px;border-radius:50%;{% if item.dry_run %}background:var(--amber){% else %}background:var(--green){% endif %}"></span>
-        {% if item.dry_run %}Queued · not sent{% else %}Sent{% endif %}
+      <span class="tag-pending">
+        <span class="tag-dot" style="background:var(--amber)"></span>
+        Pending — not sent
       </span>
     </div>
-
-    {# Email preview #}
-    <div style="padding:22px 24px">
-      <div style="margin-bottom:16px">
+    <div class="conv-body">
+      <div style="margin-bottom:14px">
         <div class="field-label">Subject</div>
         <div style="font-size:14px;font-weight:600;color:var(--navy)">{{ item.subject or '(no subject)' }}</div>
       </div>
       <div>
         <div class="field-label">Body</div>
-        <div style="font-size:13px;color:var(--text-2);line-height:1.7;white-space:pre-wrap;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:16px 20px;font-family:'IBM Plex Sans',sans-serif">{{ item.content }}</div>
+        <div class="email-preview">{{ item.content }}</div>
       </div>
     </div>
-
-    {# Actions #}
-    {% if item.dry_run %}
-    <div style="padding:14px 24px;background:var(--bg);border-top:1px solid var(--border);display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+    <div class="conv-footer">
       <button onclick="markSent({{ item.log_id }})" class="btn-success">
         ✓ Mark as Sent
       </button>
@@ -72,24 +81,71 @@
         View Customer
       </a>
       <span id="sent-label-{{ item.log_id }}" style="display:none;font-size:12.5px;color:var(--green);font-weight:500">
-        ✓ Marked sent
+        ✓ Moved to Active Conversations
       </span>
     </div>
-    {% endif %}
-
   </div>
   {% endfor %}
 </div>
 
 {% else %}
-{# Empty state #}
-<div class="card" style="padding:72px 40px;text-align:center">
-  <div style="font-size:40px;margin-bottom:16px;opacity:0.3">✉</div>
-  <div style="font-family:'Playfair Display',serif;font-size:20px;font-weight:700;color:var(--navy);margin-bottom:8px">Queue is empty</div>
-  <div style="font-size:13px;color:var(--text-3);margin-bottom:24px;max-width:320px;margin-left:auto;margin-right:auto;line-height:1.6">
-    Go to a customer page, generate a draft, and approve it to add it to this queue.
+<div class="card" style="padding:40px;text-align:center;margin-bottom:36px">
+  <div style="font-size:32px;margin-bottom:12px;opacity:0.25">✉</div>
+  <div style="font-size:14px;font-weight:600;color:var(--navy);margin-bottom:6px">No drafts pending</div>
+  <div style="font-size:13px;color:var(--text-3);max-width:300px;margin:0 auto 18px;line-height:1.6">
+    Run the reactivation agent or generate a draft from a customer page to add items here.
   </div>
   <a href="/" class="btn-primary" style="text-decoration:none">View Customers →</a>
+</div>
+{% endif %}
+
+{# ── ACTIVE CONVERSATIONS ── #}
+<div class="section-hd">
+  <h2>Active Conversations</h2>
+  <span class="section-count">{{ sent|length }} sent · awaiting reply</span>
+</div>
+
+{% if sent %}
+<div>
+  {% for item in sent %}
+  <div class="conv-card">
+    <div class="conv-header">
+      <div class="conv-meta">
+        <a href="/customer/{{ item.customer_id }}" class="conv-name">{{ item.customer_name }}</a>
+        <span class="conv-sep"></span>
+        <span class="conv-step">Step {{ item.sequence_step + 1 }}</span>
+        <span class="conv-date">Sent {{ item.sent_at.strftime('%b %-d, %Y') if item.sent_at else '' }}</span>
+      </div>
+      <span class="tag-sent">
+        <span class="tag-dot" style="background:var(--green)"></span>
+        Sent · awaiting reply
+      </span>
+    </div>
+    <div class="conv-body">
+      <div style="margin-bottom:14px">
+        <div class="field-label">Subject</div>
+        <div style="font-size:14px;font-weight:600;color:var(--navy)">{{ item.subject or '(no subject)' }}</div>
+      </div>
+      <div>
+        <div class="field-label">Body</div>
+        <div class="email-preview" style="opacity:0.75">{{ item.content }}</div>
+      </div>
+    </div>
+    <div class="conv-footer" style="justify-content:space-between">
+      <a href="/customer/{{ item.customer_id }}" class="btn-ghost" style="text-decoration:none;font-size:12px">
+        View Customer →
+      </a>
+      <span style="font-size:11.5px;color:var(--text-3);font-family:'IBM Plex Mono',monospace">
+        Follow-up sequencer — Phase 4
+      </span>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+
+{% else %}
+<div style="padding:28px 0 8px;text-align:center">
+  <div style="font-size:13px;color:var(--text-3)">No sent messages yet. Approve a draft above to move it here.</div>
 </div>
 {% endif %}
 
@@ -100,8 +156,14 @@
   async function markSent(logId) {
     const res = await fetch(`/api/outreach/${logId}/mark-sent`, { method: 'POST' });
     if (res.ok) {
-      document.getElementById('sent-label-' + logId).style.display = 'inline';
-      document.getElementById('item-' + logId).style.opacity = '0.5';
+      const card = document.getElementById('item-' + logId);
+      const label = document.getElementById('sent-label-' + logId);
+      label.style.display = 'inline';
+      setTimeout(() => {
+        card.style.transition = 'opacity 0.4s, max-height 0.4s';
+        card.style.opacity = '0';
+        setTimeout(() => window.location.reload(), 450);
+      }, 800);
     }
   }
 </script>

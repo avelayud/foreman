@@ -52,6 +52,13 @@ def _operator_data(op) -> dict:
         "tone_profile_set": bool(op.tone_profile),
     }
 
+
+def _get_queue_count(db) -> int:
+    """Count pending drafts (dry_run=True) for the sidebar badge."""
+    return db.query(OutreachLog).filter_by(
+        operator_id=OPERATOR_ID, dry_run=True
+    ).count()
+
 def days_since(dt) -> int:
     if not dt:
         return 0
@@ -209,6 +216,7 @@ def customer_detail(request: Request, customer_id: int):
         logs_raw = db.query(OutreachLog).filter_by(customer_id=customer_id).order_by(OutreachLog.sent_at.desc()).all()
 
         operator_data = _operator_data(operator)
+        queue_count = _get_queue_count(db)
         customer_data = enrich(customer)
         customer_data = add_segment(customer_data)
         customer_data["assigned_voice_id"] = customer.assigned_voice_id
@@ -222,6 +230,7 @@ def customer_detail(request: Request, customer_id: int):
         "request": request,
         "active": "customers",
         "operator": operator_data,
+        "queue_count": queue_count,
         "customer": customer_data,
         "jobs": jobs,
         "logs": logs,
@@ -240,25 +249,30 @@ def outreach_queue(request: Request):
             .all()
         )
         operator_data = _operator_data(operator)
-        items = [
-            {
+
+        def _row(log, customer):
+            return {
                 "log_id": log.id,
                 "customer_id": customer.id,
                 "customer_name": customer.name,
                 "subject": log.subject,
                 "content": log.content,
                 "created_at": log.created_at,
+                "sent_at": log.sent_at,
                 "dry_run": log.dry_run,
                 "sequence_step": log.sequence_step,
             }
-            for log, customer in rows
-        ]
+
+        pending = [_row(l, c) for l, c in rows if l.dry_run]
+        sent = [_row(l, c) for l, c in rows if not l.dry_run]
 
     return templates.TemplateResponse("outreach.html", {
         "request": request,
         "active": "outreach",
         "operator": operator_data,
-        "items": items,
+        "queue_count": len(pending),
+        "pending": pending,
+        "sent": sent,
     })
 
 

@@ -6,6 +6,11 @@ Scans for dormant customers (never_contacted, days >= threshold), ranks by
 priority score, generates a personalized email draft via Claude for each, and
 saves it to OutreachLog (dry_run=True) for operator review in the /outreach queue.
 
+IMPORTANT: This agent NEVER sends emails. It only generates drafts.
+All outreach requires explicit operator approval via the /outreach queue.
+Emails move from "Pending Approval" to "Active Conversations" only when the
+operator manually clicks "Mark as Sent" in the UI.
+
 Usage:
     python -m agents.reactivation --operator-id 1 [--limit N] [--threshold DAYS]
 
