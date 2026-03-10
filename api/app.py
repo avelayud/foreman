@@ -42,6 +42,17 @@ OPERATOR_ID = 1  # Single-tenant for now
 
 def _operator_data(op) -> dict:
     """Serialize operator ORM object to a template-safe dict."""
+    if not op:
+        return {
+            "id": None,
+            "name": "Operator",
+            "business_name": "Foreman",
+            "niche": "hvac",
+            "onboarding_complete": False,
+            "voice_profiles": [],
+            "tone_profile_set": False,
+        }
+
     return {
         "id": op.id,
         "name": op.name,

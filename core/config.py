@@ -29,7 +29,7 @@ class Config:
     GOOGLE_REDIRECT_URI: str = os.getenv("GOOGLE_REDIRECT_URI", "http://localhost:8000/auth/google/callback")
 
     # Database
-    DATABASE_URL: str = os.getenv("DATABASE_URL", "sqlite:///./fieldagent.db")
+    DATABASE_URL: str = os.getenv("DATABASE_URL", "sqlite:///./foreman.db")
 
     # App
     APP_ENV: str = os.getenv("APP_ENV", "development")
