@@ -125,6 +125,12 @@ class Customer(Base):
     # Voice profile assigned for drafting (references Operator.voice_profiles[].id)
     assigned_voice_id = Column(String, nullable=True)
 
+    # JSON profile built by CustomerAnalyzer from prior Gmail correspondence
+    # Schema: { relationship_history, topics_discussed, customer_tone,
+    #           prior_concerns, response_patterns, interest_signals,
+    #           context_notes, analyzed_at }
+    _customer_profile = Column("customer_profile", Text, nullable=True)
+
     notes = Column(Text)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -134,6 +140,14 @@ class Customer(Base):
     jobs = relationship("Job", back_populates="customer")
     bookings = relationship("Booking", back_populates="customer")
     outreach_logs = relationship("OutreachLog", back_populates="customer")
+
+    @property
+    def customer_profile(self):
+        return json.loads(self._customer_profile or "{}")
+
+    @customer_profile.setter
+    def customer_profile(self, value):
+        self._customer_profile = json.dumps(value)
 
     def __repr__(self):
         return f"<Customer {self.name} ({self.reactivation_status})>"
@@ -238,6 +252,10 @@ class OutreachLog(Base):
 
     # Was this a dry run (generated but not sent)?
     dry_run = Column(Boolean, default=False)
+
+    # Gmail thread ID — populated after sending via Gmail API
+    # Enables exact reply detection by thread rather than fuzzy address matching
+    gmail_thread_id = Column(String, nullable=True)
 
     created_at = Column(DateTime, default=datetime.utcnow)
 

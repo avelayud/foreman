@@ -449,15 +449,45 @@ class ApproveSendRequest(BaseModel):
 
 @app.post("/api/outreach/{log_id}/approve-send")
 def approve_send(log_id: int, req: ApproveSendRequest):
-    """Save any edits and move draft from queue to Active Conversations."""
+    """
+    Save edits, send via Gmail API, store thread_id, move to Active Conversations.
+    Falls back gracefully if Gmail credentials are unavailable.
+    """
     with get_db() as db:
         log = db.query(OutreachLog).filter_by(id=log_id, operator_id=OPERATOR_ID).first()
         if not log:
             raise HTTPException(status_code=404, detail="Log entry not found")
+        customer = db.query(Customer).filter_by(id=log.customer_id).first()
+        customer_email = customer.email if customer else None
         log.subject = req.subject
         log.content = req.body
+
+    # Attempt to send via Gmail API
+    thread_id = None
+    send_error = None
+    if customer_email:
+        try:
+            from integrations.gmail import send_email as gmail_send
+            _, thread_id = gmail_send(
+                to=customer_email,
+                subject=req.subject,
+                body=req.body,
+            )
+        except Exception as e:
+            send_error = str(e)
+
+    with get_db() as db:
+        log = db.query(OutreachLog).filter_by(id=log_id, operator_id=OPERATOR_ID).first()
         log.dry_run = False
-    return {"status": "approved", "log_id": log_id}
+        if thread_id:
+            log.gmail_thread_id = thread_id
+
+    result = {"status": "approved", "log_id": log_id}
+    if thread_id:
+        result["gmail_thread_id"] = thread_id
+    if send_error:
+        result["send_warning"] = f"Saved but Gmail send failed: {send_error}"
+    return result
 
 
 class ApproveRequest(BaseModel):

@@ -27,19 +27,21 @@ import anthropic
 from core.config import config
 from core.database import get_db
 from core.models import Customer, Operator, OutreachLog
+from agents.customer_analyzer import analyze_customer, format_profile_for_prompt
 
 
-# ── Prompts (mirrors api/app.py — single source of truth TODO: extract to shared) ──
+# ── Prompts ───────────────────────────────────────────────────────────────────
 
 DRAFT_SYSTEM = """You are a ghostwriter for a small field service business owner.
 Write a single reactivation email in the owner's exact voice — their tone, greeting style, signoff, and characteristic phrases.
 The email should feel personal and genuine, never salesy. Keep it short: 3–5 sentences. End with a soft call to action.
+If prior correspondence context is provided, use it to personalize — reference past topics naturally if relevant.
 Return ONLY a JSON object with keys "subject" and "body". No markdown, no code fences."""
 
 DRAFT_USER = """Tone profile:
 {tone}
 
-{voice_section}Write a reactivation email for past customer {name}.
+{voice_section}{profile_section}Write a reactivation email for past customer {name}.
 Last service: "{service_type}" about {days} days ago ({months:.0f} months).
 History: {jobs} jobs, ${spend:.0f} total spent."""
 
@@ -57,7 +59,19 @@ def priority_score(days: int, spend: float) -> float:
 
 
 def generate_draft(client: anthropic.Anthropic, customer: dict, operator: dict) -> dict:
-    """Call Claude and return {"subject": ..., "body": ...}."""
+    """
+    Run customer analyzer then call Claude to generate a personalized draft.
+    Returns {"subject": ..., "body": ...}.
+    """
+    # Run customer analyzer to build/refresh profile before drafting
+    try:
+        profile = analyze_customer(operator["id"], customer["id"], verbose=True)
+    except Exception as e:
+        print(f"     [analyzer] skipped: {e}")
+        profile = {}
+
+    profile_section = format_profile_for_prompt(profile)
+
     voice_id = customer.get("assigned_voice_id")
     profiles = operator.get("voice_profiles") or []
     voice = next((p for p in profiles if p["id"] == voice_id), profiles[0] if profiles else None)
@@ -72,13 +86,14 @@ def generate_draft(client: anthropic.Anthropic, customer: dict, operator: dict) 
 
     message = client.messages.create(
         model=config.CLAUDE_MODEL,
-        max_tokens=512,
+        max_tokens=600,
         system=DRAFT_SYSTEM,
         messages=[{
             "role": "user",
             "content": DRAFT_USER.format(
                 tone=tone,
                 voice_section=voice_section,
+                profile_section=profile_section,
                 name=customer["name"],
                 service_type=customer.get("last_service_type") or "service",
                 days=days,

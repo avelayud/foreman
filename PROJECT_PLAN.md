@@ -6,8 +6,8 @@
 
 ## Current Status
 
-**Active Phase:** Phase 3 🟡 In Progress — Reactivation Agent.
-**Current Step:** Phase 2 fully complete (dashboard, voice profiles, segment engine, 40-customer synthetic data on Railway). Starting Phase 3: automated reactivation agent with approval queue.
+**Active Phase:** Phase 4 🟡 In Progress — Gmail Send + Intelligent Follow-up.
+**Current Step:** Phase 3 complete (reactivation agent, outreach queue, approve-to-send). Phase 4 in build: Gmail API send, customer analyzer, reply detector, follow-up agent.
 **Last Updated:** 2026-03-10
 **Live URL:** https://web-production-3df3a.up.railway.app
 **GitHub:** https://github.com/avelayud/foreman
@@ -33,8 +33,8 @@
 |---|---|---|---|
 | 1 | Foundation (models, config, DB) | ✅ Complete | Week 1 |
 | 2 | Tone Profiler Agent | ✅ Complete | Week 1-2 |
-| 3 | Reactivation Outreach Agent (Email) | 🟡 In Progress | Week 2 |
-| 4 | Follow-up Sequence Engine | ⬜ Not Started | Week 2 |
+| 3 | Reactivation Outreach Agent (Email) | ✅ Complete | Week 2 |
+| 4 | Intelligent Follow-up + Gmail Send | 🟡 In Progress | Week 2-3 |
 | 5 | SMS Channel (Twilio) | ⬜ Not Started | Week 3 |
 | 6 | Booking Page + Slot Management | ⬜ Not Started | Week 3-4 |
 | 7 | Confirmation + Reminder Loop | ⬜ Not Started | Week 4 |
@@ -81,7 +81,7 @@ All core infrastructure is built and verified:
 
 ---
 
-## Phase 3 — Reactivation Outreach Agent (Email) 🟡 IN PROGRESS
+## Phase 3 — Reactivation Outreach Agent ✅ COMPLETE
 
 **Goal:** Agent autonomously scans for dormant customers, scores + ranks them, drafts personalized emails in the operator's voice, queues for approval.
 
@@ -110,22 +110,34 @@ All core infrastructure is built and verified:
 
 ---
 
-## Phase 4 — Follow-up Sequence Engine
+## Phase 4 — Intelligent Follow-up + Gmail Send 🟡 IN PROGRESS
 
-**File:** `agents/follow_up.py`
+**Goal:** Close the full automation loop — send via Gmail API, detect replies by thread ID,
+build customer profiles from correspondence, generate context-aware follow-ups.
 
-### Sequence
+### Architecture
 ```
-Day 0:   Initial outreach
-Day 3:   Follow-up #1 — softer check-in
-Day 7:   Follow-up #2 — light urgency
-Day 14:  Close loop — "I'll leave you alone"
+Pre-outreach:   Customer Analyzer → reads prior Gmail history → builds CustomerProfile
+Send:           Approve to Send → Gmail API → stores gmail_thread_id on OutreachLog
+Reply check:    Reply Detector (every few hours) → matches inbox by thread_id → logs inbound
+Follow-up:      Follow-up Agent (daily) → reads CustomerProfile + thread → drafts next step
 ```
 
-### Tasks
-- [ ] State machine per customer (tracked via OutreachLog.sequence_step)
-- [ ] Prompt variants per step
-- [ ] Skip logic when reply is detected
+### New files
+- `agents/customer_analyzer.py` ✅ — pre-outreach profile builder
+- `agents/reply_detector.py` ✅ — thread-based inbox polling
+- `agents/follow_up.py` ✅ — profile-informed sequence runner
+
+### Updated files
+- `integrations/gmail.py` ✅ — added send_email(), get_thread(), get_correspondence(), get_inbox_replies()
+- `agents/reactivation.py` ✅ — runs customer_analyzer before drafting
+- `api/app.py` ✅ — approve-send sends via Gmail API, stores thread_id
+- DB migration ✅ — customers.customer_profile + outreach_logs.gmail_thread_id
+
+### Remaining
+- [ ] Wire reply_detector + follow_up to APScheduler in main.py
+- [ ] Show reply content in Conversations page when detected
+- [ ] Re-authorize Gmail OAuth with new scopes (gmail.send + gmail.modify) — delete token.json
 
 ---
 
