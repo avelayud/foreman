@@ -17,6 +17,7 @@ JSON API:
 """
 
 import json
+import os
 import threading
 import time
 from datetime import datetime, timedelta, timezone
@@ -39,6 +40,8 @@ templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 
 OPERATOR_ID = 1  # Single-tenant for now
 SCHEDULE_POLL_SECONDS = 60
+DB_STARTUP_MAX_ATTEMPTS = max(1, int(os.getenv("DB_STARTUP_MAX_ATTEMPTS", "8")))
+DB_STARTUP_RETRY_SECONDS = max(1, int(os.getenv("DB_STARTUP_RETRY_SECONDS", "3")))
 _scheduled_sender_started = False
 _scheduled_sender_lock = threading.Lock()
 
@@ -684,7 +687,23 @@ def _conversation_recap(customer: dict, stage: dict, health: dict, logs: list[di
 
 @app.on_event("startup")
 def startup():
-    init_db()
+    last_error = None
+    for attempt in range(1, DB_STARTUP_MAX_ATTEMPTS + 1):
+        try:
+            init_db()
+            last_error = None
+            break
+        except Exception as exc:
+            last_error = exc
+            print(
+                f"[startup] init_db attempt {attempt}/{DB_STARTUP_MAX_ATTEMPTS} failed: {exc}"
+            )
+            if attempt < DB_STARTUP_MAX_ATTEMPTS:
+                time.sleep(DB_STARTUP_RETRY_SECONDS)
+
+    if last_error:
+        raise last_error
+
     _start_scheduled_sender()
 
 

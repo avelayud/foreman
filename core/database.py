@@ -10,9 +10,29 @@ from core.config import config
 from core.models import Base
 
 
+def _normalize_database_url(raw_url: str) -> str:
+    """
+    Normalize known URL variants from PaaS providers.
+    SQLAlchemy expects postgresql:// (not legacy postgres://).
+    """
+    db_url = (raw_url or "").strip()
+    if db_url.startswith("postgres://"):
+        return "postgresql://" + db_url[len("postgres://"):]
+    return db_url
+
+
+DATABASE_URL = _normalize_database_url(config.DATABASE_URL)
+
+connect_args = {}
+if DATABASE_URL.startswith("sqlite"):
+    connect_args = {"check_same_thread": False}
+elif DATABASE_URL.startswith("postgresql"):
+    connect_args = {"connect_timeout": 10}
+
 engine = create_engine(
-    config.DATABASE_URL,
-    connect_args={"check_same_thread": False} if "sqlite" in config.DATABASE_URL else {},
+    DATABASE_URL,
+    connect_args=connect_args,
+    pool_pre_ping=True,
     echo=config.is_development(),
 )
 
