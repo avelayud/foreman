@@ -722,11 +722,11 @@ _STARTING_UP_HTML = """<!DOCTYPE html>
 <html><head><meta charset="utf-8">
 <meta http-equiv="refresh" content="4">
 <title>Foreman — Starting up</title>
-<style>body{font-family:system-ui,sans-serif;display:flex;align-items:center;
-justify-content:center;height:100vh;margin:0;background:#f9fafb;}
-.box{text-align:center;color:#374151;}
-h2{font-size:1.5rem;margin-bottom:.5rem;}
-p{color:#6b7280;font-size:.95rem;}
+<style>body{{font-family:system-ui,sans-serif;display:flex;align-items:center;
+justify-content:center;height:100vh;margin:0;background:#f9fafb;}}
+.box{{text-align:center;color:#374151;}}
+h2{{font-size:1.5rem;margin-bottom:.5rem;}}
+p{{color:#6b7280;font-size:.95rem;}}
 </style></head>
 <body><div class="box">
 <h2>Foreman is starting up&hellip;</h2>
