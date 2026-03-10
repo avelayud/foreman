@@ -99,6 +99,7 @@ def dashboard(request: Request):
             "business_name": operator.business_name,
             "niche": operator.niche,
             "onboarding_complete": operator.onboarding_complete,
+            "voice_profiles": operator.voice_profiles,
         }
         customers = sorted([enrich(c) for c in raw_customers], key=lambda x: x["days_dormant"], reverse=True)
 
@@ -145,8 +146,10 @@ def customer_detail(request: Request, customer_id: int):
             "business_name": operator.business_name,
             "niche": operator.niche,
             "onboarding_complete": operator.onboarding_complete,
+            "voice_profiles": operator.voice_profiles,
         }
         customer_data = enrich(customer)
+        customer_data["assigned_voice_id"] = customer.assigned_voice_id
         jobs = [{"service_type": j.service_type, "completed_at": j.completed_at,
                  "status": j.status, "amount": j.amount} for j in jobs_raw]
         logs = [{"id": l.id, "subject": l.subject, "content": l.content,
@@ -180,6 +183,7 @@ def outreach_queue(request: Request):
             "business_name": operator.business_name,
             "niche": operator.niche,
             "onboarding_complete": operator.onboarding_complete,
+            "voice_profiles": operator.voice_profiles,
         }
         items = [
             {
@@ -253,6 +257,18 @@ def get_stats(operator_id: int):
     }
 
 
+# ── Voice assignment ──────────────────────────────────────────────────────────
+
+@app.post("/api/customer/{customer_id}/assign-voice")
+def assign_voice(customer_id: int, body: dict):
+    with get_db() as db:
+        customer = db.query(Customer).filter_by(id=customer_id, operator_id=OPERATOR_ID).first()
+        if not customer:
+            raise HTTPException(status_code=404, detail="Customer not found")
+        customer.assigned_voice_id = body.get("voice_id")
+    return {"ok": True}
+
+
 # ── Draft generation ──────────────────────────────────────────────────────────
 
 DRAFT_SYSTEM = """You are a ghostwriter for a small field service business owner.
@@ -260,24 +276,45 @@ Write a single reactivation email in the owner's exact voice — their tone, gre
 The email should feel personal and genuine, never salesy. Keep it short: 3–5 sentences. End with a soft call to action.
 Return ONLY a JSON object with keys "subject" and "body". No markdown, no code fences."""
 
-DRAFT_USER = """Voice profile:
-{profile}
+DRAFT_USER = """Tone profile:
+{tone}
 
-Write a reactivation email for past customer {name}.
+{voice_section}Write a reactivation email for past customer {name}.
 Last service: "{service_type}" about {days} days ago ({months:.0f} months).
 History: {jobs} jobs, ${spend:.0f} total spent."""
 
 
+class DraftRequest(BaseModel):
+    voice_id: str = None
+
+
 @app.post("/api/draft/{customer_id}")
-def generate_draft(customer_id: int):
+def generate_draft(customer_id: int, req: DraftRequest = None):
+    req = req or DraftRequest()
     with get_db() as db:
         customer = db.query(Customer).filter_by(id=customer_id, operator_id=OPERATOR_ID).first()
         if not customer:
             raise HTTPException(status_code=404, detail="Customer not found")
         operator = db.query(Operator).filter_by(id=OPERATOR_ID).first()
 
-    days = days_since(customer.last_service_date)
-    profile = json.dumps(operator.tone_profile, indent=2)
+        # Resolve voice profile: use requested voice_id, fall back to customer's assigned, then first profile
+        voice_id = req.voice_id or customer.assigned_voice_id
+        profiles = operator.voice_profiles
+        voice = next((p for p in profiles if p["id"] == voice_id), profiles[0] if profiles else None)
+
+        # Serialize everything we need before session closes
+        cust_name = customer.name
+        cust_service_type = customer.last_service_type or "service"
+        cust_last_service_date = customer.last_service_date
+        cust_total_jobs = customer.total_jobs
+        cust_total_spend = customer.total_spend
+        tone = json.dumps(operator.tone_profile, indent=2)
+
+    days = days_since(cust_last_service_date)
+    voice_section = (
+        f"Write in the voice of {voice['name']} ({voice.get('role', 'team member')}).\n\n"
+        if voice else ""
+    )
 
     client = anthropic.Anthropic(api_key=config.ANTHROPIC_API_KEY)
     message = client.messages.create(
@@ -287,13 +324,14 @@ def generate_draft(customer_id: int):
         messages=[{
             "role": "user",
             "content": DRAFT_USER.format(
-                profile=profile,
-                name=customer.name,
-                service_type=customer.last_service_type or "service",
+                tone=tone,
+                voice_section=voice_section,
+                name=cust_name,
+                service_type=cust_service_type,
                 days=days,
                 months=days / 30,
-                jobs=customer.total_jobs,
-                spend=customer.total_spend,
+                jobs=cust_total_jobs,
+                spend=cust_total_spend,
             )
         }]
     )
@@ -304,6 +342,8 @@ def generate_draft(customer_id: int):
     except json.JSONDecodeError:
         draft = {"subject": "Checking in", "body": raw}
 
+    if voice:
+        draft["voice_name"] = voice["name"]
     return draft
 
 

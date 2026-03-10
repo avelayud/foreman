@@ -3,78 +3,249 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Foreman{% if title %} — {{ title }}{% endif %}</title>
+  <title>Foreman{% if self.page_title() %} — {% block page_title %}{% endblock %}{% endif %}</title>
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=IBM+Plex+Sans:wght@300;400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
-    [x-cloak] { display: none; }
-    .tab-active { @apply border-b-2 border-indigo-600 text-indigo-600; }
+    :root {
+      --navy:       #0a1628;
+      --navy-mid:   #1a2e4a;
+      --navy-soft:  #f0f4f9;
+      --navy-rule:  #dde4ed;
+      --gold:       #c8922a;
+      --gold-pale:  #fdf6eb;
+      --gold-rule:  #f0ddb8;
+      --red:        #c0392b;
+      --red-pale:   #fdf2f1;
+      --green:      #1a7f5a;
+      --green-pale: #f0faf5;
+      --amber:      #b45309;
+      --amber-pale: #fffbeb;
+      --blue:       #1a56a0;
+      --blue-pale:  #eff6ff;
+      --purple-pale:#f5f3ff;
+      --purple:     #6d28d9;
+      --text:       #0f1c2e;
+      --text-2:     #4a5568;
+      --text-3:     #8fa0b5;
+      --text-4:     #b8c8d9;
+      --surface:    #ffffff;
+      --bg:         #f7f9fc;
+      --border:     #e2e8f0;
+      --border-2:   #c8d5e3;
+      --shadow-sm:  0 1px 3px rgba(10,22,40,0.06),0 1px 2px rgba(10,22,40,0.04);
+      --shadow-md:  0 4px 16px rgba(10,22,40,0.08),0 2px 6px rgba(10,22,40,0.05);
+      --shadow-lg:  0 12px 40px rgba(10,22,40,0.14);
+      --radius:     10px;
+      --sidebar-w:  234px;
+    }
+    *{margin:0;padding:0;box-sizing:border-box}
+    body{font-family:'IBM Plex Sans',sans-serif;background:var(--bg);color:var(--text);-webkit-font-smoothing:antialiased}
+
+    /* ── SIDEBAR ── */
+    .sb-link{display:flex;align-items:center;gap:10px;padding:8px 12px;border-radius:7px;font-size:13px;font-weight:400;color:rgba(255,255,255,0.5);transition:all 0.15s;text-decoration:none;margin-bottom:1px}
+    .sb-link:hover{background:rgba(255,255,255,0.06);color:rgba(255,255,255,0.85)}
+    .sb-link.active{background:rgba(200,146,42,0.18);color:#e8b86d;font-weight:500}
+    .sb-section{font-size:9.5px;letter-spacing:1.8px;text-transform:uppercase;color:rgba(255,255,255,0.22);font-family:'IBM Plex Mono',monospace;padding:14px 12px 5px}
+
+    /* ── VOICE AVATAR ── */
+    .va{border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;flex-shrink:0;border:2px solid transparent}
+    .va-a{background:#dbeafe;color:var(--blue);border-color:#93c5fd}
+    .va-b{background:#f3e8ff;color:var(--purple);border-color:#c4b5fd}
+    .va-c{background:#dcfce7;color:var(--green);border-color:#86efac}
+    .va-d{background:#fef3c7;color:var(--amber);border-color:#fcd34d}
+
+    /* ── TOP BAR ── */
+    .dry-run-chip{display:inline-flex;align-items:center;gap:6px;background:var(--amber-pale);border:1px solid #fde68a;border-radius:20px;padding:4px 12px;font-size:11px;font-weight:500;color:var(--amber);font-family:'IBM Plex Mono',monospace}
+    .dry-run-chip::before{content:'';width:6px;height:6px;border-radius:50%;background:var(--amber);animation:pulse-dot 2.2s ease-in-out infinite}
+
+    /* ── SHARED ── */
+    .card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow-sm)}
+    .card-label{font-size:10px;font-family:'IBM Plex Mono',monospace;letter-spacing:1.8px;text-transform:uppercase;color:var(--text-3);margin-bottom:14px}
+    .btn-primary{background:var(--gold);color:#fff;border:none;padding:9px 20px;border-radius:7px;font-size:12.5px;font-weight:600;font-family:'IBM Plex Sans',sans-serif;cursor:pointer;transition:all 0.15s;white-space:nowrap;display:inline-flex;align-items:center;gap:6px}
+    .btn-primary:hover{background:#b07d24;transform:translateY(-1px)}
+    .btn-secondary{background:var(--surface);color:var(--navy);border:1px solid var(--border-2);padding:8px 18px;border-radius:7px;font-size:12.5px;font-weight:500;font-family:'IBM Plex Sans',sans-serif;cursor:pointer;transition:all 0.15s}
+    .btn-secondary:hover{background:var(--navy-soft);border-color:var(--navy)}
+    .btn-ghost{background:transparent;color:var(--text-2);border:1px solid var(--border);padding:7px 16px;border-radius:7px;font-size:12px;font-family:'IBM Plex Sans',sans-serif;cursor:pointer;transition:all 0.15s}
+    .btn-ghost:hover{border-color:var(--border-2);color:var(--text)}
+    .btn-success{background:var(--green);color:#fff;border:none;padding:9px 20px;border-radius:7px;font-size:12.5px;font-weight:600;font-family:'IBM Plex Sans',sans-serif;cursor:pointer;transition:all 0.15s;display:inline-flex;align-items:center;gap:6px}
+    .btn-success:hover{background:#156347}
+
+    /* Pills */
+    .pill{display:inline-flex;align-items:center;gap:4px;font-size:10.5px;font-weight:500;padding:3px 9px;border-radius:4px;white-space:nowrap;font-family:'IBM Plex Mono',monospace}
+    .pill-maint{background:var(--blue-pale);color:var(--blue);border:1px solid #bfdbfe}
+    .pill-eol{background:var(--red-pale);color:var(--red);border:1px solid #fecaca}
+    .pill-hv{background:var(--gold-pale);color:var(--gold);border:1px solid var(--gold-rule)}
+    .pill-ref{background:var(--purple-pale);color:var(--purple);border:1px solid #ddd6fe}
+    .pill-new{background:var(--green-pale);color:var(--green);border:1px solid #a7f3d0}
+
+    .status-pill{display:inline-block;font-size:10px;font-family:'IBM Plex Mono',monospace;padding:2px 8px;border-radius:3px}
+    .s-none{background:var(--bg);color:var(--text-3);border:1px solid var(--border)}
+    .s-sent{background:var(--blue-pale);color:var(--blue);border:1px solid #bfdbfe}
+    .s-warm{background:var(--amber-pale);color:var(--amber);border:1px solid #fde68a}
+    .s-ok{background:var(--green-pale);color:var(--green);border:1px solid #a7f3d0}
+
+    /* Forms */
+    .field-label{font-size:10px;font-family:'IBM Plex Mono',monospace;letter-spacing:1.2px;text-transform:uppercase;color:var(--text-3);margin-bottom:6px;display:block}
+    .field-input{width:100%;background:var(--bg);border:1px solid var(--border);border-radius:7px;padding:10px 14px;font-size:13px;font-family:'IBM Plex Sans',sans-serif;color:var(--text);outline:none;transition:border-color 0.15s}
+    .field-input:focus{border-color:var(--navy);background:var(--surface)}
+    .field-input::placeholder{color:var(--text-4)}
+    .field-textarea{width:100%;background:var(--bg);border:1px solid var(--border);border-radius:7px;padding:12px 14px;font-size:13px;font-family:'IBM Plex Sans',sans-serif;color:var(--text);outline:none;resize:vertical;line-height:1.6;transition:border-color 0.15s}
+    .field-textarea:focus{border-color:var(--navy);background:var(--surface)}
+    .field-textarea::placeholder{color:var(--text-4)}
+
+    /* Voice selector */
+    .voice-select{appearance:none;background:var(--surface);border:1px solid var(--border);border-radius:7px;padding:6px 30px 6px 10px;font-size:12.5px;font-family:'IBM Plex Sans',sans-serif;color:var(--navy);font-weight:500;cursor:pointer;outline:none;transition:border-color 0.15s;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%238fa0b5'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 10px center;min-width:160px}
+    .voice-select:focus{border-color:var(--navy)}
+    .draft-voice-row{display:flex;align-items:center;justify-content:space-between;padding:9px 12px;background:var(--navy-soft);border:1px solid var(--border);border-radius:7px;margin-bottom:14px}
+    .draft-voice-left{display:flex;align-items:center;gap:8px}
+    .draft-voice-label{font-size:10px;font-family:'IBM Plex Mono',monospace;color:var(--text-3);letter-spacing:1px;text-transform:uppercase}
+    .draft-voice-name{font-size:13px;font-weight:600;color:var(--navy)}
+
+    /* Point-person chip */
+    .pp-chip{display:inline-flex;align-items:center;gap:7px;background:var(--navy-soft);border:1px solid var(--border);border-radius:7px;padding:5px 10px 5px 6px;cursor:pointer;transition:border-color 0.15s}
+    .pp-chip:hover{border-color:var(--navy)}
+    .pp-chip-label{font-size:10px;font-family:'IBM Plex Mono',monospace;color:var(--text-3);letter-spacing:0.8px;text-transform:uppercase}
+    .pp-chip-name{font-size:12.5px;font-weight:600;color:var(--navy)}
+
+    /* Channel selector */
+    .ch-opt{flex:1;border:1px solid var(--border);border-radius:8px;padding:10px 8px;cursor:pointer;transition:all 0.15s;text-align:center;background:var(--surface)}
+    .ch-opt:hover{border-color:var(--navy);background:var(--navy-soft)}
+    .ch-opt.selected{border-color:var(--navy);background:var(--navy)}
+    .ch-opt.selected .ch-icon,.ch-opt.selected .ch-lbl{color:#fff;opacity:0.85}
+    .ch-icon{font-size:16px;margin-bottom:3px;color:var(--text-2)}
+    .ch-lbl{font-size:10px;color:var(--text-3);font-family:'IBM Plex Mono',monospace;display:block}
+
+    /* Rationale box */
+    .rationale-box{background:var(--gold-pale);border:1px solid var(--gold-rule);border-radius:8px;padding:14px 16px}
+    .rationale-label{font-size:9.5px;font-family:'IBM Plex Mono',monospace;letter-spacing:1.5px;text-transform:uppercase;color:var(--gold);margin-bottom:6px}
+    .rationale-text{font-size:12.5px;color:var(--text);line-height:1.55}
+
+    /* Alert bars */
+    .alert-bar{border-radius:var(--radius);padding:14px 20px;display:flex;align-items:center;gap:12px}
+    .alert-danger{background:var(--red-pale);border:1px solid #fecaca}
+    .alert-warn{background:var(--amber-pale);border:1px solid #fde68a}
+
+    /* Log type badges */
+    .log-badge{display:inline-flex;align-items:center;gap:4px;font-size:10px;font-family:'IBM Plex Mono',monospace;padding:2px 8px;border-radius:3px;white-space:nowrap}
+    .log-service{background:var(--blue-pale);color:var(--blue);border:1px solid #bfdbfe}
+    .log-email{background:var(--amber-pale);color:var(--amber);border:1px solid #fde68a}
+    .log-reply{background:var(--green-pale);color:var(--green);border:1px solid #a7f3d0}
+
+    /* Timeline */
+    .tl-track{display:flex;align-items:flex-start;position:relative}
+    .tl-track::before{content:'';position:absolute;top:13px;left:14px;right:14px;height:1px;background:var(--border)}
+    .tl-step{flex:1;display:flex;flex-direction:column;align-items:center;position:relative;z-index:1}
+    .tl-dot{width:28px;height:28px;border-radius:50%;border:2px solid var(--border);background:var(--surface);display:flex;align-items:center;justify-content:center;font-size:10px;margin-bottom:8px;color:var(--text-4)}
+    .tl-done .tl-dot{background:var(--green-pale);border-color:#4ade80;color:var(--green)}
+    .tl-current .tl-dot{background:var(--navy);border-color:var(--navy);color:#fff;box-shadow:0 0 0 4px rgba(10,22,40,0.1)}
+    .tl-lbl{font-size:10.5px;font-weight:500;color:var(--text-3);text-align:center;line-height:1.3}
+    .tl-done .tl-lbl{color:var(--text-2)}
+    .tl-current .tl-lbl{color:var(--navy);font-weight:600}
+    .tl-date{font-size:9.5px;font-family:'IBM Plex Mono',monospace;color:var(--text-4);text-align:center;margin-top:3px}
+    .tl-done .tl-date,.tl-current .tl-date{color:var(--text-3)}
+
+    /* Table */
+    .data-table{width:100%;border-collapse:collapse}
+    .data-table th{font-size:10px;font-family:'IBM Plex Mono',monospace;letter-spacing:1.2px;text-transform:uppercase;color:var(--text-3);padding:10px 16px;text-align:left;border-bottom:1px solid var(--border);background:var(--bg);font-weight:500}
+    .data-table td{padding:13px 16px;font-size:13px;color:var(--text-2);border-bottom:1px solid var(--border)}
+    .data-table tr:last-child td{border-bottom:none}
+    .data-table tbody tr{transition:background 0.1s;cursor:pointer}
+    .data-table tbody tr:hover{background:var(--navy-soft)}
+
+    /* Misc */
+    .divider{height:1px;background:var(--border);margin:18px 0}
+    .empty{padding:48px 20px;text-align:center;font-size:13px;color:var(--text-3)}
+    .page-content{animation:fadeUp 0.2s ease}
+
+    @keyframes fadeUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+    @keyframes pulse-dot{0%,100%{opacity:1}50%{opacity:0.35}}
+    @keyframes spin{to{transform:rotate(360deg)}}
+    .spinner{width:18px;height:18px;border:2px solid var(--border);border-top-color:var(--navy);border-radius:50%;animation:spin 0.7s linear infinite;display:inline-block}
   </style>
 </head>
-<body class="bg-gray-50 text-gray-900 antialiased">
-<div class="flex min-h-screen">
+<body>
+<div style="display:flex;min-height:100vh">
 
-  <!-- Sidebar -->
-  <aside class="w-56 bg-slate-900 text-white flex flex-col fixed inset-y-0 z-20">
-    <div class="px-6 py-5 border-b border-slate-700">
-      <span class="text-lg font-bold tracking-tight">Foreman</span>
-      {% if operator %}
-      <p class="text-xs text-slate-400 mt-1 truncate">{{ operator.business_name }}</p>
-      {% endif %}
+  <!-- ── SIDEBAR ── -->
+  <aside style="width:var(--sidebar-w);position:fixed;top:0;left:0;bottom:0;background:var(--navy);display:flex;flex-direction:column;z-index:50;overflow-y:auto">
+
+    <div style="padding:26px 22px 20px;border-bottom:1px solid rgba(255,255,255,0.07)">
+      <div style="font-family:'Playfair Display',serif;font-size:22px;font-weight:700;color:#fff;letter-spacing:0.3px">Foreman</div>
+      <div style="font-size:10px;font-family:'IBM Plex Mono',monospace;letter-spacing:1.5px;text-transform:uppercase;color:rgba(255,255,255,0.25);margin-top:4px">
+        {% if operator %}{{ operator.business_name }}{% else %}Field Reengagement{% endif %}
+      </div>
     </div>
 
-    <nav class="flex-1 px-3 py-4 space-y-0.5">
-      <a href="/"
-         class="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors
-                {% if active == 'dashboard' %}bg-slate-700 text-white{% else %}text-slate-400 hover:bg-slate-800 hover:text-white{% endif %}">
-        <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/>
-        </svg>
-        Dashboard
+    <nav style="padding:12px 10px;flex:1">
+      <div class="sb-section">Workspace</div>
+      <a href="/" class="sb-link {% if active == 'dashboard' %}active{% endif %}">
+        <span>◼</span> Dashboard
       </a>
-
-      <a href="/outreach"
-         class="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors
-                {% if active == 'outreach' %}bg-slate-700 text-white{% else %}text-slate-400 hover:bg-slate-800 hover:text-white{% endif %}">
-        <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
-        </svg>
-        Outreach Queue
+      <a href="/outreach" class="sb-link {% if active == 'outreach' %}active{% endif %}">
+        <span>✉</span> Outreach Queue
       </a>
+      <div class="sb-section">Pipeline</div>
+      <a href="/?tab=prime"     class="sb-link"><span style="font-size:11px">🎯</span> Prime Targets</a>
+      <a href="/?tab=warming"   class="sb-link"><span style="font-size:11px">⚡</span> Warming Up</a>
+      <a href="/?tab=converted" class="sb-link"><span style="font-size:11px">✓</span> Converted</a>
     </nav>
 
-    <div class="px-4 py-4 border-t border-slate-700">
-      {% if operator and operator.onboarding_complete %}
-      <span class="inline-flex items-center gap-1.5 text-xs text-green-400">
-        <span class="w-1.5 h-1.5 rounded-full bg-green-400"></span>
-        Voice profile active
-      </span>
-      {% else %}
-      <span class="text-xs text-slate-500">Phase 2 complete</span>
-      {% endif %}
+    <!-- Active voice block -->
+    <div style="padding:0 14px 10px">
+      <div style="padding:9px 10px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.07);border-radius:8px">
+        <div style="font-size:9px;font-family:'IBM Plex Mono',monospace;letter-spacing:1.5px;text-transform:uppercase;color:rgba(255,255,255,0.22);margin-bottom:6px">Active Voice</div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <div class="va va-a" style="width:24px;height:24px;font-size:10px">
+            {% if operator and operator.voice_profiles %}{{ operator.voice_profiles[0].name[0]|upper }}{% elif operator %}{{ operator.business_name[0]|upper }}{% else %}?{% endif %}
+          </div>
+          <div style="flex:1;min-width:0">
+            <div style="font-size:12px;font-weight:500;color:rgba(255,255,255,0.82);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">
+              {% if operator and operator.voice_profiles %}{{ operator.voice_profiles[0].name }}{% elif operator %}{{ operator.business_name }}{% else %}Owner{% endif %}
+            </div>
+            <div style="font-size:10px;color:rgba(255,255,255,0.28);font-family:'IBM Plex Mono',monospace">
+              {% if operator and operator.voice_profiles %}{{ operator.voice_profiles[0].role|default('Owner') }}{% else %}default{% endif %}
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
+
+    <!-- Operator footer -->
+    <div style="padding:8px 14px 16px;border-top:1px solid rgba(255,255,255,0.07)">
+      <div style="display:flex;align-items:center;gap:10px;padding:8px 10px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.06);border-radius:8px">
+        <div style="width:30px;height:30px;background:rgba(200,146,42,0.18);border:1px solid rgba(200,146,42,0.35);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;color:#e8b86d;font-weight:700;flex-shrink:0">
+          {% if operator %}{{ operator.business_name[0]|upper }}{% else %}?{% endif %}
+        </div>
+        <div style="min-width:0">
+          <div style="font-size:12px;font-weight:500;color:rgba(255,255,255,0.78);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">
+            {% if operator %}{{ operator.business_name }}{% else %}Setup required{% endif %}
+          </div>
+          <div style="font-size:10px;color:rgba(255,255,255,0.28);font-family:'IBM Plex Mono',monospace">
+            {% if operator %}{{ operator.niche|upper }} · DRY RUN{% else %}not configured{% endif %}
+          </div>
+        </div>
+      </div>
+    </div>
+
   </aside>
 
-  <!-- Main -->
-  <main class="ml-56 flex-1 flex flex-col min-h-screen">
-    <!-- Top bar -->
-    <header class="bg-white border-b border-gray-200 px-8 py-4 sticky top-0 z-10">
-      <div class="flex items-center justify-between">
-        <h1 class="text-base font-semibold text-gray-900">{% block page_title %}{% endblock %}</h1>
-        <div class="text-xs text-gray-400">
-          {% if operator %}{{ operator.niche | upper }} · DRY RUN{% endif %}
-        </div>
+  <!-- ── MAIN ── -->
+  <main style="margin-left:var(--sidebar-w);flex:1;display:flex;flex-direction:column;min-height:100vh;min-width:0">
+
+    <header style="background:var(--surface);border-bottom:1px solid var(--border);padding:0 40px;height:56px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:40;box-shadow:var(--shadow-sm)">
+      <span style="font-size:14px;font-weight:600;color:var(--text)">{{ self.page_title() }}</span>
+      <div style="display:flex;align-items:center;gap:14px">
+        {% if operator %}<span class="dry-run-chip">DRY RUN</span>{% endif %}
       </div>
     </header>
 
-    <!-- Content -->
-    <div class="flex-1 p-8">
+    <div style="flex:1;padding:36px 40px 60px" class="page-content">
       {% block content %}{% endblock %}
     </div>
+
   </main>
 </div>
-
 {% block scripts %}{% endblock %}
 </body>
 </html>

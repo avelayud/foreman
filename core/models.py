@@ -38,6 +38,10 @@ class Operator(Base):
     # Schema: { formality, greeting_style, signoff, humor, emoji, sample_phrases[] }
     _tone_profile = Column("tone_profile", Text, default="{}")
 
+    # JSON list of named voice profiles for drafting
+    # Schema: [{"id": "vp_xxx", "name": "...", "role": "..."}]
+    _voice_profiles = Column("voice_profiles", Text, default="[]")
+
     # Which external services are connected
     # Schema: { gmail: bool, google_cal: bool, sendgrid: bool, twilio: bool }
     _integrations = Column("integrations", Text, default="{}")
@@ -69,6 +73,14 @@ class Operator(Base):
     @integrations.setter
     def integrations(self, value):
         self._integrations = json.dumps(value)
+
+    @property
+    def voice_profiles(self):
+        return json.loads(self._voice_profiles or "[]")
+
+    @voice_profiles.setter
+    def voice_profiles(self, value):
+        self._voice_profiles = json.dumps(value)
 
     def __repr__(self):
         return f"<Operator {self.business_name}>"
@@ -109,6 +121,9 @@ class Customer(Base):
         ),
         default="never_contacted"
     )
+
+    # Voice profile assigned for drafting (references Operator.voice_profiles[].id)
+    assigned_voice_id = Column(String, nullable=True)
 
     notes = Column(Text)
     created_at = Column(DateTime, default=datetime.utcnow)

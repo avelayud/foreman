@@ -3,202 +3,272 @@
 
 {% block content %}
 
-<!-- Back link -->
-<a href="/" class="inline-flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700 mb-6">
-  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
-  </svg>
-  Back to Dashboard
-</a>
-
-<!-- Customer header card -->
-<div class="bg-white rounded-xl border border-gray-200 p-6 mb-6">
-  <div class="flex items-start justify-between">
-    <div>
-      <h2 class="text-xl font-bold text-gray-900">{{ customer.name }}</h2>
-      <p class="text-sm text-gray-500 mt-0.5">{{ customer.address or 'No address on file' }}</p>
-    </div>
-
-    <!-- Status badge -->
-    {% set badge = {
-      "never_contacted":   ("bg-gray-100 text-gray-600",   "Never contacted"),
-      "outreach_sent":     ("bg-blue-100 text-blue-700",   "Outreach sent"),
-      "sequence_step_2":   ("bg-blue-100 text-blue-700",   "Follow-up 1 sent"),
-      "sequence_step_3":   ("bg-blue-100 text-blue-700",   "Follow-up 2 sent"),
-      "replied":           ("bg-green-100 text-green-700", "Replied"),
-      "booked":            ("bg-green-100 text-green-700", "Booked"),
-      "sequence_complete": ("bg-gray-100 text-gray-600",   "Sequence complete"),
-      "unsubscribed":      ("bg-gray-100 text-gray-400",   "Unsubscribed"),
-    } %}
-    {% set cls, text = badge.get(customer.reactivation_status, ("bg-gray-100 text-gray-500", customer.reactivation_status)) %}
-    <span class="inline-flex items-center rounded-full px-3 py-1 text-sm font-medium {{ cls }}">{{ text }}</span>
+<div style="display:flex;align-items:flex-end;justify-content:space-between;margin-bottom:28px;flex-wrap:wrap;gap:12px">
+  <div>
+    <h1 style="font-family:'Playfair Display',serif;font-size:26px;font-weight:700;color:var(--navy);margin-bottom:4px">{{ customer.name }}</h1>
+    <div style="font-size:12.5px;color:var(--text-3)">{{ customer.address or 'No address on file' }}</div>
   </div>
-
-  <!-- Stats row -->
-  <div class="mt-5 grid grid-cols-2 sm:grid-cols-4 gap-4 pt-5 border-t border-gray-100">
-    <div>
-      <p class="text-xs text-gray-500">Email</p>
-      <p class="text-sm font-medium text-gray-800 mt-0.5">{{ customer.email or '—' }}</p>
-    </div>
-    <div>
-      <p class="text-xs text-gray-500">Phone</p>
-      <p class="text-sm font-medium text-gray-800 mt-0.5">{{ customer.phone or '—' }}</p>
-    </div>
-    <div>
-      <p class="text-xs text-gray-500">Total Jobs</p>
-      <p class="text-sm font-medium text-gray-800 mt-0.5">{{ customer.total_jobs }}</p>
-    </div>
-    <div>
-      <p class="text-xs text-gray-500">Lifetime Value</p>
-      <p class="text-sm font-bold text-gray-900 mt-0.5">${{ "{:,.0f}".format(customer.total_spend) }}</p>
-    </div>
-  </div>
-
-  <!-- Dormancy callout -->
-  {% if customer.days_dormant >= 365 %}
-  <div class="mt-4 rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">
-    ⚠️ Last service was <strong>{{ customer.days_dormant }} days ago</strong>
-    ({{ customer.last_service_type }}) — prime reactivation candidate.
-  </div>
-  {% elif customer.days_dormant >= 180 %}
-  <div class="mt-4 rounded-lg bg-amber-50 border border-amber-200 px-4 py-3 text-sm text-amber-700">
-    Last service was <strong>{{ customer.days_dormant }} days ago</strong>
-    ({{ customer.last_service_type }}) — warming up for outreach.
-  </div>
-  {% endif %}
+  <a href="/" style="font-size:12px;font-family:'IBM Plex Mono',monospace;color:var(--text-3);text-decoration:none;transition:color 0.15s" onmouseover="this.style.color='var(--navy)'" onmouseout="this.style.color='var(--text-3)'">
+    ← Back to Dashboard
+  </a>
 </div>
 
-<!-- Two-column layout -->
-<div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+{# ── CUSTOMER OVERVIEW CARD ── #}
+<div class="card" style="padding:24px;margin-bottom:24px">
 
-  <!-- Service history -->
-  <div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
-    <div class="px-6 py-4 border-b border-gray-100">
-      <h3 class="text-sm font-semibold text-gray-900">Service History</h3>
+  <div style="display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:20px">
+    <div style="display:flex;align-items:center;gap:14px">
+      {# Status badge #}
+      {% set status_map = {
+        "never_contacted":   ("s-none",  "Never contacted"),
+        "outreach_sent":     ("s-sent",  "Outreach sent"),
+        "sequence_step_2":   ("s-sent",  "Follow-up 1"),
+        "sequence_step_3":   ("s-sent",  "Follow-up 2"),
+        "replied":           ("s-ok",    "Replied"),
+        "booked":            ("s-ok",    "Booked"),
+        "sequence_complete": ("s-none",  "Sequence done"),
+        "unsubscribed":      ("s-none",  "Unsubscribed"),
+      } %}
+      {% set s_cls, s_txt = status_map.get(customer.reactivation_status, ("s-none", customer.reactivation_status)) %}
+      <span class="status-pill {{ s_cls }}" style="font-size:11px;padding:3px 10px">{{ s_txt }}</span>
     </div>
-    {% if jobs %}
-    <ul class="divide-y divide-gray-50">
-      {% for job in jobs %}
-      <li class="px-6 py-4">
-        <div class="flex items-start justify-between">
-          <div>
-            <p class="text-sm font-medium text-gray-900">{{ job.service_type }}</p>
-            <p class="text-xs text-gray-400 mt-0.5">
-              {% if job.completed_at %}{{ job.completed_at.strftime('%b %d, %Y') }}{% else %}Scheduled{% endif %}
-            </p>
-          </div>
-          <div class="text-right">
-            <p class="text-sm font-semibold text-gray-700">${{ "{:,.0f}".format(job.amount) }}</p>
-            <span class="text-xs px-2 py-0.5 rounded-full
-              {% if job.status == 'complete' %}bg-green-100 text-green-700
-              {% elif job.status == 'cancelled' %}bg-red-100 text-red-600
-              {% else %}bg-gray-100 text-gray-500{% endif %}">
-              {{ job.status }}
-            </span>
-          </div>
+
+    {# Point-person (voice) chip — opens voice picker #}
+    {% if operator.voice_profiles %}
+    {% set assigned = operator.voice_profiles | selectattr('id', 'equalto', customer.assigned_voice_id) | list %}
+    {% set active_voice = assigned[0] if assigned else operator.voice_profiles[0] %}
+    <button class="pp-chip" onclick="document.getElementById('voice-picker').classList.toggle('hidden')">
+      <div class="va va-a" style="width:22px;height:22px;font-size:9px">{{ active_voice.name[0]|upper }}</div>
+      <div>
+        <div class="pp-chip-label">Voice</div>
+        <div class="pp-chip-name" id="active-voice-name">{{ active_voice.name }}</div>
+      </div>
+      <svg width="10" height="6" viewBox="0 0 10 6" style="color:var(--text-3)"><path d="M0 0l5 6 5-6z" fill="currentColor"/></svg>
+    </button>
+
+    {# Voice picker dropdown #}
+    <div id="voice-picker" class="hidden" style="position:absolute;right:40px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow-md);z-index:100;min-width:220px;padding:8px">
+      {% for vp in operator.voice_profiles %}
+      <button onclick="assignVoice('{{ vp.id }}', '{{ vp.name }}')"
+              style="width:100%;display:flex;align-items:center;gap:10px;padding:8px 10px;border:none;background:transparent;border-radius:6px;cursor:pointer;text-align:left;transition:background 0.1s"
+              onmouseover="this.style.background='var(--navy-soft)'" onmouseout="this.style.background='transparent'">
+        <div class="va va-{{ ['a','b','c','d'][loop.index0 % 4] }}" style="width:28px;height:28px;font-size:11px">{{ vp.name[0]|upper }}</div>
+        <div>
+          <div style="font-size:13px;font-weight:600;color:var(--navy)">{{ vp.name }}</div>
+          <div style="font-size:10.5px;color:var(--text-3);font-family:'IBM Plex Mono',monospace">{{ vp.role|default('Team member') }}</div>
         </div>
-      </li>
+      </button>
       {% endfor %}
-    </ul>
-    {% else %}
-    <div class="px-6 py-8 text-sm text-gray-400 text-center">No job history on file.</div>
+    </div>
     {% endif %}
   </div>
 
-  <!-- Outreach panel -->
-  <div class="space-y-4">
+  {# Stats row #}
+  <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:var(--border);border:1px solid var(--border);border-radius:8px;overflow:hidden">
+    <div style="background:var(--surface);padding:14px 18px">
+      <div class="field-label">Email</div>
+      <div style="font-size:13px;color:var(--text)">{{ customer.email or '—' }}</div>
+    </div>
+    <div style="background:var(--surface);padding:14px 18px">
+      <div class="field-label">Phone</div>
+      <div style="font-size:13px;color:var(--text)">{{ customer.phone or '—' }}</div>
+    </div>
+    <div style="background:var(--surface);padding:14px 18px">
+      <div class="field-label">Total Jobs</div>
+      <div style="font-size:18px;font-weight:700;color:var(--navy);font-family:'Playfair Display',serif">{{ customer.total_jobs }}</div>
+    </div>
+    <div style="background:var(--surface);padding:14px 18px">
+      <div class="field-label">Lifetime Value</div>
+      <div style="font-size:18px;font-weight:700;color:var(--navy);font-family:'Playfair Display',serif">${{ "{:,.0f}".format(customer.total_spend) }}</div>
+    </div>
+  </div>
 
-    <!-- Draft generation -->
-    <div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
-      <div class="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
-        <h3 class="text-sm font-semibold text-gray-900">Draft Outreach Email</h3>
-        <span class="text-xs text-gray-400">Written in your voice</span>
+  {# Dormancy alert #}
+  {% if customer.days_dormant >= 365 %}
+  <div class="alert-bar alert-danger" style="margin-top:16px">
+    <span style="font-size:16px">⚠️</span>
+    <div>
+      <span style="font-size:13px;font-weight:600;color:var(--red)">Last service was {{ customer.days_dormant }} days ago</span>
+      <span style="font-size:12.5px;color:var(--red);opacity:0.8"> · {{ customer.last_service_type or 'service' }} · prime reactivation candidate</span>
+    </div>
+  </div>
+  {% elif customer.days_dormant >= 180 %}
+  <div class="alert-bar alert-warn" style="margin-top:16px">
+    <span style="font-size:16px">🕐</span>
+    <div>
+      <span style="font-size:13px;font-weight:600;color:var(--amber)">Last service was {{ customer.days_dormant }} days ago</span>
+      <span style="font-size:12.5px;color:var(--amber);opacity:0.8"> · {{ customer.last_service_type or 'service' }} · warming up for outreach</span>
+    </div>
+  </div>
+  {% endif %}
+
+</div>
+
+{# ── TWO-COLUMN LAYOUT ── #}
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;align-items:start">
+
+  {# Service history #}
+  <div class="card" style="overflow:hidden">
+    <div style="padding:16px 20px;border-bottom:1px solid var(--border);background:var(--bg)">
+      <span style="font-size:12px;font-weight:600;color:var(--text);font-family:'IBM Plex Mono',monospace;letter-spacing:0.5px">Service History</span>
+    </div>
+    {% if jobs %}
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Service</th>
+          <th>Date</th>
+          <th>Amount</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for job in jobs %}
+        <tr style="cursor:default">
+          <td style="font-weight:500;color:var(--text)">{{ job.service_type }}</td>
+          <td style="font-family:'IBM Plex Mono',monospace;font-size:12px">
+            {% if job.completed_at %}{{ job.completed_at.strftime('%b %-d, %Y') }}{% else %}Scheduled{% endif %}
+          </td>
+          <td style="font-weight:600;font-family:'IBM Plex Mono',monospace">${{ "{:,.0f}".format(job.amount) }}</td>
+          <td>
+            <span class="status-pill {% if job.status == 'complete' %}s-ok{% elif job.status == 'cancelled' %}s-none{% else %}s-sent{% endif %}">
+              {{ job.status }}
+            </span>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <div class="empty">No job history on file.</div>
+    {% endif %}
+  </div>
+
+  {# Right column: draft + history #}
+  <div style="display:flex;flex-direction:column;gap:16px">
+
+    {# Draft outreach card #}
+    <div class="card" style="overflow:hidden">
+      <div style="padding:16px 20px;border-bottom:1px solid var(--border);background:var(--bg);display:flex;align-items:center;justify-content:space-between">
+        <span style="font-size:12px;font-weight:600;color:var(--text);font-family:'IBM Plex Mono',monospace;letter-spacing:0.5px">Draft Outreach</span>
+        <span style="font-size:11px;color:var(--text-3)">Written in your voice</span>
       </div>
 
-      <div class="p-6">
-        <!-- Generate button -->
-        <div id="draft-prompt" class="{% if logs %}hidden{% endif %}">
-          <p class="text-sm text-gray-500 mb-4">
-            Generate a personalized reactivation email for {{ customer.name }}
-            using your tone profile.
+      <div style="padding:20px">
+
+        {# Initial generate prompt #}
+        <div id="draft-prompt" {% if logs %}style="display:none"{% endif %}>
+          <p style="font-size:13px;color:var(--text-2);margin-bottom:16px;line-height:1.5">
+            Generate a personalized reactivation email for {{ customer.name }} using your tone profile.
           </p>
-          <button onclick="generateDraft({{ customer.id }})"
-                  class="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors">
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                    d="M13 10V3L4 14h7v7l9-11h-7z"/>
-            </svg>
-            Generate Draft
+
+          {# Voice row #}
+          {% if operator.voice_profiles %}
+          <div class="draft-voice-row" style="margin-bottom:16px">
+            <div class="draft-voice-left">
+              <div class="va va-a" style="width:24px;height:24px;font-size:10px" id="draft-va-initial">
+                {{ operator.voice_profiles[0].name[0]|upper }}
+              </div>
+              <div>
+                <div class="draft-voice-label">Voice</div>
+                <div class="draft-voice-name" id="draft-voice-display">{{ operator.voice_profiles[0].name }}</div>
+              </div>
+            </div>
+            <select id="voice-select-initial" class="voice-select" onchange="updateVoiceDisplay(this)">
+              {% for vp in operator.voice_profiles %}
+              <option value="{{ vp.id }}" {% if vp.id == customer.assigned_voice_id %}selected{% endif %}>{{ vp.name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          {% endif %}
+
+          <button onclick="generateDraft({{ customer.id }})" class="btn-primary">
+            ✦ Generate Draft
           </button>
         </div>
 
-        <!-- Loading state -->
-        <div id="draft-loading" class="hidden text-center py-6">
-          <div class="inline-block w-6 h-6 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
-          <p class="text-sm text-gray-400 mt-2">Writing in your voice...</p>
+        {# Loading state #}
+        <div id="draft-loading" style="display:none;text-align:center;padding:32px 0">
+          <div class="spinner" style="margin:0 auto 10px"></div>
+          <p style="font-size:13px;color:var(--text-3)">Writing in your voice…</p>
         </div>
 
-        <!-- Draft result -->
-        <div id="draft-result" class="hidden space-y-3">
-          <div>
-            <label class="text-xs font-medium text-gray-500 uppercase tracking-wide">Subject</label>
-            <input id="draft-subject" type="text"
-                   class="mt-1 w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"/>
+        {# Draft result #}
+        <div id="draft-result" style="display:none">
+
+          {# Voice attribution #}
+          <div class="draft-voice-row" id="draft-voice-row" style="margin-bottom:16px">
+            <div class="draft-voice-left">
+              <div class="va va-a" style="width:24px;height:24px;font-size:10px" id="draft-va-result">?</div>
+              <div>
+                <div class="draft-voice-label">Drafted by</div>
+                <div class="draft-voice-name" id="draft-voice-result-name">—</div>
+              </div>
+            </div>
+            {% if operator.voice_profiles %}
+            <select id="voice-select-result" class="voice-select" onchange="updateVoiceDisplay(this)">
+              {% for vp in operator.voice_profiles %}
+              <option value="{{ vp.id }}" {% if vp.id == customer.assigned_voice_id %}selected{% endif %}>{{ vp.name }}</option>
+              {% endfor %}
+            </select>
+            {% endif %}
           </div>
-          <div>
-            <label class="text-xs font-medium text-gray-500 uppercase tracking-wide">Body</label>
-            <textarea id="draft-body" rows="7"
-                      class="mt-1 w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none"></textarea>
+
+          <div style="margin-bottom:14px">
+            <label class="field-label">Subject</label>
+            <input id="draft-subject" type="text" class="field-input" />
           </div>
-          <div class="flex gap-2 pt-1">
-            <button onclick="approveDraft({{ customer.id }})"
-                    class="flex-1 px-4 py-2 bg-green-600 text-white text-sm font-medium rounded-lg hover:bg-green-700 transition-colors">
+          <div style="margin-bottom:16px">
+            <label class="field-label">Body</label>
+            <textarea id="draft-body" rows="7" class="field-textarea"></textarea>
+          </div>
+          <div style="display:flex;gap:8px">
+            <button onclick="approveDraft({{ customer.id }})" class="btn-success" style="flex:1">
               ✓ Approve &amp; Queue
             </button>
-            <button onclick="generateDraft({{ customer.id }})"
-                    class="px-4 py-2 border border-gray-200 text-gray-600 text-sm font-medium rounded-lg hover:bg-gray-50 transition-colors">
+            <button onclick="generateDraft({{ customer.id }})" class="btn-secondary">
               Regenerate
             </button>
           </div>
-          <div id="draft-success" class="hidden rounded-lg bg-green-50 border border-green-200 px-4 py-3 text-sm text-green-700">
-            ✓ Draft queued. <a href="/outreach" class="underline font-medium">View in Outreach Queue →</a>
+          <div id="draft-success" style="display:none;margin-top:12px;background:var(--green-pale);border:1px solid #a7f3d0;border-radius:8px;padding:12px 16px;font-size:13px;color:var(--green)">
+            ✓ Draft queued. <a href="/outreach" style="color:var(--green);font-weight:600;text-decoration:underline">View in Outreach Queue →</a>
           </div>
         </div>
 
-        <!-- Re-draft button if already has logs -->
+        {# Re-draft button shown when logs already exist #}
         {% if logs %}
-        <button onclick="generateDraft({{ customer.id }}); document.getElementById('draft-prompt').classList.add('hidden');"
-                class="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors">
-          Generate New Draft
-        </button>
+        <div style="padding-top:0">
+          <button onclick="generateDraft({{ customer.id }}); document.getElementById('draft-prompt').style.display='none';" class="btn-primary">
+            Generate New Draft
+          </button>
+        </div>
         {% endif %}
+
       </div>
     </div>
 
-    <!-- Outreach history -->
+    {# Outreach history #}
     {% if logs %}
-    <div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
-      <div class="px-6 py-4 border-b border-gray-100">
-        <h3 class="text-sm font-semibold text-gray-900">Outreach History</h3>
+    <div class="card" style="overflow:hidden">
+      <div style="padding:16px 20px;border-bottom:1px solid var(--border);background:var(--bg)">
+        <span style="font-size:12px;font-weight:600;color:var(--text);font-family:'IBM Plex Mono',monospace;letter-spacing:0.5px">Outreach History</span>
       </div>
-      <ul class="divide-y divide-gray-50">
+      <div style="display:flex;flex-direction:column">
         {% for log in logs %}
-        <li class="px-6 py-4">
-          <div class="flex items-start justify-between mb-1">
-            <p class="text-sm font-medium text-gray-900">{{ log.subject or '(no subject)' }}</p>
-            <span class="text-xs px-2 py-0.5 rounded-full ml-2 shrink-0
-              {% if log.dry_run %}bg-amber-100 text-amber-700{% else %}bg-green-100 text-green-700{% endif %}">
+        <div style="padding:14px 20px;{% if not loop.last %}border-bottom:1px solid var(--border){% endif %}">
+          <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:6px;gap:8px">
+            <div style="font-size:13px;font-weight:600;color:var(--navy)">{{ log.subject or '(no subject)' }}</div>
+            <span class="log-badge {% if log.dry_run %}log-email{% else %}log-reply{% endif %}" style="flex-shrink:0">
               {% if log.dry_run %}Queued{% else %}Sent{% endif %}
             </span>
           </div>
-          <p class="text-xs text-gray-400">
-            {{ log.sent_at.strftime('%b %d, %Y') if log.sent_at else '' }}
-            · Step {{ log.sequence_step }}
-          </p>
-          <p class="text-xs text-gray-500 mt-1 line-clamp-2">{{ log.content[:120] }}...</p>
-        </li>
+          <div style="font-size:11px;color:var(--text-3);font-family:'IBM Plex Mono',monospace;margin-bottom:6px">
+            {{ log.sent_at.strftime('%b %-d, %Y') if log.sent_at else '' }} · Step {{ log.sequence_step + 1 }}
+          </div>
+          <div style="font-size:12.5px;color:var(--text-2);line-height:1.5">{{ log.content[:120] }}…</div>
+        </div>
         {% endfor %}
-      </ul>
+      </div>
     </div>
     {% endif %}
 
@@ -209,23 +279,69 @@
 
 {% block scripts %}
 <script>
+  const CUSTOMER_ID = {{ customer.id }};
+  let selectedVoiceId = {{ ('"%s"' % customer.assigned_voice_id) if customer.assigned_voice_id else 'null' }};
+
+  function updateVoiceDisplay(sel) {
+    selectedVoiceId = sel.value;
+    // Sync both selects
+    document.querySelectorAll('.voice-select').forEach(s => s.value = sel.value);
+    const name = sel.options[sel.selectedIndex].text;
+    const el = document.getElementById('draft-voice-display');
+    if (el) el.textContent = name;
+  }
+
+  async function assignVoice(voiceId, voiceName) {
+    selectedVoiceId = voiceId;
+    document.getElementById('voice-picker').classList.add('hidden');
+    document.getElementById('active-voice-name').textContent = voiceName;
+    document.querySelectorAll('.voice-select').forEach(s => s.value = voiceId);
+    const el = document.getElementById('draft-voice-display');
+    if (el) el.textContent = voiceName;
+    await fetch(`/api/customer/${CUSTOMER_ID}/assign-voice`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ voice_id: voiceId }),
+    });
+  }
+
+  // Close voice picker when clicking outside
+  document.addEventListener('click', e => {
+    const picker = document.getElementById('voice-picker');
+    if (picker && !picker.classList.contains('hidden') && !e.target.closest('#voice-picker') && !e.target.closest('.pp-chip')) {
+      picker.classList.add('hidden');
+    }
+  });
+
   async function generateDraft(customerId) {
-    document.getElementById('draft-prompt').classList.add('hidden');
-    document.getElementById('draft-loading').classList.remove('hidden');
-    document.getElementById('draft-result').classList.add('hidden');
-    document.getElementById('draft-success').classList.add('hidden');
+    document.getElementById('draft-prompt').style.display = 'none';
+    document.getElementById('draft-loading').style.display = 'block';
+    document.getElementById('draft-result').style.display = 'none';
+    document.getElementById('draft-success').style.display = 'none';
 
     try {
-      const res = await fetch(`/api/draft/${customerId}`, { method: 'POST' });
+      const body = selectedVoiceId ? { voice_id: selectedVoiceId } : {};
+      const res = await fetch(`/api/draft/${customerId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
       const data = await res.json();
 
       document.getElementById('draft-subject').value = data.subject || '';
       document.getElementById('draft-body').value = data.body || '';
-      document.getElementById('draft-loading').classList.add('hidden');
-      document.getElementById('draft-result').classList.remove('hidden');
+
+      // Show voice attribution
+      if (data.voice_name) {
+        document.getElementById('draft-voice-result-name').textContent = data.voice_name;
+        document.getElementById('draft-va-result').textContent = data.voice_name[0].toUpperCase();
+      }
+
+      document.getElementById('draft-loading').style.display = 'none';
+      document.getElementById('draft-result').style.display = 'block';
     } catch (e) {
-      document.getElementById('draft-loading').classList.add('hidden');
-      document.getElementById('draft-prompt').classList.remove('hidden');
+      document.getElementById('draft-loading').style.display = 'none';
+      document.getElementById('draft-prompt').style.display = 'block';
       alert('Error generating draft. Check API key and try again.');
     }
   }
@@ -233,15 +349,13 @@
   async function approveDraft(customerId) {
     const subject = document.getElementById('draft-subject').value;
     const body = document.getElementById('draft-body').value;
-
     const res = await fetch(`/api/draft/${customerId}/approve`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ subject, body }),
     });
-
     if (res.ok) {
-      document.getElementById('draft-success').classList.remove('hidden');
+      document.getElementById('draft-success').style.display = 'block';
     }
   }
 </script>
