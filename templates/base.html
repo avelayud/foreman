@@ -193,6 +193,27 @@
       <a href="/?tab=prime"     class="sb-link"><span style="font-size:11px">🎯</span> Prime Targets</a>
       <a href="/?tab=warming"   class="sb-link"><span style="font-size:11px">⚡</span> Warming Up</a>
       <a href="/?tab=converted" class="sb-link"><span style="font-size:11px">✓</span> Converted</a>
+
+      <div class="sb-section">Agents</div>
+      <a href="/agents" class="sb-link {% if active == 'agents' %}active{% endif %}">
+        <span style="font-size:11px">⚙</span> All Agents
+      </a>
+      <a href="/agents#tone_profiler" class="sb-link">
+        <span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:{% if operator and operator.tone_profile_set %}#4ade80{% else %}rgba(255,255,255,0.2){% endif %};flex-shrink:0"></span>
+        Tone Profiler
+      </a>
+      <a href="/agents#reactivation" class="sb-link">
+        <span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#4ade80;flex-shrink:0"></span>
+        Reactivation
+      </a>
+      <a href="/agents#follow_up" class="sb-link" style="opacity:0.45">
+        <span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:rgba(255,255,255,0.15);flex-shrink:0"></span>
+        Follow-up
+      </a>
+      <a href="/agents#sms_outreach" class="sb-link" style="opacity:0.45">
+        <span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:rgba(255,255,255,0.15);flex-shrink:0"></span>
+        SMS Outreach
+      </a>
     </nav>
 
     <!-- Active voice block -->

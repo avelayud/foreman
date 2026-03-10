@@ -40,6 +40,18 @@ OPERATOR_ID = 1  # Single-tenant for now
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
+def _operator_data(op) -> dict:
+    """Serialize operator ORM object to a template-safe dict."""
+    return {
+        "id": op.id,
+        "name": op.name,
+        "business_name": op.business_name,
+        "niche": op.niche,
+        "onboarding_complete": op.onboarding_complete,
+        "voice_profiles": op.voice_profiles,
+        "tone_profile_set": bool(op.tone_profile),
+    }
+
 def days_since(dt) -> int:
     if not dt:
         return 0
@@ -137,14 +149,7 @@ def dashboard(request: Request):
         queue_count = db.query(OutreachLog).filter_by(
             operator_id=OPERATOR_ID, dry_run=True
         ).count()
-        operator_data = {
-            "id": operator.id,
-            "name": operator.name,
-            "business_name": operator.business_name,
-            "niche": operator.niche,
-            "onboarding_complete": operator.onboarding_complete,
-            "voice_profiles": operator.voice_profiles,
-        }
+        operator_data = _operator_data(operator)
         customers = sorted(
             [add_segment(enrich(c)) for c in raw_customers],
             key=lambda x: x["days_dormant"], reverse=True
@@ -203,14 +208,7 @@ def customer_detail(request: Request, customer_id: int):
         jobs_raw = db.query(Job).filter_by(customer_id=customer_id).order_by(Job.completed_at.desc()).all()
         logs_raw = db.query(OutreachLog).filter_by(customer_id=customer_id).order_by(OutreachLog.sent_at.desc()).all()
 
-        operator_data = {
-            "id": operator.id,
-            "name": operator.name,
-            "business_name": operator.business_name,
-            "niche": operator.niche,
-            "onboarding_complete": operator.onboarding_complete,
-            "voice_profiles": operator.voice_profiles,
-        }
+        operator_data = _operator_data(operator)
         customer_data = enrich(customer)
         customer_data = add_segment(customer_data)
         customer_data["assigned_voice_id"] = customer.assigned_voice_id
@@ -241,14 +239,7 @@ def outreach_queue(request: Request):
             .order_by(OutreachLog.created_at.desc())
             .all()
         )
-        operator_data = {
-            "id": operator.id,
-            "name": operator.name,
-            "business_name": operator.business_name,
-            "niche": operator.niche,
-            "onboarding_complete": operator.onboarding_complete,
-            "voice_profiles": operator.voice_profiles,
-        }
+        operator_data = _operator_data(operator)
         items = [
             {
                 "log_id": log.id,
@@ -380,25 +371,28 @@ def generate_draft(customer_id: int, req: DraftRequest = None):
         if voice else ""
     )
 
-    client = anthropic.Anthropic(api_key=config.ANTHROPIC_API_KEY)
-    message = client.messages.create(
-        model=config.CLAUDE_MODEL,
-        max_tokens=512,
-        system=DRAFT_SYSTEM,
-        messages=[{
-            "role": "user",
-            "content": DRAFT_USER.format(
-                tone=tone,
-                voice_section=voice_section,
-                name=cust_name,
-                service_type=cust_service_type,
-                days=days,
-                months=days / 30,
-                jobs=cust_total_jobs,
-                spend=cust_total_spend,
-            )
-        }]
-    )
+    try:
+        client = anthropic.Anthropic(api_key=config.ANTHROPIC_API_KEY)
+        message = client.messages.create(
+            model=config.CLAUDE_MODEL,
+            max_tokens=512,
+            system=DRAFT_SYSTEM,
+            messages=[{
+                "role": "user",
+                "content": DRAFT_USER.format(
+                    tone=tone,
+                    voice_section=voice_section,
+                    name=cust_name,
+                    service_type=cust_service_type,
+                    days=days,
+                    months=days / 30,
+                    jobs=cust_total_jobs,
+                    spend=cust_total_spend,
+                )
+            }]
+        )
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Claude API error: {e}")
 
     raw = message.content[0].text.strip()
     try:
@@ -472,3 +466,123 @@ def run_agent(req: AgentRunRequest = None):
     t = threading.Thread(target=_run, daemon=True)
     t.start()
     return {"status": "started", "limit": req.limit}
+
+
+@app.get("/api/agent/status")
+def agent_status():
+    with get_db() as db:
+        op = db.query(Operator).filter_by(id=OPERATOR_ID).first()
+        tone_profile_set = bool(op.tone_profile) if op else False
+
+        latest_log = (
+            db.query(OutreachLog)
+            .filter_by(operator_id=OPERATOR_ID, sequence_step=0)
+            .order_by(OutreachLog.created_at.desc())
+            .first()
+        )
+        queued_count = (
+            db.query(OutreachLog)
+            .filter_by(operator_id=OPERATOR_ID, dry_run=True)
+            .count()
+        )
+        last_run_at = latest_log.created_at.isoformat() if latest_log else None
+
+    return {
+        "tone_profiler": {
+            "configured": tone_profile_set,
+            "description": "Extracts your writing voice from sent Gmail",
+        },
+        "reactivation": {
+            "configured": True,
+            "last_run_at": last_run_at,
+            "queued_count": queued_count,
+            "description": "Scans dormant customers and queues email drafts",
+        },
+    }
+
+
+@app.get("/agents", response_class=HTMLResponse)
+def agents_page(request: Request):
+    with get_db() as db:
+        op = db.query(Operator).filter_by(id=OPERATOR_ID).first()
+        operator_data = _operator_data(op)
+        tone_profile_set = bool(op.tone_profile) if op else False
+
+        latest_log = (
+            db.query(OutreachLog)
+            .filter_by(operator_id=OPERATOR_ID, sequence_step=0)
+            .order_by(OutreachLog.created_at.desc())
+            .first()
+        )
+        total_drafted = (
+            db.query(OutreachLog)
+            .filter_by(operator_id=OPERATOR_ID, sequence_step=0)
+            .count()
+        )
+        queued_count = (
+            db.query(OutreachLog)
+            .filter_by(operator_id=OPERATOR_ID, dry_run=True)
+            .count()
+        )
+        last_run_at = latest_log.created_at if latest_log else None
+
+    return templates.TemplateResponse("agents.html", {
+        "request": request,
+        "active": "agents",
+        "operator": operator_data,
+        "queue_count": queued_count,
+        "agents": [
+            {
+                "key": "tone_profiler",
+                "name": "Tone Profiler",
+                "icon": "🎙",
+                "description": "Reads your sent Gmail to extract writing style, tone, and characteristic phrases. Stores a voice profile used by all outreach drafts.",
+                "status": "active" if tone_profile_set else "needs_setup",
+                "status_label": "Active" if tone_profile_set else "Not configured",
+                "last_run_at": None,
+                "stat_label": "Voice profiles" if tone_profile_set else "Setup required",
+                "stat_value": str(len(operator_data.get("voice_profiles") or [])) if tone_profile_set else "—",
+                "cli": "python -m agents.tone_profiler --operator-id 1",
+                "phase": "Phase 2",
+            },
+            {
+                "key": "reactivation",
+                "name": "Reactivation Agent",
+                "icon": "🎯",
+                "description": "Scans for customers dormant 365+ days, ranks by priority score (days dormant × spend), generates personalized email drafts, and queues them for your review.",
+                "status": "active",
+                "status_label": "Active",
+                "last_run_at": last_run_at,
+                "stat_label": "Drafts queued",
+                "stat_value": str(total_drafted),
+                "cli": "python -m agents.reactivation --operator-id 1 --limit 10",
+                "phase": "Phase 3",
+            },
+            {
+                "key": "follow_up",
+                "name": "Follow-up Sequencer",
+                "icon": "🔁",
+                "description": "Sends follow-up emails at Day 3, Day 7, and Day 14 for customers who haven't replied. Stops automatically when a reply is detected.",
+                "status": "planned",
+                "status_label": "Planned — Phase 4",
+                "last_run_at": None,
+                "stat_label": None,
+                "stat_value": None,
+                "cli": None,
+                "phase": "Phase 4",
+            },
+            {
+                "key": "sms_outreach",
+                "name": "SMS Outreach",
+                "icon": "💬",
+                "description": "Sends and receives text messages via Twilio. Handles two-way replies, opt-outs, and booking confirmations over SMS.",
+                "status": "planned",
+                "status_label": "Planned — Phase 5",
+                "last_run_at": None,
+                "stat_label": None,
+                "stat_value": None,
+                "cli": None,
+                "phase": "Phase 5",
+            },
+        ],
+    })

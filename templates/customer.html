@@ -185,6 +185,7 @@
           <button onclick="generateDraft({{ customer.id }})" class="btn-primary">
             ✦ Generate Draft
           </button>
+          <div id="draft-error" style="display:none;margin-top:12px;background:var(--red-pale);border:1px solid #fecaca;border-radius:8px;padding:10px 14px;font-size:12.5px;color:var(--red);font-family:'IBM Plex Mono',monospace"></div>
         </div>
 
         {# Loading state #}
@@ -318,6 +319,7 @@
     document.getElementById('draft-loading').style.display = 'block';
     document.getElementById('draft-result').style.display = 'none';
     document.getElementById('draft-success').style.display = 'none';
+    document.getElementById('draft-error').style.display = 'none';
 
     try {
       const body = selectedVoiceId ? { voice_id: selectedVoiceId } : {};
@@ -326,12 +328,16 @@
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       });
-      const data = await res.json();
+
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok) {
+        throw new Error(data.detail || `Server error ${res.status}`);
+      }
 
       document.getElementById('draft-subject').value = data.subject || '';
       document.getElementById('draft-body').value = data.body || '';
 
-      // Show voice attribution
       if (data.voice_name) {
         document.getElementById('draft-voice-result-name').textContent = data.voice_name;
         document.getElementById('draft-va-result').textContent = data.voice_name[0].toUpperCase();
@@ -342,7 +348,9 @@
     } catch (e) {
       document.getElementById('draft-loading').style.display = 'none';
       document.getElementById('draft-prompt').style.display = 'block';
-      alert('Error generating draft. Check API key and try again.');
+      const errEl = document.getElementById('draft-error');
+      errEl.textContent = '⚠ ' + e.message;
+      errEl.style.display = 'block';
     }
   }
 
