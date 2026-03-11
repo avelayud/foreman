@@ -9,7 +9,8 @@ Run: python -m data.seed   (idempotent — clears and reseeds each time)
 import random
 from datetime import datetime, timedelta
 
-from core.database import init_db, get_db
+from sqlalchemy import text
+from core.database import init_db, get_db, DATABASE_URL
 from core.models import Operator, Customer, Job, OutreachLog
 
 # ── Reproducible randomness ────────────────────────────────────────────────────
@@ -248,10 +249,18 @@ def seed():
 
     with get_db() as db:
         # ── Wipe existing data ──────────────────────────────────────────────
-        db.query(OutreachLog).delete()
-        db.query(Job).delete()
-        db.query(Customer).delete()
-        db.query(Operator).delete()
+        # TRUNCATE with RESTART IDENTITY resets Postgres sequences so that
+        # the new operator gets id=1 again (OPERATOR_ID is hardcoded to 1).
+        if DATABASE_URL.startswith("postgresql"):
+            db.execute(text(
+                "TRUNCATE TABLE outreach_logs, bookings, jobs, customers, operators "
+                "RESTART IDENTITY CASCADE"
+            ))
+        else:
+            db.query(OutreachLog).delete()
+            db.query(Job).delete()
+            db.query(Customer).delete()
+            db.query(Operator).delete()
         db.commit()
 
         # ── Create operator ────────────────────────────────────────────────
