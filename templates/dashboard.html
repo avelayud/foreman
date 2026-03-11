@@ -5,90 +5,92 @@
 <style>
   /* ── PAGE HEADER ── */
   .page-eyebrow{font-size:10.5px;font-family:'IBM Plex Mono',monospace;letter-spacing:1.5px;text-transform:uppercase;color:var(--text-3);margin-bottom:6px}
-  .page-title{font-family:'Playfair Display',serif;font-size:28px;font-weight:700;color:var(--navy);line-height:1.2;margin-bottom:28px}
+  .page-title{font-family:'Playfair Display',serif;font-size:28px;font-weight:700;color:var(--navy);line-height:1.2;margin-bottom:24px}
 
-  /* ── ACTION BANNER ── */
-  .action-banner{background:linear-gradient(135deg,var(--navy) 0%,var(--navy-mid) 100%);border-radius:var(--radius);padding:20px 26px;display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;box-shadow:var(--shadow-md);gap:16px}
-  .action-banner-left{display:flex;align-items:center;gap:16px;flex:1;min-width:0}
-  .action-banner-icon{width:42px;height:42px;background:rgba(200,146,42,0.2);border:1px solid rgba(200,146,42,0.35);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0}
-  .action-banner-title{font-size:14px;font-weight:600;color:#fff;line-height:1.3}
-  .action-banner-sub{font-size:12px;color:rgba(255,255,255,0.45);margin-top:3px}
-
-  /* ── AGENT BAR ── */
-  .agent-bar{background:var(--navy-soft);border:1px solid var(--navy-rule);border-radius:var(--radius);padding:11px 18px;display:flex;align-items:center;justify-content:space-between;margin-bottom:24px;gap:12px}
-  .agent-bar-left{display:flex;align-items:center;gap:10px;flex:1;min-width:0}
-  .agent-dot{width:7px;height:7px;border-radius:50%;background:var(--amber);flex-shrink:0;animation:pulse-dot 2.2s ease-in-out infinite}
-  .agent-bar-text{font-size:12.5px;color:var(--text-2)}
-  .agent-bar-text strong{color:var(--navy);font-weight:600}
-  .agent-bar-meta{font-size:11px;color:var(--text-3);font-family:'IBM Plex Mono',monospace;margin-top:1px}
-
-  /* ── METRIC STRIP ── */
-  .metric-strip{display:grid;grid-template-columns:repeat(4,1fr);gap:0;border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;background:var(--surface);box-shadow:var(--shadow-sm);margin-bottom:32px}
-  .metric-cell{padding:22px 26px;border-right:1px solid var(--border);position:relative;transition:background 0.15s}
+  /* ── METRIC GRID ── */
+  .metric-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:0;border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;background:var(--surface);box-shadow:var(--shadow-sm);margin-bottom:14px}
+  .metric-grid-row2{margin-top:0;border-top:none;border-radius:0 0 var(--radius) var(--radius)}
+  .metric-cell{padding:18px 22px;border-right:1px solid var(--border);position:relative;transition:background 0.15s;border-bottom:1px solid var(--border)}
   .metric-cell:last-child{border-right:none}
   .metric-cell:hover{background:var(--navy-soft)}
   .metric-cell.accent{background:var(--navy)}
-  .metric-cell.accent:hover{background:var(--navy-mid)}
-  .metric-label{font-size:10.5px;font-family:'IBM Plex Mono',monospace;letter-spacing:1.2px;text-transform:uppercase;color:var(--text-3);margin-bottom:10px}
-  .metric-cell.accent .metric-label{color:rgba(255,255,255,0.45)}
-  .metric-value{font-family:'Playfair Display',serif;font-size:34px;font-weight:700;color:var(--navy);line-height:1;letter-spacing:-0.5px}
+  .metric-cell.accent:hover{background:#0f1f38}
+  .metric-cell.accent-green{background:#0d4e34}
+  .metric-cell.accent-green:hover{background:#0b4330}
+  .metric-label{font-size:9.5px;font-family:'IBM Plex Mono',monospace;letter-spacing:1.4px;text-transform:uppercase;color:var(--text-3);margin-bottom:8px}
+  .metric-cell.accent .metric-label,.metric-cell.accent-green .metric-label{color:rgba(255,255,255,0.4)}
+  .metric-value{font-family:'Playfair Display',serif;font-size:30px;font-weight:700;color:var(--navy);line-height:1;letter-spacing:-0.5px}
   .metric-cell.accent .metric-value{color:#e8b86d}
-  .metric-sub{font-size:11.5px;color:var(--text-3);margin-top:6px}
-  .metric-cell.accent .metric-sub{color:rgba(255,255,255,0.35)}
-  .metric-delta{display:inline-flex;align-items:center;gap:3px;font-size:10.5px;font-family:'IBM Plex Mono',monospace;margin-top:8px;padding:2px 8px;border-radius:4px}
-  .delta-warn{background:var(--red-pale);color:var(--red)}
-  .delta-ok{background:var(--green-pale);color:var(--green)}
+  .metric-cell.accent-green .metric-value{color:#6ee7b7}
+  .metric-sub{font-size:11px;color:var(--text-3);margin-top:5px}
+  .metric-cell.accent .metric-sub,.metric-cell.accent-green .metric-sub{color:rgba(255,255,255,0.3)}
 
-  /* ── SECTION HEADER ── */
-  .section-hd{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:14px}
-  .section-hd h2{font-size:13px;font-weight:600;color:var(--navy);letter-spacing:0.1px}
-  .section-hd a{font-size:12px;color:var(--blue);font-weight:500;text-decoration:none}
-  .section-hd a:hover{text-decoration:underline}
-  .section-hd .muted{font-size:12px;color:var(--text-3);font-weight:400}
+  /* ── FILTER BAR ── */
+  .filter-bar{display:flex;align-items:center;gap:8px;margin-bottom:12px;flex-wrap:wrap}
+  .filter-tab{padding:7px 14px;border-radius:20px;font-size:12px;font-weight:500;cursor:pointer;border:1px solid var(--border);background:var(--surface);color:var(--text-2);transition:all 0.15s;font-family:'IBM Plex Sans',sans-serif}
+  .filter-tab:hover{border-color:var(--navy);color:var(--navy)}
+  .filter-tab.active{background:var(--navy);color:#fff;border-color:var(--navy)}
+  .filter-tab .count{font-size:10px;font-family:'IBM Plex Mono',monospace;margin-left:4px;opacity:0.75}
 
-  /* ── SEGMENT SHELF ── */
-  .seg-shelf{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:32px}
-  .seg-tile{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px 18px;cursor:pointer;transition:all 0.15s;box-shadow:var(--shadow-sm)}
-  .seg-tile:hover{border-color:var(--navy);box-shadow:var(--shadow-md);transform:translateY(-1px)}
-  .seg-tile-emoji{font-size:20px;margin-bottom:8px;line-height:1}
-  .seg-tile-name{font-size:11.5px;font-weight:600;margin-bottom:2px}
-  .seg-tile-count{font-family:'Playfair Display',serif;font-size:26px;font-weight:700;color:var(--navy);line-height:1}
-  .seg-tile-desc{font-size:10.5px;color:var(--text-3);margin-top:4px;line-height:1.4}
-
-  /* ── PROSPECT TABLE ── */
-  .prospect-table{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;box-shadow:var(--shadow-sm);margin-bottom:32px}
-  .pt-thead{display:grid;grid-template-columns:36px 1fr 130px 80px 100px 120px 110px 80px;padding:10px 20px;background:var(--navy-soft);border-bottom:1px solid var(--border)}
-  .pt-th{font-size:9.5px;font-family:'IBM Plex Mono',monospace;letter-spacing:1.2px;text-transform:uppercase;color:var(--text-3);font-weight:400}
-  .pt-row{display:grid;grid-template-columns:36px 1fr 130px 80px 100px 120px 110px 80px;padding:14px 20px;border-bottom:1px solid var(--border);align-items:center;cursor:pointer;transition:background 0.1s;gap:4px}
+  /* ── PRIORITY TABLE ── */
+  .priority-table{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;box-shadow:var(--shadow-sm)}
+  .pt-head{display:grid;grid-template-columns:64px 1fr 120px 90px 100px 130px 130px;padding:10px 18px;background:var(--navy-soft);border-bottom:1px solid var(--border);gap:8px}
+  .pt-th{font-size:9px;font-family:'IBM Plex Mono',monospace;letter-spacing:1.4px;text-transform:uppercase;color:var(--text-3);font-weight:400}
+  .pt-row{display:grid;grid-template-columns:64px 1fr 120px 90px 100px 130px 130px;padding:13px 18px;border-bottom:1px solid var(--border);align-items:center;gap:8px;transition:background 0.1s;cursor:pointer}
   .pt-row:last-child{border-bottom:none}
   .pt-row:hover{background:var(--navy-soft)}
-  .pt-rank{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--text-4);font-weight:500}
-  .rank-1{color:var(--gold)!important;font-weight:600}
-  .rank-2{color:var(--text-2)!important}
-  .pt-name{font-size:13.5px;font-weight:600;color:var(--navy);line-height:1.3}
-  .pt-email{font-size:11px;color:var(--text-3);font-family:'IBM Plex Mono',monospace;margin-top:1px}
-  .days-red{color:var(--red)!important;font-family:'IBM Plex Mono',monospace;font-size:12px;font-weight:600}
-  .days-amber{color:var(--amber)!important;font-family:'IBM Plex Mono',monospace;font-size:12px;font-weight:600}
-  .days-normal{color:var(--text-2);font-family:'IBM Plex Mono',monospace;font-size:12px;font-weight:500}
-  .opp-val{font-family:'IBM Plex Mono',monospace;font-size:13px;font-weight:600;color:var(--green)}
-  .opp-sub{font-size:10px;color:var(--text-3);font-family:'IBM Plex Mono',monospace;margin-top:1px}
+  .pt-row.hidden{display:none}
 
-  /* ── BROWSE TABS ── */
-  .browse-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;box-shadow:var(--shadow-sm)}
-  .tab-strip{display:flex;border-bottom:1px solid var(--border);padding:0 20px;background:var(--navy-soft);overflow-x:auto}
-  .tab-btn{padding:12px 16px;font-size:12.5px;font-weight:400;color:var(--text-3);background:none;border:none;border-bottom:2px solid transparent;cursor:pointer;transition:all 0.15s;white-space:nowrap;font-family:'IBM Plex Sans',sans-serif;display:flex;align-items:center;gap:6px;margin-bottom:-1px}
-  .tab-btn:hover{color:var(--navy)}
-  .tab-btn.active{color:var(--navy);font-weight:600;border-bottom-color:var(--navy)}
-  .tab-count{font-size:10px;font-family:'IBM Plex Mono',monospace;background:var(--border);color:var(--text-3);padding:1px 6px;border-radius:10px}
-  .tab-btn.active .tab-count{background:var(--navy);color:#fff}
-  .tab-panel{display:none}
-  .tab-panel.active{display:block}
-  .browse-table{width:100%;border-collapse:collapse}
-  .browse-table th{text-align:left;padding:10px 20px;font-size:9.5px;font-family:'IBM Plex Mono',monospace;letter-spacing:1.2px;text-transform:uppercase;color:var(--text-3);font-weight:400;background:var(--navy-soft);border-bottom:1px solid var(--border)}
-  .browse-table td{padding:12px 20px;border-bottom:1px solid var(--border);font-size:13px;color:var(--text-2);vertical-align:middle}
-  .browse-table tr:last-child td{border-bottom:none}
-  .browse-table tr:hover td{background:var(--navy-soft)}
-  .browse-table tr{cursor:pointer}
+  /* Score badge */
+  .score-badge{display:inline-flex;align-items:center;justify-content:center;width:40px;height:40px;border-radius:8px;font-family:'IBM Plex Mono',monospace;font-size:14px;font-weight:700;flex-shrink:0}
+  .score-high{background:#d1fae5;color:#065f46;border:1.5px solid #6ee7b7}
+  .score-med{background:#fef3c7;color:#92400e;border:1.5px solid #fcd34d}
+  .score-low{background:#fee2e2;color:#991b1b;border:1.5px solid #fca5a5}
+
+  /* Customer name col */
+  .c-name{font-size:13.5px;font-weight:600;color:var(--navy);line-height:1.3}
+  .c-email{font-size:11px;color:var(--text-3);font-family:'IBM Plex Mono',monospace;margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+  /* Last service col */
+  .last-svc-date{font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--text-2);font-weight:500}
+  .last-svc-ago{font-size:10.5px;color:var(--text-3);margin-top:2px}
+  .dormant-red{color:var(--red)!important}
+  .dormant-amber{color:var(--amber)!important}
+
+  /* Est value col */
+  .est-val{font-family:'IBM Plex Mono',monospace;font-size:13px;font-weight:600;color:var(--green)}
+
+  /* Status pills */
+  .os-pill{display:inline-block;padding:3px 9px;border-radius:12px;font-size:10.5px;font-weight:600;font-family:'IBM Plex Mono',monospace;white-space:nowrap}
+  .s-none{background:#f1f5f9;color:var(--text-3)}
+  .s-contacted{background:var(--blue-pale);color:var(--blue)}
+  .s-replied{background:var(--amber-pale);color:var(--amber)}
+  .s-booked{background:var(--green-pale);color:var(--green)}
+  .s-unsub{background:#f8f8f8;color:var(--text-4)}
+
+  /* Action button col */
+  .act-btn{font-size:11.5px;padding:6px 12px;border-radius:6px;cursor:pointer;font-family:'IBM Plex Sans',sans-serif;font-weight:500;white-space:nowrap;border:none;transition:all 0.15s;text-decoration:none;display:inline-block;text-align:center}
+  .act-draft{background:var(--navy);color:#fff}
+  .act-draft:hover{background:#1a2a4a}
+  .act-view{background:var(--surface);color:var(--navy);border:1px solid var(--border-2)}
+  .act-view:hover{background:var(--navy-soft)}
+  .act-book{background:var(--green);color:#fff}
+  .act-book:hover{background:#156347}
+
+  /* Empty state */
+  .empty-state{padding:40px;text-align:center;color:var(--text-3);font-size:13px}
+
+  /* ── MODAL ── */
+  .modal-overlay{display:none;position:fixed;inset:0;background:rgba(10,22,40,0.45);z-index:1000;align-items:center;justify-content:center}
+  .modal-overlay.open{display:flex}
+  .modal{background:var(--surface);border-radius:12px;padding:28px 30px;width:380px;box-shadow:var(--shadow-lg)}
+  .modal h3{font-size:16px;font-weight:700;color:var(--navy);margin-bottom:8px;font-family:'Playfair Display',serif}
+  .modal p{font-size:13px;color:var(--text-2);margin-bottom:18px}
+  .modal label{display:block;font-size:11px;font-family:'IBM Plex Mono',monospace;letter-spacing:1px;text-transform:uppercase;color:var(--text-3);margin-bottom:5px}
+  .modal input,.modal textarea{width:100%;border:1px solid var(--border);border-radius:7px;padding:9px 12px;font-size:13.5px;font-family:'IBM Plex Sans',sans-serif;color:var(--text);outline:none;transition:border-color 0.15s;margin-bottom:14px}
+  .modal input:focus,.modal textarea:focus{border-color:var(--navy)}
+  .modal textarea{resize:vertical;height:70px}
+  .modal-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:6px}
 </style>
 {% endblock %}
 
@@ -96,352 +98,248 @@
 
 {# ── PAGE HEADER ── #}
 <div class="page-eyebrow">{{ operator.business_name }} · {{ today_str }}</div>
-<h1 class="page-title">Good morning{% if operator %}, {{ operator.business_name.split()[0] }}{% endif %}.</h1>
+<h1 class="page-title">Revenue Dashboard</h1>
 
-{# ── ACTION BANNER ── #}
-{% if stats.prime_count > 0 %}
-{% set top = top_prospects[0] if top_prospects else none %}
-<div class="action-banner">
-  <div class="action-banner-left">
-    <div class="action-banner-icon">🎯</div>
-    <div>
-      <div class="action-banner-title">You have {{ stats.prime_count }} customer{{ 's' if stats.prime_count != 1 }} overdue for reengagement</div>
-      {% if top %}
-      <div class="action-banner-sub">
-        Top opportunity: {{ top.name }} — ${{ "{:,.0f}".format(top.total_spend) }} lifetime · {{ top.days_dormant }} days dormant · {{ top.opp_est }} est. next job
-      </div>
-      {% endif %}
-    </div>
-  </div>
-  <a href="/customer/{{ top.id }}" class="btn-primary" style="text-decoration:none;white-space:nowrap">Start Outreach →</a>
-</div>
-{% endif %}
-
-{# ── AGENT BAR ── #}
-<div class="agent-bar">
-  <div class="agent-bar-left">
-    <div class="agent-dot" id="agentDot"></div>
-    <div>
-      <div class="agent-bar-text" id="agentBarText">
-        {% if queue_count > 0 %}
-        <strong>Outreach Queue</strong> — {{ queue_count }} draft{{ 's' if queue_count != 1 }} queued for review
-        {% else %}
-        <strong>Reactivation Analyzer</strong> — ready to scan for prime targets
-        {% endif %}
-      </div>
-      <div class="agent-bar-meta" id="agentBarMeta">
-        {% if queue_count > 0 %}Drafts waiting in queue — review before sending{% else %}Identifies dormant customers, drafts emails, queues for your approval{% endif %}
-      </div>
-    </div>
-  </div>
-  <div style="display:flex;gap:8px;align-items:center">
-    {% if queue_count > 0 %}
-    <a href="/outreach" class="btn-ghost" style="font-size:11.5px;text-decoration:none">Review Queue →</a>
-    {% endif %}
-    <button class="btn-primary" id="runAgentBtn" onclick="runAgent()" style="font-size:11.5px;padding:6px 14px">Run Agent</button>
-  </div>
-</div>
-
-{# ── METRIC STRIP ── #}
-<div class="metric-strip">
+{# ── 8 METRIC CARDS ── #}
+<div class="metric-grid">
   <div class="metric-cell">
-    <div class="metric-label">Total Customers</div>
-    <div class="metric-value">{{ stats.total_customers }}</div>
-    <div class="metric-sub">Active in database</div>
+    <div class="metric-label">Dormant Identified</div>
+    <div class="metric-value">{{ metrics.dormant_identified }}</div>
+    <div class="metric-sub">Score &gt;40, not yet contacted</div>
   </div>
   <div class="metric-cell">
-    <div class="metric-label">Prime Targets</div>
-    <div class="metric-value" style="color:var(--red)">{{ stats.prime_count }}</div>
-    <div class="metric-sub">365+ days dormant</div>
-    {% if stats.prime_count > 0 %}
-    <div class="metric-delta delta-warn">{{ stats.prime_count }} need outreach</div>
-    {% endif %}
-  </div>
-  <div class="metric-cell accent">
-    <div class="metric-label">Revenue at Risk</div>
-    <div class="metric-value">${{ "{:,.0f}".format(stats.prime_revenue) }}</div>
-    <div class="metric-sub">Recoverable via outreach</div>
+    <div class="metric-label">% Dormant Contacted</div>
+    <div class="metric-value">{{ metrics.pct_contacted }}%</div>
+    <div class="metric-sub">Of priority-scored customers</div>
   </div>
   <div class="metric-cell">
-    <div class="metric-label">Avg Days Dormant</div>
-    <div class="metric-value">{{ stats.avg_days_dormant }}</div>
-    <div class="metric-sub">Among prime targets</div>
-    {% if stats.avg_days_dormant > 365 %}
-    <div class="metric-delta delta-warn">{{ "%.1f"|format(stats.avg_days_dormant / 365) }} yrs avg</div>
-    {% endif %}
+    <div class="metric-label">Responses Received</div>
+    <div class="metric-value">{{ metrics.responses_received }}</div>
+    <div class="metric-sub">Inbound replies logged</div>
+  </div>
+  <div class="metric-cell">
+    <div class="metric-label">Active Conversations</div>
+    <div class="metric-value">{{ metrics.active_conversations }}</div>
+    <div class="metric-sub">Open threads, no booking yet</div>
+  </div>
+</div>
+<div class="metric-grid" style="border-radius:0 0 var(--radius) var(--radius);margin-top:-1px;margin-bottom:28px">
+  <div class="metric-cell {% if metrics.jobs_booked > 0 %}accent-green{% endif %}">
+    <div class="metric-label">Jobs Booked</div>
+    <div class="metric-value">{{ metrics.jobs_booked }}</div>
+    <div class="metric-sub">Converted via Foreman</div>
+  </div>
+  <div class="metric-cell {% if metrics.revenue_generated > 0 %}accent{% endif %}">
+    <div class="metric-label">Revenue Generated</div>
+    <div class="metric-value">${{ "{:,.0f}".format(metrics.revenue_generated) }}</div>
+    <div class="metric-sub">From Foreman-booked jobs</div>
+  </div>
+  <div class="metric-cell">
+    <div class="metric-label">Potential Revenue</div>
+    <div class="metric-value" style="color:var(--amber)">${{ "{:,.0f}".format(metrics.potential_revenue) }}</div>
+    <div class="metric-sub">Uncontacted priority queue</div>
+  </div>
+  <div class="metric-cell">
+    <div class="metric-label">Avg Job Value</div>
+    <div class="metric-value">${{ "{:,.0f}".format(metrics.avg_job_value) }}</div>
+    <div class="metric-sub">Historical average</div>
   </div>
 </div>
 
-{# ── SEGMENT SHELF ── #}
-<div class="section-hd">
-  <h2>Customer Segments</h2>
-  <span class="muted">Click to filter by category</span>
-</div>
-<div class="seg-shelf">
-  <div class="seg-tile" onclick="showTab('prime')">
-    <div class="seg-tile-emoji">🔧</div>
-    <div class="seg-tile-name" style="color:var(--blue)">Maintenance Due</div>
-    <div class="seg-tile-count">{{ seg_counts.maintenance }}</div>
-    <div class="seg-tile-desc">Annual service window open</div>
-  </div>
-  <div class="seg-tile" onclick="showTab('prime')">
-    <div class="seg-tile-emoji">⚠️</div>
-    <div class="seg-tile-name" style="color:var(--red)">End-of-Life</div>
-    <div class="seg-tile-count">{{ seg_counts.end_of_life }}</div>
-    <div class="seg-tile-desc">Equipment 2+ years overdue</div>
-  </div>
-  <div class="seg-tile" onclick="showTab('prime')">
-    <div class="seg-tile-emoji">🔥</div>
-    <div class="seg-tile-name" style="color:var(--gold)">High Value</div>
-    <div class="seg-tile-count">{{ seg_counts.high_value }}</div>
-    <div class="seg-tile-desc">$1,500+ lifetime spend</div>
-  </div>
-  <div class="seg-tile" onclick="showTab('converted')">
-    <div class="seg-tile-emoji">👥</div>
-    <div class="seg-tile-name" style="color:#6d28d9">Referral Ready</div>
-    <div class="seg-tile-count">{{ seg_counts.referral }}</div>
-    <div class="seg-tile-desc">Happy customers, ask for referrals</div>
-  </div>
-  <div class="seg-tile" onclick="showTab('recent')">
-    <div class="seg-tile-emoji">🆕</div>
-    <div class="seg-tile-name" style="color:var(--green)">New Lead</div>
-    <div class="seg-tile-count">{{ seg_counts.new_lead }}</div>
-    <div class="seg-tile-desc">First job done, convert to recurring</div>
-  </div>
+{# ── PRIORITY QUEUE ── #}
+<div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:12px">
+  <h2 style="font-size:13px;font-weight:600;color:var(--navy)">Priority Queue <span style="font-size:12px;color:var(--text-3);font-weight:400">— ranked by score</span></h2>
+  <span style="font-size:11.5px;color:var(--text-3);font-family:'IBM Plex Mono',monospace">{{ priority_queue|length }} customers</span>
 </div>
 
-{# ── TOP PROSPECTS TABLE ── #}
-{% if top_prospects %}
-<div class="section-hd">
-  <h2>Top Prospects <span class="muted">— ranked by opportunity</span></h2>
-  <a href="#all-customers">View all →</a>
+{# Filter tabs #}
+{% set all_count = priority_queue|length %}
+{% set high_count = priority_queue|selectattr('priority_tier','equalto','high')|list|length %}
+{% set not_contacted_count = priority_queue|selectattr('reactivation_status','equalto','never_contacted')|list|length %}
+{% set awaiting_count = priority_queue|selectattr('reactivation_status','in',['outreach_sent','sequence_step_2','sequence_step_3'])|list|length %}
+{% set replied_count = priority_queue|selectattr('reactivation_status','equalto','replied')|list|length %}
+{% set booked_count = priority_queue|selectattr('reactivation_status','equalto','booked')|list|length %}
+
+<div class="filter-bar" id="filterBar">
+  <button class="filter-tab active" data-filter="all" onclick="applyFilter('all',this)">All <span class="count">{{ all_count }}</span></button>
+  <button class="filter-tab" data-filter="high" onclick="applyFilter('high',this)">High Priority <span class="count">{{ high_count }}</span></button>
+  <button class="filter-tab" data-filter="not_contacted" onclick="applyFilter('not_contacted',this)">Not Contacted <span class="count">{{ not_contacted_count }}</span></button>
+  <button class="filter-tab" data-filter="awaiting" onclick="applyFilter('awaiting',this)">Awaiting Reply <span class="count">{{ awaiting_count }}</span></button>
+  <button class="filter-tab" data-filter="replied" onclick="applyFilter('replied',this)">Replied <span class="count">{{ replied_count }}</span></button>
+  <button class="filter-tab" data-filter="booked" onclick="applyFilter('booked',this)">Booked <span class="count">{{ booked_count }}</span></button>
 </div>
-<div class="prospect-table">
-  <div class="pt-thead">
-    <div class="pt-th">#</div>
+
+<div class="priority-table">
+  <div class="pt-head">
+    <div class="pt-th">Score</div>
     <div class="pt-th">Customer</div>
-    <div class="pt-th">Segment</div>
-    <div class="pt-th">Dormant</div>
-    <div class="pt-th">Lifetime $</div>
-    <div class="pt-th">Opportunity</div>
+    <div class="pt-th">Last Service</div>
+    <div class="pt-th">Est. Value</div>
+    <div class="pt-th">Tier</div>
     <div class="pt-th">Status</div>
-    <div class="pt-th"></div>
+    <div class="pt-th">Action</div>
   </div>
-  {% for c in top_prospects %}
-  {% set status_map = {
-    "never_contacted":   ("s-none",  "No contact"),
-    "outreach_sent":     ("s-sent",  "Outreach sent"),
-    "sequence_step_2":   ("s-sent",  "Follow-up 1"),
-    "sequence_step_3":   ("s-sent",  "Follow-up 2"),
-    "replied":           ("s-ok",    "Replied"),
-    "booked":            ("s-ok",    "Booked"),
-    "sequence_complete": ("s-none",  "Seq. done"),
-    "unsubscribed":      ("s-none",  "Unsubscribed"),
-  } %}
-  {% set s_cls, s_txt = status_map.get(c.reactivation_status, ("s-none", c.reactivation_status)) %}
-  <div class="pt-row" onclick="window.location='/customer/{{ c.id }}'">
-    <div class="pt-rank {% if loop.index == 1 %}rank-1{% elif loop.index == 2 %}rank-2{% endif %}">{{ "%02d"|format(loop.index) }}</div>
+
+  {% for c in priority_queue %}
+  <div class="pt-row"
+       data-tier="{{ c.priority_tier }}"
+       data-status="{{ c.reactivation_status }}"
+       onclick="window.location='/customer/{{ c.id }}'">
+
+    {# Score badge #}
     <div>
-      <div class="pt-name">{{ c.name }}</div>
-      <div class="pt-email">{{ c.email or '—' }}</div>
+      <div class="score-badge {{ c.score_cls }}">{{ c.score }}</div>
     </div>
-    <div><span class="pill {{ c.segment_cls }}">{{ c.segment_label }}</span></div>
-    <div class="{% if c.days_dormant >= 365 %}days-red{% elif c.days_dormant >= 180 %}days-amber{% else %}days-normal{% endif %}">{{ c.days_dormant }}d</div>
-    <div style="font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--text-2)">${{ "{:,.0f}".format(c.total_spend) }}</div>
+
+    {# Customer name #}
+    <div style="min-width:0">
+      <div class="c-name">{{ c.name }}</div>
+      <div class="c-email">{{ c.email or '—' }}</div>
+    </div>
+
+    {# Last service #}
     <div>
-      <div class="opp-val">{{ c.opp_est }}</div>
-      <div class="opp-sub">{{ c.opp_label }}</div>
-    </div>
-    <div><span class="status-pill {{ s_cls }}">{{ s_txt }}</span></div>
-    <div style="display:flex;justify-content:flex-end">
-      {% if loop.index == 1 %}
-      <a href="/customer/{{ c.id }}" class="btn-primary" style="font-size:11.5px;padding:7px 14px;text-decoration:none" onclick="event.stopPropagation()">Draft →</a>
+      {% if c.last_service_date %}
+      <div class="last-svc-date">{{ c.last_service_date.strftime('%b %-d, %Y') }}</div>
+      <div class="last-svc-ago {% if c.days_dormant >= 365 %}dormant-red{% elif c.days_dormant >= 180 %}dormant-amber{% endif %}">
+        {{ c.days_dormant }}d ago
+      </div>
       {% else %}
-      <a href="/customer/{{ c.id }}" class="btn-secondary" style="font-size:11.5px;padding:7px 14px;text-decoration:none" onclick="event.stopPropagation()">View →</a>
+      <div class="last-svc-date" style="color:var(--text-4)">—</div>
+      {% endif %}
+    </div>
+
+    {# Estimated job value #}
+    <div>
+      {% if c.estimated_job_value and c.estimated_job_value > 0 %}
+      <div class="est-val">${{ "{:,.0f}".format(c.estimated_job_value) }}</div>
+      {% else %}
+      <div style="color:var(--text-4);font-family:'IBM Plex Mono',monospace;font-size:12px">—</div>
+      {% endif %}
+    </div>
+
+    {# Priority tier #}
+    <div>
+      {% if c.priority_tier == 'high' %}
+      <span class="os-pill" style="background:#d1fae5;color:#065f46">High</span>
+      {% elif c.priority_tier == 'medium' %}
+      <span class="os-pill" style="background:#fef3c7;color:#92400e">Medium</span>
+      {% else %}
+      <span class="os-pill" style="background:#f1f5f9;color:var(--text-3)">Low</span>
+      {% endif %}
+    </div>
+
+    {# Outreach status #}
+    <div>
+      <span class="os-pill {{ c.outreach_status_cls }}">{{ c.outreach_status }}</span>
+    </div>
+
+    {# Action button #}
+    <div onclick="event.stopPropagation()">
+      {% if c.reactivation_status == 'booked' %}
+        <span style="font-size:11px;color:var(--green);font-family:'IBM Plex Mono',monospace">Booked</span>
+      {% elif c.reactivation_status in ('replied',) %}
+        <a href="/conversations/{{ c.id }}" class="act-btn act-view">View Convo</a>
+      {% elif c.reactivation_status in ('outreach_sent','sequence_step_2','sequence_step_3') %}
+        <div style="display:flex;gap:6px;flex-wrap:wrap">
+          <a href="/conversations/{{ c.id }}" class="act-btn act-view">Convo</a>
+          <button class="act-btn act-book" onclick="openBookModal({{ c.id }}, '{{ c.name|replace("'","\\'")|e }}')">Mark Booked</button>
+        </div>
+      {% elif c.reactivation_status == 'unsubscribed' %}
+        <span style="font-size:11px;color:var(--text-4);font-family:'IBM Plex Mono',monospace">Unsubscribed</span>
+      {% else %}
+        <a href="/customer/{{ c.id }}" class="act-btn act-draft">Draft Outreach</a>
       {% endif %}
     </div>
   </div>
+  {% else %}
+  <div class="empty-state">No customers found.</div>
   {% endfor %}
 </div>
-{% endif %}
 
-{# ── BROWSE ALL TABS ── #}
-<div class="section-hd">
-  <h2>All Customers <span class="muted">— by pipeline stage</span></h2>
-</div>
-
-{% set tabs = [
-  ("prime",       "🎯 Prime Targets",  stats.prime_count),
-  ("warming",     "⚡ Warming Up",      stats.warming_count),
-  ("in_sequence", "📬 In Sequence",     stats.in_sequence_count),
-  ("converted",   "✅ Converted",       stats.converted_count),
-  ("recent",      "🕐 Recent",          categories.recent|length),
-] %}
-
-<div class="browse-card" id="all-customers">
-  <div style="padding:10px 20px;border-bottom:1px solid var(--border);background:var(--bg);display:flex;align-items:center;gap:10px">
-    <input id="customer-search" type="text" placeholder="Search customers by name or email…"
-           style="flex:1;border:1px solid var(--border);border-radius:6px;padding:7px 12px;font-size:12.5px;outline:none;font-family:'IBM Plex Sans',sans-serif;color:var(--text);background:var(--surface)"
-           oninput="filterCustomers(this.value)">
-    <span id="customer-search-count" style="font-size:11px;color:var(--text-3);font-family:'IBM Plex Mono',monospace;white-space:nowrap"></span>
+{# ── MARK AS BOOKED MODAL ── #}
+<div class="modal-overlay" id="bookModal">
+  <div class="modal">
+    <h3>Mark as Booked</h3>
+    <p id="bookModalCustomer" style="color:var(--text-3);font-size:12px;margin-bottom:16px"></p>
+    <label>Job Value ($)</label>
+    <input type="number" id="bookJobValue" placeholder="e.g. 450" min="0" step="1">
+    <label>Notes (optional)</label>
+    <textarea id="bookNotes" placeholder="Service type, notes…"></textarea>
+    <div class="modal-actions">
+      <button class="btn-ghost" onclick="closeBookModal()">Cancel</button>
+      <button class="btn-success" onclick="submitBooked()">Confirm Booking</button>
+    </div>
   </div>
-  <div class="tab-strip">
-    {% for key, label, count in tabs %}
-    <button class="tab-btn" id="tab-btn-{{ key }}" onclick="showTab('{{ key }}')">
-      {{ label }} <span class="tab-count">{{ count }}</span>
-    </button>
-    {% endfor %}
-  </div>
-
-  {% for key, label, count in tabs %}
-  <div id="tab-{{ key }}" class="tab-panel">
-    {% set rows = categories[key] %}
-    {% if rows %}
-    <table class="browse-table">
-      <thead>
-        <tr>
-          <th>Customer</th>
-          <th>Last Service</th>
-          <th>Dormant</th>
-          <th>Service Type</th>
-          <th>Segment</th>
-          <th>Spend</th>
-          <th>Status</th>
-          <th></th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for c in rows %}
-        {% set status_map = {
-          "never_contacted":   ("s-none",  "Never contacted"),
-          "outreach_sent":     ("s-sent",  "Outreach sent"),
-          "sequence_step_2":   ("s-sent",  "Follow-up 1"),
-          "sequence_step_3":   ("s-sent",  "Follow-up 2"),
-          "replied":           ("s-ok",    "Replied"),
-          "booked":            ("s-ok",    "Booked"),
-          "sequence_complete": ("s-none",  "Sequence done"),
-          "unsubscribed":      ("s-none",  "Unsubscribed"),
-        } %}
-        {% set s_cls, s_txt = status_map.get(c.reactivation_status, ("s-none", c.reactivation_status)) %}
-        <tr onclick="window.location='/customer/{{ c.id }}'">
-          <td>
-            <div style="font-weight:600;color:var(--navy);font-size:13px">{{ c.name }}</div>
-            <div style="font-size:11px;color:var(--text-3);font-family:'IBM Plex Mono',monospace;margin-top:1px">{{ c.email }}</div>
-          </td>
-          <td style="font-size:12px;color:var(--text-3);font-family:'IBM Plex Mono',monospace">
-            {% if c.last_service_date %}{{ c.last_service_date.strftime('%b %-d, %Y') }}{% else %}—{% endif %}
-          </td>
-          <td class="{% if c.days_dormant >= 365 %}days-red{% elif c.days_dormant >= 180 %}days-amber{% else %}days-normal{% endif %}">{{ c.days_dormant }}d</td>
-          <td style="font-size:12.5px;color:var(--text-2)">{{ c.last_service_type or '—' }}</td>
-          <td><span class="pill {{ c.segment_cls }}">{{ c.segment_label }}</span></td>
-          <td style="font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--text-2)">${{ "{:,.0f}".format(c.total_spend) }}</td>
-          <td><span class="status-pill {{ s_cls }}">{{ s_txt }}</span></td>
-          <td style="text-align:right">
-            <a href="/customer/{{ c.id }}" style="font-size:12px;font-weight:600;color:var(--gold);text-decoration:none" onclick="event.stopPropagation()">View →</a>
-          </td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-    {% else %}
-    <div class="empty">No customers in this stage.</div>
-    {% endif %}
-  </div>
-  {% endfor %}
 </div>
 
 {% endblock %}
 
 {% block scripts %}
 <script>
-  const TAB_KEYS = ['prime','warming','in_sequence','converted','recent'];
-
-  function showTab(key) {
-    TAB_KEYS.forEach(t => {
-      const panel = document.getElementById('tab-' + t);
-      const btn   = document.getElementById('tab-btn-' + t);
-      if (!panel || !btn) return;
-      panel.classList.remove('active');
-      btn.classList.remove('active');
+  // ── Filter tabs ────────────────────────────────────────────────────────────
+  function applyFilter(filter, btn) {
+    document.querySelectorAll('.filter-tab').forEach(t => t.classList.remove('active'));
+    btn.classList.add('active');
+    const rows = document.querySelectorAll('.pt-row');
+    rows.forEach(row => {
+      const tier = row.dataset.tier;
+      const status = row.dataset.status;
+      let show = false;
+      if (filter === 'all') show = true;
+      else if (filter === 'high') show = tier === 'high';
+      else if (filter === 'not_contacted') show = status === 'never_contacted';
+      else if (filter === 'awaiting') show = ['outreach_sent','sequence_step_2','sequence_step_3'].includes(status);
+      else if (filter === 'replied') show = status === 'replied';
+      else if (filter === 'booked') show = status === 'booked';
+      row.classList.toggle('hidden', !show);
     });
-    const panel = document.getElementById('tab-' + key);
-    const btn   = document.getElementById('tab-btn-' + key);
-    if (panel) panel.classList.add('active');
-    if (btn)   btn.classList.add('active');
   }
 
-  function filterCustomers(query) {
-    const q = query.toLowerCase().trim();
-    let visibleCount = 0;
-    document.querySelectorAll('.browse-table tbody tr').forEach(row => {
-      const text = row.textContent.toLowerCase();
-      const match = !q || text.includes(q);
-      row.style.display = match ? '' : 'none';
-      if (match) visibleCount++;
-    });
-    const countEl = document.getElementById('customer-search-count');
-    if (countEl) countEl.textContent = q ? `${visibleCount} match${visibleCount !== 1 ? 'es' : ''}` : '';
-    // If searching, show first tab with results
-    if (q) {
-      for (const key of TAB_KEYS) {
-        const panel = document.getElementById('tab-' + key);
-        if (!panel) continue;
-        const visible = panel.querySelectorAll('tbody tr:not([style*="display: none"])').length;
-        if (visible > 0) { showTab(key); break; }
-      }
-    }
+  // ── Mark as Booked modal ───────────────────────────────────────────────────
+  let _bookCustomerId = null;
+
+  function openBookModal(customerId, customerName) {
+    _bookCustomerId = customerId;
+    document.getElementById('bookModalCustomer').textContent = customerName;
+    document.getElementById('bookJobValue').value = '';
+    document.getElementById('bookNotes').value = '';
+    document.getElementById('bookModal').classList.add('open');
+    document.getElementById('bookJobValue').focus();
   }
 
-  // Scroll browse card into view when clicking segment tiles
-  document.querySelectorAll('.seg-tile').forEach(tile => {
-    tile._origClick = tile.onclick;
-    tile.onclick = function(e) {
-      this._origClick && this._origClick(e);
-      document.querySelector('.browse-card').scrollIntoView({behavior:'smooth', block:'nearest'});
-    };
+  function closeBookModal() {
+    document.getElementById('bookModal').classList.remove('open');
+    _bookCustomerId = null;
+  }
+
+  document.getElementById('bookModal').addEventListener('click', function(e) {
+    if (e.target === this) closeBookModal();
   });
 
-  const defaultTab = {{ "'prime'" if stats.prime_count > 0 else "'warming'" if stats.warming_count > 0 else "'recent'" }};
-  showTab(defaultTab);
-
-  const urlTab = new URLSearchParams(window.location.search).get('tab');
-  if (urlTab && TAB_KEYS.includes(urlTab)) showTab(urlTab);
-
-  async function runAgent() {
-    const btn = document.getElementById('runAgentBtn');
-    const dot = document.getElementById('agentDot');
-    const text = document.getElementById('agentBarText');
-    const meta = document.getElementById('agentBarMeta');
-
+  async function submitBooked() {
+    const jobValue = parseFloat(document.getElementById('bookJobValue').value);
+    const notes = document.getElementById('bookNotes').value.trim();
+    if (!jobValue || jobValue <= 0) {
+      alert('Please enter a valid job value.');
+      return;
+    }
+    const btn = document.querySelector('#bookModal .btn-success');
     btn.disabled = true;
-    btn.textContent = 'Running…';
-    dot.style.background = 'var(--gold)';
-    text.innerHTML = '<strong>Agent Running</strong> — scanning for prime targets and generating drafts…';
-    meta.textContent = 'This may take 15–30 seconds';
-
+    btn.textContent = 'Saving…';
     try {
-      const res = await fetch('/api/agent/run', {
+      const res = await fetch(`/api/customer/${_bookCustomerId}/mark-booked`, {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({limit: 10}),
+        body: JSON.stringify({job_value: jobValue, notes: notes}),
       });
-      const data = await res.json();
-      if (res.ok) {
-        text.innerHTML = '<strong>Agent Started</strong> — drafts will appear in the outreach queue';
-        meta.textContent = 'Refresh the page in ~30s to see new queue items';
-        btn.textContent = 'Refresh';
-        btn.disabled = false;
-        btn.onclick = () => window.location.reload();
-        dot.style.background = 'var(--green)';
-      } else {
-        throw new Error(data.detail || 'Unknown error');
-      }
+      if (!res.ok) throw new Error((await res.json()).detail || 'Server error');
+      closeBookModal();
+      window.location.reload();
     } catch (err) {
-      text.innerHTML = '<strong>Agent Error</strong> — ' + err.message;
-      meta.textContent = 'Check server logs for details';
-      btn.textContent = 'Run Agent';
+      alert('Error: ' + err.message);
       btn.disabled = false;
-      dot.style.background = 'var(--red)';
+      btn.textContent = 'Confirm Booking';
     }
   }
 </script>

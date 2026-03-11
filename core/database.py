@@ -47,6 +47,12 @@ SCHEMA_PATCHES = {
     "customers": {
         "assigned_voice_id": "VARCHAR",
         "customer_profile": "TEXT",
+        "score": "INTEGER",
+        "score_breakdown": "TEXT",
+        "priority_tier": "VARCHAR",
+        "estimated_job_value": "FLOAT",
+        "service_interval_days": "INTEGER",
+        "predicted_next_service": "TIMESTAMP",
     },
     "outreach_logs": {
         "gmail_thread_id": "VARCHAR",
@@ -54,6 +60,11 @@ SCHEMA_PATCHES = {
         "approved_at": "TIMESTAMP",
         "scheduled_send_at": "TIMESTAMP",
         "send_error": "TEXT",
+        "response_classification": "VARCHAR",
+        "classified_at": "TIMESTAMP",
+        "converted_to_job": "BOOLEAN",
+        "converted_job_value": "FLOAT",
+        "converted_at": "TIMESTAMP",
     },
 }
 

@@ -25,6 +25,8 @@ from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+from apscheduler.schedulers.background import BackgroundScheduler
+
 import anthropic
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse
@@ -67,6 +69,7 @@ _db_ready = False
 _db_init_error: Exception | None = None
 
 REPLY_POLL_SECONDS = 900  # 15 minutes
+_scoring_scheduler: BackgroundScheduler | None = None
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -363,6 +366,29 @@ def _start_reply_detector():
         print(f"✅ Reply detector started (poll: {REPLY_POLL_SECONDS}s / 15 min)", flush=True)
 
 
+def _run_scoring_job():
+    """Score all customers — called at startup and daily by APScheduler."""
+    try:
+        from core.scoring import score_all_customers
+        with get_db() as db:
+            count = score_all_customers(db, operator_id=OPERATOR_ID)
+        print(f"[scoring] Scored {count} customers.", flush=True)
+    except Exception as exc:
+        print(f"[scoring] error: {exc}", flush=True)
+
+
+def _start_scoring_scheduler():
+    global _scoring_scheduler
+    if _scoring_scheduler is not None:
+        return
+    _run_scoring_job()  # run once immediately
+    scheduler = BackgroundScheduler(daemon=True)
+    scheduler.add_job(_run_scoring_job, "interval", hours=24, id="daily_scoring")
+    scheduler.start()
+    _scoring_scheduler = scheduler
+    print("✅ Scoring scheduler started (daily).", flush=True)
+
+
 def _normalize_customer_profile(profile: dict | None) -> dict:
     profile = profile or {}
     topics = profile.get("topics_discussed")
@@ -389,6 +415,21 @@ def days_since(dt) -> int:
     if not dt:
         return 0
     return (datetime.utcnow() - dt).days
+
+
+def categorize_from_dict(cd: dict, days: int, status: str) -> str:
+    """Categorize using a pre-serialized customer dict."""
+    if status == "unsubscribed":
+        return "unsubscribed"
+    if status in ("outreach_sent", "sequence_step_2", "sequence_step_3"):
+        return "in_sequence"
+    if status in ("replied", "booked", "sequence_complete"):
+        return "converted"
+    if days >= 365:
+        return "prime"
+    if days >= 180:
+        return "warming"
+    return "recent"
 
 
 def categorize(customer) -> str:
@@ -881,6 +922,7 @@ def _init_db_background():
             print("✅ Database ready.", flush=True, file=sys.stderr)
             _start_scheduled_sender()
             _start_reply_detector()
+            _start_scoring_scheduler()
             return
         except Exception as exc:
             _db_init_error = exc
@@ -939,6 +981,9 @@ def _db_starting_response() -> HTMLResponse | None:
 def dashboard(request: Request):
     if (guard := _db_starting_response()):
         return guard
+
+    ninety_days_ago = datetime.utcnow() - timedelta(days=90)
+
     with get_db() as db:
         operator = db.query(Operator).filter_by(id=OPERATOR_ID).first()
         raw_customers = db.query(Customer).filter_by(operator_id=OPERATOR_ID).all()
@@ -947,37 +992,142 @@ def dashboard(request: Request):
         ).count()
         conversations_attention_count = _get_conversations_attention_count(db)
         operator_data = _operator_data(operator)
-        customers = sorted(
-            [add_segment(enrich(c)) for c in raw_customers],
-            key=lambda x: x["days_dormant"], reverse=True
+
+        # ── Phase 5 metrics ────────────────────────────────────────────────
+        # Responses received (inbound outreach logs)
+        responses_received = db.query(OutreachLog).filter_by(
+            operator_id=OPERATOR_ID, direction="inbound"
+        ).count()
+
+        # Active conversations: customers with outbound sent but not booked/unsubscribed
+        active_statuses = ("outreach_sent", "sequence_step_2", "sequence_step_3", "replied")
+        active_conversations = db.query(Customer).filter(
+            Customer.operator_id == OPERATOR_ID,
+            Customer.reactivation_status.in_(active_statuses),
+        ).count()
+
+        # Jobs booked via Foreman (converted_to_job = True)
+        booked_logs = db.query(OutreachLog).filter_by(
+            operator_id=OPERATOR_ID, converted_to_job=True
+        ).all()
+        jobs_booked = len(booked_logs)
+        revenue_generated = sum(
+            (l.converted_job_value or 0.0) for l in booked_logs
         )
 
-    cats = {k: [] for k in ("prime", "warming", "in_sequence", "converted", "recent", "unsubscribed")}
-    for c in customers:
-        cats[c["category"]].append(c)
+        # Serialize everything we need from ORM before session closes
+        customers_raw_data = []
+        for c in raw_customers:
+            score_bd = {}
+            try:
+                score_bd = json.loads(c.score_breakdown or "{}")
+            except Exception:
+                pass
+            customers_raw_data.append({
+                "id": c.id,
+                "name": c.name,
+                "email": c.email,
+                "phone": c.phone,
+                "address": c.address,
+                "last_service_date": c.last_service_date,
+                "last_service_type": c.last_service_type,
+                "total_jobs": c.total_jobs,
+                "total_spend": c.total_spend,
+                "reactivation_status": c.reactivation_status,
+                "score": c.score or 0,
+                "score_breakdown": score_bd,
+                "priority_tier": c.priority_tier or "low",
+                "estimated_job_value": c.estimated_job_value or 0.0,
+                "service_interval_days": c.service_interval_days,
+                "predicted_next_service": c.predicted_next_service,
+            })
 
-    prime = cats["prime"]
-    prime_revenue = sum(c["total_spend"] for c in prime)
-    avg_dormant = int(sum(c["days_dormant"] for c in prime) / len(prime)) if prime else 0
+    # Enrich customers with derived fields
+    enriched = []
+    for cd in customers_raw_data:
+        days = days_since(cd["last_service_date"])
+        status = cd["reactivation_status"]
+        cat = categorize_from_dict(cd, days, status)
+        cd["days_dormant"] = days
+        cd["category"] = cat
 
-    seg_counts = {k: 0 for k in SEGMENT_INFO}
-    for c in customers:
-        if c['category'] != 'unsubscribed':
-            seg_counts[c['segment_key']] += 1
+        # Outreach status pill
+        if status == "booked":
+            cd["outreach_status"] = "Booked"
+            cd["outreach_status_cls"] = "s-booked"
+        elif status in ("replied",):
+            cd["outreach_status"] = "Replied"
+            cd["outreach_status_cls"] = "s-replied"
+        elif status in ("outreach_sent", "sequence_step_2", "sequence_step_3"):
+            cd["outreach_status"] = "Contacted"
+            cd["outreach_status_cls"] = "s-contacted"
+        elif status == "unsubscribed":
+            cd["outreach_status"] = "Unsubscribed"
+            cd["outreach_status_cls"] = "s-unsub"
+        else:
+            cd["outreach_status"] = "Not Contacted"
+            cd["outreach_status_cls"] = "s-none"
 
-    top_prospects = sorted(
-        [c for c in customers if c['category'] not in ('unsubscribed', 'converted')],
-        key=lambda x: x['priority_score'], reverse=True
-    )[:6]
+        # Score badge color
+        score = cd["score"]
+        if score >= 70:
+            cd["score_cls"] = "score-high"
+        elif score >= 40:
+            cd["score_cls"] = "score-med"
+        else:
+            cd["score_cls"] = "score-low"
 
-    stats = {
-        "total_customers": len(customers),
-        "prime_count": len(prime),
-        "warming_count": len(cats["warming"]),
-        "in_sequence_count": len(cats["in_sequence"]),
-        "converted_count": len(cats["converted"]),
-        "prime_revenue": prime_revenue,
-        "avg_days_dormant": avg_dormant,
+        enriched.append(cd)
+
+    # Sort by score descending (primary queue)
+    priority_queue = sorted(enriched, key=lambda x: x["score"], reverse=True)
+
+    # ── 8 dashboard metric cards ───────────────────────────────────────────
+    dormant_customers = [
+        c for c in enriched
+        if c["score"] > 40
+        and c["reactivation_status"] == "never_contacted"
+    ]
+    dormant_count = len(dormant_customers)
+
+    # "contacted in last 90 days" = outreach_sent/replied/etc.
+    total_dormant_eligible = [
+        c for c in enriched
+        if c["score"] > 40
+        and c["reactivation_status"] != "unsubscribed"
+    ]
+    contacted_dormant = sum(
+        1 for c in total_dormant_eligible
+        if c["reactivation_status"] not in ("never_contacted",)
+    )
+    pct_contacted = (
+        round(contacted_dormant * 100 / len(total_dormant_eligible))
+        if total_dormant_eligible else 0
+    )
+
+    # Potential revenue: uncontacted priority customers (score > 40, never_contacted)
+    potential_revenue = sum(
+        c["estimated_job_value"]
+        for c in dormant_customers
+        if c["estimated_job_value"]
+    )
+
+    # Avg job value across all customers with spend
+    all_spend = [c["total_spend"] for c in enriched if c["total_spend"] and c["total_jobs"]]
+    all_jobs = [c["total_jobs"] for c in enriched if c["total_spend"] and c["total_jobs"]]
+    avg_job_value = (
+        round(sum(all_spend) / sum(all_jobs), 2) if all_jobs else 0
+    )
+
+    metrics = {
+        "dormant_identified": dormant_count,
+        "pct_contacted": pct_contacted,
+        "responses_received": responses_received,
+        "active_conversations": active_conversations,
+        "jobs_booked": jobs_booked,
+        "revenue_generated": revenue_generated,
+        "potential_revenue": potential_revenue,
+        "avg_job_value": avg_job_value,
     }
 
     today_str = datetime.utcnow().strftime('%A, %B %-d, %Y')
@@ -986,10 +1136,8 @@ def dashboard(request: Request):
         "request": request,
         "active": "dashboard",
         "operator": operator_data,
-        "stats": stats,
-        "seg_counts": seg_counts,
-        "categories": cats,
-        "top_prospects": top_prospects,
+        "metrics": metrics,
+        "priority_queue": priority_queue,
         "queue_count": queue_count,
         "conversations_attention_count": conversations_attention_count,
         "today_str": today_str,
@@ -1367,6 +1515,71 @@ def delete_outreach(log_id: int):
             raise HTTPException(status_code=400, detail="Only pending or failed drafts can be removed")
         db.delete(log)
     return {"status": "deleted"}
+
+
+class MarkBookedRequest(BaseModel):
+    job_value: float
+    notes: str = ""
+    customer_id: int | None = None
+
+
+@app.post("/api/outreach/{log_id}/mark-booked")
+def mark_booked(log_id: int, req: MarkBookedRequest):
+    """
+    Mark an outreach thread as converted to a booked job.
+    Sets converted_to_job=True, records job value, updates customer status.
+    """
+    now_utc = datetime.utcnow()
+    with get_db() as db:
+        log = db.query(OutreachLog).filter_by(id=log_id, operator_id=OPERATOR_ID).first()
+        if not log:
+            raise HTTPException(status_code=404, detail="Outreach log not found")
+        log.converted_to_job = True
+        log.converted_job_value = req.job_value
+        log.converted_at = now_utc
+
+        customer = db.query(Customer).filter_by(
+            id=log.customer_id, operator_id=OPERATOR_ID
+        ).first()
+        if customer:
+            customer.reactivation_status = "booked"
+            if req.notes:
+                customer.notes = (customer.notes or "") + f"\n[Booked {now_utc.strftime('%Y-%m-%d')}] {req.notes}"
+
+    return {"status": "booked", "log_id": log_id, "job_value": req.job_value}
+
+
+@app.post("/api/customer/{customer_id}/mark-booked")
+def mark_booked_by_customer(customer_id: int, req: MarkBookedRequest):
+    """
+    Mark a customer as booked from the dashboard (no specific log_id).
+    Finds the most recent outbound log and marks it converted.
+    """
+    now_utc = datetime.utcnow()
+    with get_db() as db:
+        customer = db.query(Customer).filter_by(
+            id=customer_id, operator_id=OPERATOR_ID
+        ).first()
+        if not customer:
+            raise HTTPException(status_code=404, detail="Customer not found")
+
+        # Find most recent outbound log (dry_run=False preferred, else any)
+        log = (
+            db.query(OutreachLog)
+            .filter_by(operator_id=OPERATOR_ID, customer_id=customer_id, direction="outbound")
+            .order_by(OutreachLog.sent_at.desc(), OutreachLog.created_at.desc())
+            .first()
+        )
+        if log:
+            log.converted_to_job = True
+            log.converted_job_value = req.job_value
+            log.converted_at = now_utc
+
+        customer.reactivation_status = "booked"
+        if req.notes:
+            customer.notes = (customer.notes or "") + f"\n[Booked {now_utc.strftime('%Y-%m-%d')}] {req.notes}"
+
+    return {"status": "booked", "customer_id": customer_id, "job_value": req.job_value}
 
 
 @app.get("/health")

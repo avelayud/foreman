@@ -137,6 +137,15 @@ class Customer(Base):
     _customer_profile = Column("customer_profile", Text, nullable=True)
 
     notes = Column(Text)
+
+    # Phase 5: scoring engine output
+    score = Column(Integer, default=0)
+    score_breakdown = Column(Text, nullable=True)       # JSON stored as Text
+    priority_tier = Column(String, nullable=True)       # "high" | "medium" | "low"
+    estimated_job_value = Column(Float, nullable=True)  # avg of historical job revenues
+    service_interval_days = Column(Integer, nullable=True)  # avg days between jobs
+    predicted_next_service = Column(DateTime, nullable=True)  # last_job + interval
+
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -272,6 +281,13 @@ class OutreachLog(Base):
     # Gmail thread ID — populated after sending via Gmail API
     # Enables exact reply detection by thread rather than fuzzy address matching
     gmail_thread_id = Column(String, nullable=True)
+
+    # Phase 5: conversion tracking
+    response_classification = Column(String, nullable=True)  # booking_intent | callback_request | price_inquiry | not_interested | unclear
+    classified_at = Column(DateTime, nullable=True)
+    converted_to_job = Column(Boolean, default=False)
+    converted_job_value = Column(Float, nullable=True)
+    converted_at = Column(DateTime, nullable=True)
 
     created_at = Column(DateTime, default=datetime.utcnow)
 
