@@ -4,11 +4,11 @@
 {% block extra_styles %}
 <style>
   /* Two-column conversation layout */
-  .conv-grid{display:grid;grid-template-columns:320px 1fr;gap:14px;align-items:start;margin-bottom:14px}
+  .conv-grid{display:grid;grid-template-columns:300px 1fr;gap:14px;align-items:start;margin-bottom:14px}
 
   .panel{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow-sm);overflow:hidden}
-  .panel-head{padding:12px 14px;border-bottom:1px solid var(--border);background:var(--bg);display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
-  .panel-title{font-size:11.5px;font-weight:600;color:var(--text);font-family:'IBM Plex Mono',monospace;letter-spacing:0.5px}
+  .panel-head{padding:11px 14px;border-bottom:1px solid var(--border);background:var(--bg);display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
+  .panel-title{font-size:11px;font-weight:600;color:var(--text);font-family:'IBM Plex Mono',monospace;letter-spacing:0.6px;text-transform:uppercase}
   .panel-body{padding:12px 14px}
 
   /* Stage / health chips */
@@ -19,68 +19,64 @@
   .stage-closed{background:var(--green-pale);color:var(--green);border-color:#a7f3d0}
 
   /* Timeline (left column) */
-  .vtl{position:relative;padding-left:20px}
-  .vtl::before{content:'';position:absolute;left:7px;top:0;bottom:0;width:2px;background:var(--border)}
-  .vtl-event{position:relative;margin-bottom:8px}
+  .vtl{position:relative;padding-left:18px}
+  .vtl::before{content:'';position:absolute;left:6px;top:0;bottom:0;width:2px;background:var(--border)}
+  .vtl-event{position:relative;margin-bottom:7px}
   .vtl-event:last-child{margin-bottom:0}
-  .vtl-dot{position:absolute;left:-16px;top:12px;width:9px;height:9px;border-radius:50%;border:2px solid #fff;box-shadow:0 0 0 1px var(--border)}
+  .vtl-dot{position:absolute;left:-15px;top:12px;width:8px;height:8px;border-radius:50%;border:2px solid #fff;box-shadow:0 0 0 1px var(--border)}
   .vtl-dot.inbound{background:var(--green)}
   .vtl-dot.outbound{background:var(--amber)}
-  .vtl-card{border:1px solid var(--border);background:var(--bg);border-radius:7px;padding:9px 10px;cursor:pointer;transition:border-color 0.12s,background 0.12s;user-select:none}
+  .vtl-card{border:1px solid var(--border);background:var(--bg);border-radius:7px;padding:8px 10px;cursor:pointer;transition:border-color 0.12s,background 0.12s;user-select:none}
   .vtl-card:hover{border-color:var(--navy);background:var(--surface)}
   .vtl-event.active .vtl-card{border-color:var(--navy);background:var(--surface)}
-  .vtl-dir{font-size:9.5px;font-family:'IBM Plex Mono',monospace;font-weight:600;letter-spacing:0.5px;text-transform:uppercase;margin-bottom:3px}
+  .vtl-dir{font-size:9px;font-family:'IBM Plex Mono',monospace;font-weight:700;letter-spacing:0.6px;text-transform:uppercase;margin-bottom:3px}
   .vtl-dir.inbound{color:var(--green)}
   .vtl-dir.outbound{color:var(--amber)}
-  .vtl-subject{font-size:12px;font-weight:700;color:var(--navy);margin-bottom:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .vtl-summary{font-size:11.5px;color:var(--text-2);line-height:1.4;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
-  .vtl-date{font-size:10px;color:var(--text-3);font-family:'IBM Plex Mono',monospace;margin-top:4px}
+  .vtl-summary{font-size:11.5px;color:var(--text-2);line-height:1.45;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+  .vtl-date{font-size:9.5px;color:var(--text-3);font-family:'IBM Plex Mono',monospace;margin-top:4px}
 
-  /* Collapsed sections below timeline */
-  .collapsible{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow-sm);overflow:hidden;margin-top:10px}
+  /* Full-width collapsible sections */
+  .collapsible{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow-sm);overflow:hidden;margin-bottom:10px}
   .collapsible-head{padding:11px 14px;display:flex;align-items:center;justify-content:space-between;cursor:pointer;user-select:none;background:var(--bg)}
   .collapsible-head:hover{background:var(--navy-soft)}
-  .collapsible-chevron{font-size:11px;color:var(--text-3);font-family:'IBM Plex Mono',monospace;transition:transform 0.2s}
+  .collapsible-chevron{font-size:10px;color:var(--text-3);font-family:'IBM Plex Mono',monospace;transition:transform 0.2s}
   .collapsible.open .collapsible-chevron{transform:rotate(180deg)}
-  .collapsible-body{display:none;padding:12px 14px;border-top:1px solid var(--border)}
+  .collapsible-body{display:none;padding:14px;border-top:1px solid var(--border)}
   .collapsible.open .collapsible-body{display:block}
 
-  /* Metric grid inside collapsible */
-  .metric-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-bottom:10px}
-  .metric{border:1px solid var(--border);background:var(--bg);border-radius:7px;padding:9px 10px}
-  .metric-label{font-size:9.5px;font-family:'IBM Plex Mono',monospace;letter-spacing:1px;text-transform:uppercase;color:var(--text-3);margin-bottom:3px}
-  .metric-value{font-size:16px;font-family:'Playfair Display',serif;color:var(--navy);font-weight:700}
-  .signal{font-size:11.5px;color:var(--text-2);line-height:1.5;border:1px solid var(--border);background:var(--bg);border-radius:7px;padding:8px 10px}
-  .next-step{border:1px solid var(--border);background:var(--bg);border-radius:7px;padding:8px 10px;margin-bottom:7px}
-  .next-step-title{font-size:12px;font-weight:700;color:var(--navy);margin-bottom:2px}
-  .next-step-meta{font-size:10.5px;color:var(--text-3);font-family:'IBM Plex Mono',monospace}
+  /* Horizontal 2-panel layout for collapsibles */
+  .horiz-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  @media(max-width:760px){.horiz-grid{grid-template-columns:1fr}}
 
-  /* Right column: draft + expanded message */
+  /* Metric grid inside collapsibles */
+  .metric-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px;margin-bottom:10px}
+  .metric{border:1px solid var(--border);background:var(--bg);border-radius:7px;padding:9px 10px}
+  .metric-label{font-size:9px;font-family:'IBM Plex Mono',monospace;letter-spacing:1px;text-transform:uppercase;color:var(--text-3);margin-bottom:3px}
+  .metric-value{font-size:15px;font-family:'Playfair Display',serif;color:var(--navy);font-weight:700}
+  .signal{font-size:11.5px;color:var(--text-2);line-height:1.5;border:1px solid var(--border);background:var(--bg);border-radius:7px;padding:7px 9px}
+  .next-step{border:1px solid var(--border);background:var(--bg);border-radius:7px;padding:8px 10px;margin-bottom:6px}
+  .next-step-title{font-size:12px;font-weight:700;color:var(--navy);margin-bottom:1px}
+  .next-step-meta{font-size:10px;color:var(--text-3);font-family:'IBM Plex Mono',monospace}
+
+  /* Right column */
   .right-col{display:flex;flex-direction:column;gap:14px}
 
   /* Draft panel */
-  .draft-label{font-size:10px;font-family:'IBM Plex Mono',monospace;letter-spacing:1px;text-transform:uppercase;color:var(--text-3);margin-bottom:5px}
-  .draft-subject-input{width:100%;border:1px solid var(--border);border-radius:7px;padding:7px 11px;font-size:13px;font-family:'IBM Plex Sans',sans-serif;color:var(--navy);font-weight:600;background:var(--bg);outline:none;transition:border-color 0.15s;box-sizing:border-box}
-  .draft-subject-input:focus{border-color:var(--navy);background:var(--surface)}
-  .draft-body-textarea{width:100%;min-height:150px;border:1px solid var(--border);border-radius:7px;padding:9px 11px;font-size:13px;font-family:'IBM Plex Sans',sans-serif;color:var(--text);line-height:1.65;background:var(--bg);outline:none;resize:vertical;transition:border-color 0.15s;box-sizing:border-box}
+  .draft-body-textarea{width:100%;min-height:145px;border:1px solid var(--border);border-radius:7px;padding:9px 11px;font-size:13px;font-family:'IBM Plex Sans',sans-serif;color:var(--text);line-height:1.65;background:var(--bg);outline:none;resize:vertical;transition:border-color 0.15s;box-sizing:border-box}
   .draft-body-textarea:focus{border-color:var(--navy);background:var(--surface)}
-  .draft-spinner{display:flex;align-items:center;gap:10px;font-size:13px;color:var(--text-3);padding:20px 0}
+  .draft-spinner{display:flex;align-items:center;gap:10px;font-size:12.5px;color:var(--text-3);padding:18px 0}
 
   /* Expanded message panel */
   .msg-box{font-size:13px;color:var(--text-2);line-height:1.7;white-space:pre-wrap;background:var(--bg);border:1px solid var(--border);border-radius:7px;padding:12px 13px;max-height:340px;overflow-y:auto}
 
-  /* Recap at bottom */
-  .recap-grid{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);gap:12px}
-  .recap-summary{font-size:13px;color:var(--text-2);line-height:1.65;border:1px solid var(--border);background:var(--bg);border-radius:7px;padding:10px 11px;margin-bottom:8px}
-  .briefing-item{border:1px solid var(--border);background:var(--bg);border-radius:7px;padding:8px 10px;margin-bottom:7px}
-  .briefing-label{font-size:10px;color:var(--text-3);font-family:'IBM Plex Mono',monospace;letter-spacing:1px;text-transform:uppercase;margin-bottom:3px}
+  /* Recap */
+  .briefing-item{border:1px solid var(--border);background:var(--bg);border-radius:7px;padding:8px 10px;margin-bottom:6px}
+  .briefing-label{font-size:9.5px;color:var(--text-3);font-family:'IBM Plex Mono',monospace;letter-spacing:1px;text-transform:uppercase;margin-bottom:3px}
   .briefing-value{font-size:12px;color:var(--text-2);line-height:1.5}
-  .talking-item{font-size:12.5px;color:var(--text);line-height:1.5;border:1px solid var(--border);background:var(--bg);border-radius:7px;padding:8px 10px;margin-bottom:7px}
+  .recap-summary{font-size:13px;color:var(--text-2);line-height:1.65;border:1px solid var(--border);background:var(--bg);border-radius:7px;padding:10px 11px;margin-bottom:8px}
+  .talking-item{font-size:12.5px;color:var(--text);line-height:1.5;border:1px solid var(--border);background:var(--bg);border-radius:7px;padding:8px 10px;margin-bottom:6px}
 
-  @media(max-width:900px){
-    .conv-grid{grid-template-columns:1fr}
-    .recap-grid{grid-template-columns:1fr}
-  }
+  @media(max-width:860px){.conv-grid{grid-template-columns:1fr}}
 </style>
 {% endblock %}
 
@@ -89,11 +85,11 @@
 {# ── PAGE HEADER ── #}
 <div style="display:flex;align-items:flex-end;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:14px">
   <div>
-    <div style="font-size:10px;font-family:'IBM Plex Mono',monospace;letter-spacing:1.5px;text-transform:uppercase;color:var(--text-3);margin-bottom:5px">Conversation</div>
+    <div style="font-size:10px;font-family:'IBM Plex Mono',monospace;letter-spacing:1.5px;text-transform:uppercase;color:var(--text-3);margin-bottom:4px">Conversation</div>
     <h1 style="font-family:'Playfair Display',serif;font-size:26px;font-weight:700;color:var(--navy);line-height:1.1;margin-bottom:3px">{{ customer.name }}</h1>
     <div style="font-size:12px;color:var(--text-3)">{{ customer.email or 'No email on file' }}</div>
   </div>
-  <div style="display:flex;gap:8px;align-items:center">
+  <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
     <span class="status-pill {{ stage.status_cls }}" style="font-size:11px">{{ stage.label }}</span>
     <span class="stage-chip stage-{{ health.chip_cls }}">{{ health.label }}</span>
     <a href="/customer/{{ customer.id }}" class="btn-ghost" style="text-decoration:none;font-size:12px;margin-left:4px">Customer Page</a>
@@ -104,43 +100,95 @@
 {# ── MAIN TWO-COLUMN GRID ── #}
 <div class="conv-grid">
 
-  {# ═══ LEFT COLUMN: Timeline + collapsed sections ═══ #}
-  <div>
+  {# ═══ LEFT: Timeline only ═══ #}
+  <div class="panel">
+    <div class="panel-head">
+      <div class="panel-title">Timeline</div>
+      <div style="font-size:10px;color:var(--text-3);font-family:'IBM Plex Mono',monospace">{{ outbound_count }} out · {{ inbound_count }} in</div>
+    </div>
+    <div class="panel-body">
+      {% if timeline_events %}
+      <div class="vtl" id="timeline-list">
+        {% for event in timeline_events %}
+        <div class="vtl-event" data-index="{{ loop.index0 }}" onclick="toggleTimelineEvent({{ loop.index0 }})">
+          <span class="vtl-dot {{ event.type }}"></span>
+          <div class="vtl-card">
+            <div class="vtl-dir {{ event.type }}">{% if event.type == 'inbound' %}↙ Customer{% else %}↗ You{% endif %}</div>
+            <div class="vtl-summary">{{ event.summary }}</div>
+            <div class="vtl-date">{% if event.at %}{{ event.at.strftime('%b %-d, %Y · %-I:%M %p') }}{% else %}Unknown{% endif %}</div>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+      {% else %}
+      <div style="font-size:13px;color:var(--text-3)">No messages yet.</div>
+      {% endif %}
+    </div>
+  </div>
 
-    {# Timeline #}
-    <div class="panel">
+  {# ═══ RIGHT: Draft + Expanded message ═══ #}
+  <div class="right-col">
+
+    {# Draft / Reply panel #}
+    <div class="panel" id="draft-panel">
       <div class="panel-head">
-        <div class="panel-title">Timeline</div>
-        <div style="font-size:10.5px;color:var(--text-3);font-family:'IBM Plex Mono',monospace">{{ outbound_count }} out · {{ inbound_count }} in</div>
+        <div style="display:flex;align-items:baseline;gap:8px;flex-wrap:wrap">
+          <span class="panel-title">
+            {% if health.needs_response %}Reply to Customer{% elif health.needs_follow_up %}Follow-up Due{% else %}Draft Follow-up{% endif %}
+          </span>
+          <span style="font-size:11px;color:var(--text-3)">
+            {% if health.needs_response %}Customer replied — agent drafted a response.
+            {% elif health.needs_follow_up %}Follow-up overdue — agent drafted a message.
+            {% else %}No reply yet — agent drafted a follow-up.{% endif %}
+          </span>
+        </div>
+        <button class="btn-ghost" onclick="regenerateDraft()" id="regen-btn" style="font-size:11px;padding:5px 11px">↺ Regenerate</button>
       </div>
       <div class="panel-body">
-        {% if timeline_events %}
-        <div class="vtl" id="timeline-list">
-          {% for event in timeline_events %}
-          <div class="vtl-event" data-index="{{ loop.index0 }}" onclick="toggleTimelineEvent({{ loop.index0 }})">
-            <span class="vtl-dot {{ event.type }}"></span>
-            <div class="vtl-card">
-              <div class="vtl-dir {{ event.type }}">{% if event.type == 'inbound' %}↙ Customer{% else %}↗ You{% endif %}</div>
-              <div class="vtl-subject">{{ event.subject }}</div>
-              <div class="vtl-summary">{{ event.summary }}</div>
-              <div class="vtl-date">{% if event.at %}{{ event.at.strftime('%b %-d, %Y · %-I:%M %p') }}{% else %}Unknown{% endif %}</div>
-            </div>
-          </div>
-          {% endfor %}
+        <div id="draft-loading" class="draft-spinner">
+          <div class="spinner"></div>
+          <span>Agent is drafting…</span>
         </div>
-        {% else %}
-        <div style="font-size:13px;color:var(--text-3)">No messages yet.</div>
-        {% endif %}
+        <div id="draft-form" style="display:none">
+          <div style="margin-bottom:12px">
+            <textarea class="draft-body-textarea" id="draft-body" placeholder="Email body"></textarea>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+            <button class="btn-success" onclick="approveDraft()" id="approve-btn" style="font-size:13px">Approve &amp; Queue →</button>
+            <span id="draft-status" style="font-size:12px"></span>
+          </div>
+        </div>
+        <div id="draft-error" style="display:none;font-size:12.5px;color:var(--red);padding:6px 0"></div>
       </div>
     </div>
 
-    {# Opportunity Snapshot — collapsed #}
-    <div class="collapsible" id="opp-section">
-      <div class="collapsible-head" onclick="toggleSection('opp-section')">
-        <div class="panel-title">Opportunity Snapshot</div>
-        <span class="collapsible-chevron">▾</span>
+    {# Expanded message — hidden until timeline item clicked #}
+    <div class="panel" id="msg-panel" style="display:none">
+      <div class="panel-head">
+        <div style="min-width:0;flex:1">
+          <div style="font-size:9px;font-family:'IBM Plex Mono',monospace;font-weight:700;letter-spacing:0.6px;text-transform:uppercase;margin-bottom:3px" id="msg-dir-label"></div>
+          <div style="font-size:12px;color:var(--text-3);font-family:'IBM Plex Mono',monospace" id="msg-meta"></div>
+        </div>
+        <button onclick="closeMessage()" style="all:unset;cursor:pointer;font-size:20px;color:var(--text-3);padding:2px 6px;line-height:1" title="Close">×</button>
       </div>
-      <div class="collapsible-body">
+      <div class="panel-body">
+        <div class="msg-box" id="msg-content"></div>
+      </div>
+    </div>
+
+  </div>{# end right column #}
+</div>{# end conv-grid #}
+
+{# ── OPPORTUNITY SNAPSHOT — full-width, horizontal, collapsed ── #}
+<div class="collapsible" id="opp-section">
+  <div class="collapsible-head" onclick="toggleSection('opp-section')">
+    <div class="panel-title">Opportunity Snapshot</div>
+    <span class="collapsible-chevron">▾</span>
+  </div>
+  <div class="collapsible-body">
+    <div class="horiz-grid">
+      <div>
+        <div style="font-size:9.5px;font-family:'IBM Plex Mono',monospace;letter-spacing:1px;text-transform:uppercase;color:var(--text-3);margin-bottom:8px">Metrics</div>
         <div class="metric-grid">
           <div class="metric">
             <div class="metric-label">Est. Opportunity</div>
@@ -148,7 +196,7 @@
           </div>
           <div class="metric">
             <div class="metric-label">Likely Job</div>
-            <div class="metric-value" style="font-size:14px">{{ customer.opp_label|title }}</div>
+            <div class="metric-value" style="font-size:13px">{{ customer.opp_label|title }}</div>
           </div>
           <div class="metric">
             <div class="metric-label">Out / In</div>
@@ -159,97 +207,38 @@
             <div class="metric-value">{{ customer.days_dormant }}</div>
           </div>
         </div>
-        {% if next_steps %}
-        <div style="font-size:10px;font-family:'IBM Plex Mono',monospace;letter-spacing:1px;text-transform:uppercase;color:var(--text-3);margin-bottom:7px">Next Steps</div>
-        {% for step in next_steps %}
-        <div class="next-step">
-          <div class="next-step-title">{{ step.title }}</div>
-          <div class="next-step-meta">{{ step.owner }} · {{ step.timing }}</div>
-        </div>
-        {% endfor %}
-        {% endif %}
         {% if opportunity_signals %}
-        <div style="font-size:10px;font-family:'IBM Plex Mono',monospace;letter-spacing:1px;text-transform:uppercase;color:var(--text-3);margin:10px 0 7px">Signals</div>
-        <div style="display:flex;flex-direction:column;gap:6px">
+        <div style="font-size:9.5px;font-family:'IBM Plex Mono',monospace;letter-spacing:1px;text-transform:uppercase;color:var(--text-3);margin-bottom:7px">Signals</div>
+        <div style="display:flex;flex-direction:column;gap:5px">
           {% for signal in opportunity_signals %}
           <div class="signal">{{ signal }}</div>
           {% endfor %}
         </div>
         {% endif %}
       </div>
-    </div>
-
-  </div>{# end left column #}
-
-  {# ═══ RIGHT COLUMN: Draft + Expanded message ═══ #}
-  <div class="right-col">
-
-    {# Draft / Reply panel — always shown for active conversations #}
-    <div class="panel" id="draft-panel">
-      <div class="panel-head">
-        <div>
-          <div class="panel-title" id="draft-panel-title">
-            {% if health.needs_response %}Reply to Customer{% elif health.needs_follow_up %}Follow-up Due{% else %}Draft Follow-up{% endif %}
-          </div>
-          <div style="font-size:11px;color:var(--text-3);margin-top:1px" id="draft-panel-sub">
-            {% if health.needs_response %}Customer replied — agent drafted a response below.
-            {% elif health.needs_follow_up %}Follow-up overdue — agent drafted a message below.
-            {% else %}No reply yet — agent drafted a follow-up below.{% endif %}
-          </div>
+      <div>
+        <div style="font-size:9.5px;font-family:'IBM Plex Mono',monospace;letter-spacing:1px;text-transform:uppercase;color:var(--text-3);margin-bottom:8px">Next Steps</div>
+        {% for step in next_steps %}
+        <div class="next-step">
+          <div class="next-step-title">{{ step.title }}</div>
+          <div class="next-step-meta">{{ step.owner }} · {{ step.timing }}</div>
         </div>
-        <button class="btn-ghost" onclick="regenerateDraft()" id="regen-btn" style="font-size:11.5px;padding:6px 12px">↺ Regenerate</button>
-      </div>
-      <div class="panel-body">
-        <div id="draft-loading" class="draft-spinner">
-          <div class="spinner"></div>
-          <span>Agent is drafting…</span>
-        </div>
-        <div id="draft-form" style="display:none">
-          <div style="margin-bottom:10px">
-            <div class="draft-label">Subject</div>
-            <input type="text" class="draft-subject-input" id="draft-subject" placeholder="Subject line">
-          </div>
-          <div style="margin-bottom:14px">
-            <div class="draft-label">Body</div>
-            <textarea class="draft-body-textarea" id="draft-body" placeholder="Email body"></textarea>
-          </div>
-          <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-            <button class="btn-success" onclick="approveDraft()" id="approve-btn" style="font-size:13px">Approve &amp; Queue →</button>
-            <span id="draft-status" style="font-size:12px;color:var(--text-3)"></span>
-          </div>
-        </div>
-        <div id="draft-error" style="display:none;font-size:13px;color:var(--red);padding:6px 0"></div>
+        {% endfor %}
       </div>
     </div>
+  </div>
+</div>
 
-    {# Expanded message panel — hidden until timeline item clicked #}
-    <div class="panel" id="msg-panel" style="display:none">
-      <div class="panel-head">
-        <div style="min-width:0;flex:1">
-          <div style="font-size:11px;font-family:'IBM Plex Mono',monospace;margin-bottom:3px" id="msg-dir-label"></div>
-          <div style="font-size:13px;font-weight:700;color:var(--navy);white-space:nowrap;overflow:hidden;text-overflow:ellipsis" id="msg-subject"></div>
-          <div style="font-size:10.5px;color:var(--text-3);font-family:'IBM Plex Mono',monospace;margin-top:2px" id="msg-meta"></div>
-        </div>
-        <button onclick="closeMessage()" style="all:unset;cursor:pointer;font-size:18px;color:var(--text-3);padding:4px 6px;line-height:1" title="Close">×</button>
-      </div>
-      <div class="panel-body">
-        <div class="msg-box" id="msg-content"></div>
-      </div>
-    </div>
-
-  </div>{# end right column #}
-</div>{# end conv-grid #}
-
-{# ── CONVERSATION RECAP — full-width, collapsed ── #}
+{# ── CONVERSATION RECAP — full-width, horizontal, collapsed ── #}
 <div class="collapsible" id="recap-section">
   <div class="collapsible-head" onclick="toggleSection('recap-section')">
     <div class="panel-title">Conversation Recap &amp; Talking Points</div>
     <span class="collapsible-chevron">▾</span>
   </div>
   <div class="collapsible-body">
-    <div class="recap-grid">
+    <div class="horiz-grid">
       <div>
-        <div class="field-label" style="margin-bottom:7px">Discussion Summary</div>
+        <div style="font-size:9.5px;font-family:'IBM Plex Mono',monospace;letter-spacing:1px;text-transform:uppercase;color:var(--text-3);margin-bottom:8px">Discussion Summary</div>
         <div class="recap-summary">{{ conversation_recap.operator_summary }}</div>
         {% for row in conversation_recap.briefing_rows %}
         <div class="briefing-item">
@@ -259,7 +248,7 @@
         {% endfor %}
       </div>
       <div>
-        <div class="field-label" style="margin-bottom:7px">Talking Points</div>
+        <div style="font-size:9.5px;font-family:'IBM Plex Mono',monospace;letter-spacing:1px;text-transform:uppercase;color:var(--text-3);margin-bottom:8px">Talking Points</div>
         {% for point in conversation_recap.talking_points %}
         <div class="talking-item">{{ loop.index }}. {{ point }}</div>
         {% endfor %}
@@ -276,45 +265,34 @@
   const CUSTOMER_ID = {{ customer.id }};
   let selectedIndex = -1;
 
-  // ── Collapsible sections ──
   function toggleSection(id) {
-    const el = document.getElementById(id);
-    el.classList.toggle('open');
+    document.getElementById(id).classList.toggle('open');
   }
 
-  // ── Timeline interaction ──
   function toggleTimelineEvent(index) {
-    if (selectedIndex === index) {
-      closeMessage();
-      return;
-    }
+    if (selectedIndex === index) { closeMessage(); return; }
     selectedIndex = index;
     const event = TIMELINE_EVENTS[index];
     if (!event) return;
 
-    // Update active state
     document.querySelectorAll('.vtl-event').forEach(el => el.classList.remove('active'));
     const card = document.querySelector(`.vtl-event[data-index="${index}"]`);
     if (card) card.classList.add('active');
 
-    // Populate message panel
+    const panel = document.getElementById('msg-panel');
     const dirLabel = document.getElementById('msg-dir-label');
-    const subjectEl = document.getElementById('msg-subject');
     const metaEl = document.getElementById('msg-meta');
     const contentEl = document.getElementById('msg-content');
-    const panel = document.getElementById('msg-panel');
-
     const isInbound = event.type === 'inbound';
+
     dirLabel.textContent = isInbound ? '↙ Customer reply' : '↗ Outbound email';
     dirLabel.style.color = isInbound ? 'var(--green)' : 'var(--amber)';
-    subjectEl.textContent = event.subject || '(no subject)';
     const dateText = event.at ? new Date(event.at).toLocaleString() : 'Unknown date';
-    metaEl.textContent = `${event.sender_label} · ${dateText}`;
+    metaEl.textContent = `${event.subject} · ${dateText}`;
     contentEl.textContent = event.content || 'No message content.';
-
     panel.style.display = 'block';
-    // Smooth scroll to message panel on small screens
-    if (window.innerWidth < 900) {
+
+    if (window.innerWidth < 860) {
       panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
   }
@@ -325,7 +303,6 @@
     document.getElementById('msg-panel').style.display = 'none';
   }
 
-  // ── Draft generation ──
   async function loadDraft() {
     const loading = document.getElementById('draft-loading');
     const form = document.getElementById('draft-form');
@@ -343,7 +320,6 @@
         throw new Error(data.detail || `Server error ${res.status}`);
       }
       const draft = await res.json();
-      document.getElementById('draft-subject').value = draft.subject || '';
       document.getElementById('draft-body').value = draft.body || '';
       loading.style.display = 'none';
       form.style.display = 'block';
@@ -363,11 +339,10 @@
   }
 
   async function approveDraft() {
-    const subject = document.getElementById('draft-subject').value.trim();
     const body = document.getElementById('draft-body').value.trim();
     const statusEl = document.getElementById('draft-status');
     const btn = document.getElementById('approve-btn');
-    if (!subject || !body) { statusEl.textContent = 'Subject and body required.'; statusEl.style.color = 'var(--red)'; return; }
+    if (!body) { statusEl.textContent = 'Body required.'; statusEl.style.color = 'var(--red)'; return; }
     btn.disabled = true;
     statusEl.style.color = 'var(--text-3)';
     statusEl.textContent = 'Queuing…';
@@ -375,7 +350,7 @@
       const res = await fetch(`/api/conversation/${CUSTOMER_ID}/queue`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ subject, body, sequence_step: 0 }),
+        body: JSON.stringify({ body }),
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
@@ -391,7 +366,6 @@
     }
   }
 
-  // Auto-load draft on page load
   loadDraft();
 </script>
 {% endblock %}

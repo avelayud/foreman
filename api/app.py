@@ -595,6 +595,41 @@ def _compact_summary(content: str, max_len: int = 140) -> str:
     return text[:max_len] + ("..." if len(text) > max_len else "")
 
 
+def _generate_timeline_summaries(log_entries: list[dict]) -> dict[int, str]:
+    """One Claude call to produce a one-sentence snapshot for each timeline event.
+    Returns {log_id: summary}. Falls back to {} on any error."""
+    if not log_entries:
+        return {}
+    try:
+        items = []
+        for entry in log_entries:
+            direction = "Customer reply" if entry["direction"] == "inbound" else "Outbound email"
+            body = (entry.get("content") or "")[:500].strip().replace("\n", " ")
+            items.append(
+                f'ID:{entry["id"]} [{direction}] Subject:"{entry["subject"]}"\n{body}'
+            )
+        prompt = (
+            "For each email below, write ONE concise sentence (max 18 words) summarising "
+            "the specific content — what was said, asked, or offered. Be concrete, not generic.\n\n"
+            + "\n\n---\n\n".join(items)
+            + '\n\nReturn a JSON array only: [{"id": <int>, "summary": "<sentence>"}]'
+        )
+        client = anthropic.Anthropic(api_key=config.ANTHROPIC_API_KEY)
+        msg = client.messages.create(
+            model=config.CLAUDE_MODEL,
+            max_tokens=300,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        raw = msg.content[0].text.strip()
+        # Strip markdown fences if present
+        if raw.startswith("```"):
+            raw = "\n".join(raw.split("\n")[1:]).rstrip("`").strip()
+        return {item["id"]: item["summary"] for item in json.loads(raw)}
+    except Exception as exc:
+        print(f"[timeline_summaries] failed: {exc}")
+        return {}
+
+
 def _auto_next_steps(status: str, last_outbound_at, last_inbound_at):
     if last_inbound_at and (not last_outbound_at or last_inbound_at > last_outbound_at):
         return [
@@ -1247,6 +1282,13 @@ def conversation_detail(request: Request, customer_id: int):
             })
 
     timeline_events.sort(key=_timeline_date_key, reverse=True)
+
+    # Enrich timeline summaries with one-sentence AI descriptions
+    ai_summaries = _generate_timeline_summaries(log_entries)
+    for event in timeline_events:
+        if event["id"] in ai_summaries:
+            event["summary"] = ai_summaries[event["id"]]
+
     timeline_events_json = [
         {
             **event,
@@ -1533,8 +1575,8 @@ def generate_conversation_draft(customer_id: int):
 
 
 class QueueDraftRequest(BaseModel):
-    subject: str
     body: str
+    subject: str = ""   # optional — auto-derived from thread if omitted
     sequence_step: int = 0
 
 
@@ -1545,12 +1587,23 @@ def queue_conversation_draft(customer_id: int, req: QueueDraftRequest):
         customer = db.query(Customer).filter_by(id=customer_id, operator_id=OPERATOR_ID).first()
         if not customer:
             raise HTTPException(status_code=404, detail="Customer not found")
+        # Derive subject from existing thread if not supplied
+        subject = req.subject.strip() if req.subject.strip() else None
+        if not subject:
+            last_out = (
+                db.query(OutreachLog)
+                .filter_by(operator_id=OPERATOR_ID, customer_id=customer_id, dry_run=False, direction="outbound")
+                .order_by(OutreachLog.sent_at.desc(), OutreachLog.created_at.desc())
+                .first()
+            )
+            thread_subject = (last_out.subject or "") if last_out else ""
+            subject = f"Re: {thread_subject}" if thread_subject else "Following up"
         log = OutreachLog(
             operator_id=OPERATOR_ID,
             customer_id=customer_id,
             channel="email",
             direction="outbound",
-            subject=req.subject,
+            subject=subject,
             content=req.body,
             dry_run=True,
             approval_status="pending",
