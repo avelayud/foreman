@@ -302,7 +302,7 @@
             <label class="field-label">Body</label>
             <textarea id="draft-body" rows="7" class="field-textarea"></textarea>
           </div>
-          <div style="display:flex;gap:8px">
+          <div style="display:flex;gap:8px;margin-top:12px">
             <button onclick="approveDraft({{ customer.id }})" class="btn-success" style="flex:1">
               ✓ Approve &amp; Queue
             </button>
@@ -317,7 +317,7 @@
 
         {# Re-draft button shown when logs already exist #}
         {% if logs %}
-        <div style="padding-top:0">
+        <div style="padding-top:12px">
           <button onclick="generateDraft({{ customer.id }}); document.getElementById('draft-prompt').style.display='none';" class="btn-primary">
             Generate New Draft
           </button>

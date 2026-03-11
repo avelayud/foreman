@@ -45,8 +45,12 @@ DB_STARTUP_MAX_ATTEMPTS = max(1, int(os.getenv("DB_STARTUP_MAX_ATTEMPTS", "8")))
 DB_STARTUP_RETRY_SECONDS = max(1, int(os.getenv("DB_STARTUP_RETRY_SECONDS", "3")))
 _scheduled_sender_started = False
 _scheduled_sender_lock = threading.Lock()
+_reply_detector_started = False
+_reply_detector_lock = threading.Lock()
 _db_ready = False
 _db_init_error: Exception | None = None
+
+REPLY_POLL_SECONDS = 900  # 15 minutes
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -261,6 +265,36 @@ def _start_scheduled_sender():
         worker.start()
         _scheduled_sender_started = True
         print(f"✅ Scheduled outreach sender started (poll: {SCHEDULE_POLL_SECONDS}s)")
+
+
+def _reply_detector_loop():
+    """Poll Gmail for customer replies every REPLY_POLL_SECONDS."""
+    # Delay first run by 30s to let the app fully settle
+    time.sleep(30)
+    while True:
+        try:
+            from agents.reply_detector import run as run_reply_detector
+            count = run_reply_detector(operator_id=OPERATOR_ID)
+            if count:
+                print(f"[reply_detector] {count} new reply(s) detected", flush=True)
+        except Exception as exc:
+            print(f"[reply_detector] loop error: {exc}", flush=True)
+        time.sleep(REPLY_POLL_SECONDS)
+
+
+def _start_reply_detector():
+    global _reply_detector_started
+    with _reply_detector_lock:
+        if _reply_detector_started:
+            return
+        worker = threading.Thread(
+            target=_reply_detector_loop,
+            daemon=True,
+            name="reply-detector",
+        )
+        worker.start()
+        _reply_detector_started = True
+        print(f"✅ Reply detector started (poll: {REPLY_POLL_SECONDS}s / 15 min)", flush=True)
 
 
 def _normalize_customer_profile(profile: dict | None) -> dict:
@@ -732,6 +766,7 @@ def _init_db_background():
             _db_init_error = None
             print("✅ Database ready.", flush=True, file=sys.stderr)
             _start_scheduled_sender()
+            _start_reply_detector()
             return
         except Exception as exc:
             _db_init_error = exc
@@ -1173,6 +1208,19 @@ def conversation_detail(request: Request, customer_id: int):
 
 # ── JSON API ──────────────────────────────────────────────────────────────────
 
+@app.delete("/api/outreach/{log_id}")
+def delete_outreach(log_id: int):
+    """Remove a draft from the outreach queue. Only pending/failed drafts can be deleted."""
+    with get_db() as db:
+        log = db.query(OutreachLog).filter_by(id=log_id, operator_id=OPERATOR_ID).first()
+        if not log:
+            raise HTTPException(status_code=404, detail="Draft not found")
+        if log.approval_status not in ("pending", "failed"):
+            raise HTTPException(status_code=400, detail="Only pending or failed drafts can be removed")
+        db.delete(log)
+    return {"status": "deleted"}
+
+
 @app.get("/health")
 def health():
     return {
@@ -1257,6 +1305,7 @@ def assign_voice(customer_id: int, body: dict):
 DRAFT_SYSTEM = """You are a ghostwriter for a small field service business owner.
 Write a single reactivation email in the owner's exact voice — their tone, greeting style, signoff, and characteristic phrases.
 The email should feel personal and genuine, never salesy. Keep it short: 3–5 sentences. End with a soft call to action.
+Formatting rules: use plain text only, no markdown. Separate paragraphs with a single blank line (\\n\\n). Do not add extra blank lines. Do not use bullet points or headers.
 Return ONLY a JSON object with keys "subject" and "body". No markdown, no code fences."""
 
 DRAFT_USER = """Tone profile:
@@ -1322,11 +1371,16 @@ def generate_draft(customer_id: int, req: DraftRequest = None):
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Claude API error: {e}")
 
+    import re as _re
     raw = message.content[0].text.strip()
     try:
         draft = json.loads(raw)
     except json.JSONDecodeError:
         draft = {"subject": "Checking in", "body": raw}
+
+    # Normalize body: collapse 3+ consecutive newlines to 2, strip edges
+    if draft.get("body"):
+        draft["body"] = _re.sub(r'\n{3,}', '\n\n', draft["body"].strip())
 
     if voice:
         draft["voice_name"] = voice["name"]

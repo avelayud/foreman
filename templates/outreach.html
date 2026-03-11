@@ -146,13 +146,16 @@
             {% endif %}
             <span id="action-label-{{ item.log_id }}" class="inline-status" style="display:none;color:var(--green)"></span>
             <span id="action-error-{{ item.log_id }}" class="inline-status" style="display:none;color:var(--red)"></span>
+            <button onclick="removeFromQueue({{ item.log_id }})" class="btn-ghost action-btn" style="color:var(--red);border-color:#fecaca" id="remove-btn-{{ item.log_id }}">
+              Remove Draft
+            </button>
           </div>
         </div>
 
         <div class="right-title">Quick Links</div>
         <div class="link-stack">
-          <a href="/customer/{{ item.customer_id }}" class="btn-ghost" style="text-decoration:none;text-align:center">Customer Page</a>
-          <a href="/conversations/{{ item.customer_id }}" class="btn-primary" style="text-decoration:none;text-align:center;padding:8px 14px">Open Conversation</a>
+          <a href="/customer/{{ item.customer_id }}" class="btn-ghost" style="text-decoration:none;text-align:center;display:flex;justify-content:center">Customer Page</a>
+          <a href="/conversations/{{ item.customer_id }}" class="btn-primary" style="text-decoration:none;display:flex;justify-content:center;padding:8px 14px">Open Conversation</a>
         </div>
       </div>
     </div>
@@ -238,6 +241,25 @@
     const ok = window.confirm('Send this message immediately? This will send a real email now.');
     if (!ok) return;
     submitQueueAction(logId, true);
+  }
+
+  async function removeFromQueue(logId) {
+    const ok = window.confirm('Remove this draft from the queue? This cannot be undone.');
+    if (!ok) return;
+    const btn = document.getElementById('remove-btn-' + logId);
+    btn.disabled = true;
+    btn.textContent = 'Removing…';
+    const res = await fetch(`/api/outreach/${logId}`, { method: 'DELETE' });
+    if (res.ok) {
+      const card = document.getElementById('card-' + logId);
+      card.style.transition = 'opacity 0.25s';
+      card.style.opacity = '0';
+      setTimeout(() => { card.remove(); }, 280);
+    } else {
+      btn.disabled = false;
+      btn.textContent = 'Remove Draft';
+      alert('Failed to remove draft.');
+    }
   }
 </script>
 {% endblock %}

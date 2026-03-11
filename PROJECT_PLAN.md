@@ -187,11 +187,17 @@ TWILIO_FROM_NUMBER
 
 ---
 
+## To-Do / Backlog
+
+- **Email draft fine-tuning**: The AI-generated draft quality (formatting, tone calibration, personalization depth) needs iterative improvement. Future work: prompt engineering, operator feedback loop, A/B testing different draft styles.
+
+---
+
 ## Known Risks
 
 - Secrets were exposed in chat/local env during troubleshooting and must be rotated.
-- Railway app still reported “Application failed to respond” after one deploy; pending log-based root-cause confirmation.
-- `reply_detector` and `follow_up` are not yet wired into a durable recurring scheduler pipeline.
+- Railway app still reported “Application failed to respond” after one deploy; resolved via background DB init + deadlock fix.
+- `reply_detector` runs in a background thread (every 15 min); not yet backed by a durable scheduler (e.g., cron/Celery) — will miss cycles if the dyno restarts mid-poll.
 
 ---
 
