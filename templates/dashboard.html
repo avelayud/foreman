@@ -33,11 +33,11 @@
   .filter-tab .count{font-size:10px;font-family:'IBM Plex Mono',monospace;margin-left:4px;opacity:0.75}
 
   /* ── PRIORITY TABLE ── */
-  /* Cols: Score | Customer | Last Service | Est.Value | Status | Action | Mark Booked | ··· */
+  /* Cols: Score | Customer | Est.Value | Last Service | Last Interaction | Status | Action | Mark as Booked | ··· */
   .priority-table{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;box-shadow:var(--shadow-sm)}
-  .pt-head{display:grid;grid-template-columns:52px 185px 110px 82px 112px 122px 108px 40px;padding:9px 16px;background:var(--navy-soft);border-bottom:1px solid var(--border);gap:10px;align-items:center}
+  .pt-head{display:grid;grid-template-columns:52px 1fr 88px 130px 150px 112px 122px 130px 40px;padding:9px 16px;background:var(--navy-soft);border-bottom:1px solid var(--border);gap:10px;align-items:center}
   .pt-th{font-size:9px;font-family:'IBM Plex Mono',monospace;letter-spacing:1.4px;text-transform:uppercase;color:var(--text-3);font-weight:400;white-space:nowrap}
-  .pt-row{display:grid;grid-template-columns:52px 185px 110px 82px 112px 122px 108px 40px;padding:11px 16px;border-bottom:1px solid var(--border);align-items:center;gap:10px;transition:background 0.1s}
+  .pt-row{display:grid;grid-template-columns:52px 1fr 88px 130px 150px 112px 122px 130px 40px;padding:11px 16px;border-bottom:1px solid var(--border);align-items:center;gap:10px;transition:background 0.1s}
   .pt-row:last-child{border-bottom:none}
   .pt-row:hover{background:var(--navy-soft)}
   .pt-row.hidden{display:none}
@@ -48,11 +48,8 @@
   .score-med{background:#fef3c7;color:#92400e;border:1.5px solid #fcd34d}
   .score-low{background:#fee2e2;color:#991b1b;border:1.5px solid #fca5a5}
 
-  /* Customer col — name + email on ONE line */
-  .c-line{display:flex;align-items:baseline;gap:6px;min-width:0;overflow:hidden}
-  .c-name{font-size:13px;font-weight:600;color:var(--navy);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex-shrink:0;max-width:110px}
-  .c-sep{font-size:10px;color:var(--text-4);flex-shrink:0}
-  .c-email{font-size:10.5px;color:var(--text-3);font-family:'IBM Plex Mono',monospace;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+  /* Customer col */
+  .c-name{font-size:13px;font-weight:600;color:var(--navy);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block}
 
   /* Last service col — single line */
   .svc-line{font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:var(--text-2);white-space:nowrap}
@@ -186,11 +183,12 @@
   <div class="pt-head">
     <div class="pt-th">Score</div>
     <div class="pt-th">Customer</div>
-    <div class="pt-th">Last Service</div>
     <div class="pt-th">Est. Value</div>
+    <div class="pt-th">Last Service</div>
+    <div class="pt-th">Last Interaction</div>
     <div class="pt-th">Status</div>
     <div class="pt-th">Action</div>
-    <div class="pt-th">Mark Booked</div>
+    <div class="pt-th">Mark as Booked</div>
     <div class="pt-th"></div>
   </div>
 
@@ -204,11 +202,18 @@
       <div class="score-badge {{ c.score_cls }}">{{ c.score }}</div>
     </div>
 
-    {# Customer — name · email on one line #}
-    <div class="c-line">
+    {# Customer name #}
+    <div style="min-width:0">
       <span class="c-name">{{ c.name }}</span>
-      <span class="c-sep">·</span>
-      <span class="c-email">{{ c.email or '—' }}</span>
+    </div>
+
+    {# Est. job value #}
+    <div>
+      {% if c.estimated_job_value and c.estimated_job_value > 0 %}
+      <span class="est-val">${{ "{:,.0f}".format(c.estimated_job_value) }}</span>
+      {% else %}
+      <span class="act-empty">—</span>
+      {% endif %}
     </div>
 
     {# Last service — date + "Xd ago" on one line #}
@@ -221,12 +226,14 @@
       {% endif %}
     </div>
 
-    {# Est. job value #}
+    {# Last interaction #}
     <div>
-      {% if c.estimated_job_value and c.estimated_job_value > 0 %}
-      <span class="est-val">${{ "{:,.0f}".format(c.estimated_job_value) }}</span>
+      {% if c.last_interaction %}
+        {% set li = c.last_interaction %}
+        <span class="svc-line">{{ li.date.strftime('%b %-d, %Y') }}</span>
+        <span class="svc-ago">{% if li.direction == 'inbound' %}Reply{% else %}Outreach{% endif %}</span>
       {% else %}
-      <span class="act-empty">—</span>
+        <span class="act-empty">—</span>
       {% endif %}
     </div>
 
@@ -251,7 +258,7 @@
     {# Mark Booked column #}
     <div onclick="event.stopPropagation()">
       {% if c.reactivation_status not in ('booked', 'unsubscribed', 'never_contacted') %}
-        <button class="act-btn act-book" onclick="openBookModal({{ c.id }}, '{{ c.name|replace("'","\\'")|e }}')">Mark Booked</button>
+        <button class="act-btn act-book" onclick="openBookModal({{ c.id }}, '{{ c.name|replace("'","\\'")|e }}')">Mark as Booked</button>
       {% elif c.reactivation_status == 'booked' %}
         <span class="act-booked-done">Done</span>
       {% else %}

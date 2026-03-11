@@ -1015,6 +1015,21 @@ def dashboard(request: Request):
             (l.converted_job_value or 0.0) for l in booked_logs
         )
 
+        # Batch-fetch last interaction per customer (one query, not N)
+        last_interaction_rows = (
+            db.query(OutreachLog.customer_id, OutreachLog.sent_at, OutreachLog.direction)
+            .filter(OutreachLog.operator_id == OPERATOR_ID, OutreachLog.dry_run == False)
+            .order_by(OutreachLog.sent_at.desc())
+            .all()
+        )
+        last_interaction: dict[int, dict] = {}
+        for row in last_interaction_rows:
+            if row.customer_id not in last_interaction:
+                last_interaction[row.customer_id] = {
+                    "date": row.sent_at,
+                    "direction": row.direction,
+                }
+
         # Serialize everything we need from ORM before session closes
         customers_raw_data = []
         for c in raw_customers:
@@ -1040,6 +1055,7 @@ def dashboard(request: Request):
                 "estimated_job_value": c.estimated_job_value or 0.0,
                 "service_interval_days": c.service_interval_days,
                 "predicted_next_service": c.predicted_next_service,
+                "last_interaction": last_interaction.get(c.id),
             })
 
     # Enrich customers with derived fields
