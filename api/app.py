@@ -45,7 +45,7 @@ from datetime import timezone as _tz
 
 _EASTERN = _ZoneInfo("America/New_York")
 
-def _jinja_est(dt, fmt="%-m/%-d/%y %-I:%M %p EST"):
+def _jinja_est(dt, fmt="%-m/%-d/%y %-I:%M %p %Z"):
     """Format a naive UTC datetime as Eastern time for display."""
     if dt is None:
         return "—"
