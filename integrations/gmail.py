@@ -143,9 +143,10 @@ def _parse_message(msg: dict) -> dict:
     try:
         from email.utils import parsedate_to_datetime
         sent_at = parsedate_to_datetime(date_str) if date_str else None
-        # Make timezone-naive for SQLite compatibility
+        # Normalize to UTC before stripping tzinfo for SQLite compatibility
         if sent_at and sent_at.tzinfo:
-            sent_at = sent_at.replace(tzinfo=None)
+            from datetime import timezone as _tz
+            sent_at = sent_at.astimezone(_tz.utc).replace(tzinfo=None)
     except Exception:
         sent_at = None
 

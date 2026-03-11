@@ -1515,8 +1515,16 @@ Full service history: {job_history}
 Total: {total_jobs} jobs, ${total_spend:,.0f} lifetime spend
 ---
 
-Previous outreach (subject: "{last_subject}") went unanswered. Write a brief follow-up (2–3 sentences).
-Take a different angle from the first email — draw on their specific service history, mention timing or seasonality, or ask a direct question. Don't be pushy or repeat the first email."""
+--- Previous outreach thread (oldest first) ---
+{thread}
+---
+
+The customer has not replied yet. Write a brief follow-up (2–3 sentences) that:
+1. Acknowledges the previous email — reference something specific from it (the subject or a detail mentioned), so it reads as a continuation, not a fresh outreach.
+2. Takes a slightly different angle — bring in their service history, mention a seasonal reason to act now, or ask a direct question they can answer easily.
+3. Ends with one simple call to action.
+
+Do not repeat the first email word-for-word. Be natural, not pushy. Match the operator's tone exactly."""
 
 
 class DraftRequest(BaseModel):
@@ -1616,7 +1624,7 @@ def generate_conversation_draft(customer_id: int):
                 job_history=job_history,
                 total_jobs=cust_total_jobs,
                 total_spend=cust_total_spend,
-                last_subject=last_outbound_subject,
+                thread=thread,
             )
         message = client.messages.create(
             model=config.CLAUDE_MODEL,
