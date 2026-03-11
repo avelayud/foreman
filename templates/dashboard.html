@@ -33,11 +33,11 @@
   .filter-tab .count{font-size:10px;font-family:'IBM Plex Mono',monospace;margin-left:4px;opacity:0.75}
 
   /* ── PRIORITY TABLE ── */
-  /* Cols: Score | Customer | Est.Value | Last Service | Dormant | Last Interaction | Status | Action | Mark as Booked | ··· */
+  /* Cols: Score | Customer | Status | Est.Value | Last Service | Dormant | Last Interaction | Action | Mark as Booked | ··· */
   .priority-table{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;box-shadow:var(--shadow-sm)}
-  .pt-head{display:grid;grid-template-columns:52px 2fr 1fr 1.2fr 0.7fr 1.6fr 1.1fr 1.3fr 1.3fr 40px;padding:9px 16px;background:var(--navy-soft);border-bottom:1px solid var(--border);gap:10px;align-items:center}
+  .pt-head{display:grid;grid-template-columns:52px 2fr 1.1fr 0.9fr 1.2fr 0.6fr 1.5fr 1.0fr 1.0fr 40px;padding:9px 16px;background:var(--navy-soft);border-bottom:1px solid var(--border);gap:10px;align-items:center}
   .pt-th{font-size:9px;font-family:'IBM Plex Mono',monospace;letter-spacing:1.4px;text-transform:uppercase;color:var(--text-3);font-weight:700;white-space:nowrap;text-align:center}
-  .pt-row{display:grid;grid-template-columns:52px 2fr 1fr 1.2fr 0.7fr 1.6fr 1.1fr 1.3fr 1.3fr 40px;padding:11px 16px;border-bottom:1px solid var(--border);align-items:center;gap:10px;transition:background 0.1s}
+  .pt-row{display:grid;grid-template-columns:52px 2fr 1.1fr 0.9fr 1.2fr 0.6fr 1.5fr 1.0fr 1.0fr 40px;padding:11px 16px;border-bottom:1px solid var(--border);align-items:center;gap:10px;transition:background 0.1s}
   .pt-row>div{text-align:center;display:flex;align-items:center;justify-content:center}
   .pt-row:last-child{border-bottom:none}
   .pt-row:hover{background:var(--navy-soft)}
@@ -53,8 +53,10 @@
   .pt-row>.c-cell{justify-content:flex-start;min-width:0}
   .c-name{font-size:13px;font-weight:600;color:var(--navy);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block;width:100%}
 
-  /* Last service col */
+  /* Stacked two-line cells (date + sub-label) */
+  .svc-cell{display:flex;flex-direction:column;align-items:center;gap:2px}
   .svc-line{font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:var(--text-2);white-space:nowrap}
+  .svc-sub{font-size:10px;color:var(--text-4);white-space:nowrap;font-family:'IBM Plex Sans',sans-serif}
   .svc-ago{font-size:11px;color:var(--text-3);white-space:nowrap}
   .dormant-red{color:var(--red)!important}
   .dormant-amber{color:var(--amber)!important}
@@ -62,13 +64,13 @@
   /* Est value col */
   .est-val{font-family:'IBM Plex Mono',monospace;font-size:12.5px;font-weight:600;color:var(--green);white-space:nowrap}
 
-  /* Status pills */
+  /* Status pills — aligned to action button color scheme */
   .os-pill{display:inline-block;padding:3px 9px;border-radius:12px;font-size:10px;font-weight:600;font-family:'IBM Plex Mono',monospace;white-space:nowrap}
-  .s-none{background:#f1f5f9;color:var(--text-3)}
+  .s-none{background:var(--navy-soft);color:var(--text-3)}
   .s-contacted{background:var(--blue-pale);color:var(--blue)}
   .s-replied{background:var(--amber-pale);color:var(--amber)}
   .s-booked{background:var(--green-pale);color:var(--green)}
-  .s-unsub{background:#f8f8f8;color:var(--text-4)}
+  .s-unsub{background:#eef0f3;color:#9ca3af;border:1.5px solid #e5e7eb}
 
   /* Action buttons — fill column width, blocky */
   .act-btn{font-size:11px;padding:5px 0;border-radius:6px;cursor:pointer;font-family:'IBM Plex Sans',sans-serif;font-weight:600;white-space:nowrap;border:1.5px solid transparent;transition:all 0.15s;text-decoration:none;display:block;text-align:center;line-height:1.4;width:100%;letter-spacing:0.1px}
@@ -192,12 +194,12 @@
 <div class="priority-table">
   <div class="pt-head">
     <div class="pt-th">Score</div>
-    <div class="pt-th">Customer</div>
+    <div class="pt-th" style="text-align:left">Customer</div>
+    <div class="pt-th">Status</div>
     <div class="pt-th">Est. Value</div>
     <div class="pt-th">Last Service</div>
     <div class="pt-th">Dormant</div>
     <div class="pt-th">Last Interaction</div>
-    <div class="pt-th">Status</div>
     <div class="pt-th">Action</div>
     <div class="pt-th">Mark as Booked</div>
     <div class="pt-th"></div>
@@ -218,6 +220,11 @@
       <span class="c-name">{{ c.name }}</span>
     </div>
 
+    {# Outreach status pill — next to customer #}
+    <div>
+      <span class="os-pill {{ c.outreach_status_cls }}">{{ c.outreach_status }}</span>
+    </div>
+
     {# Est. job value #}
     <div>
       {% if c.estimated_job_value and c.estimated_job_value > 0 %}
@@ -227,38 +234,40 @@
       {% endif %}
     </div>
 
-    {# Last service — date only #}
+    {# Last service — date + service type stacked #}
     <div>
       {% if c.last_service_date %}
-      <span class="svc-line">{{ c.last_service_date.strftime('%b %-d, %Y') }}</span>
+      <div class="svc-cell">
+        <span class="svc-line">{{ c.last_service_date.strftime('%b %-d, %Y') }}</span>
+        {% if c.last_service_type %}
+        <span class="svc-sub">{{ c.last_service_type }}</span>
+        {% endif %}
+      </div>
       {% else %}
       <span class="svc-line" style="color:var(--text-4)">—</span>
       {% endif %}
     </div>
 
-    {# Dormant days — separate column #}
+    {# Dormant days #}
     <div>
       {% if c.days_dormant is not none %}
-      <span class="svc-ago {% if c.days_dormant >= 365 %}dormant-red{% elif c.days_dormant >= 180 %}dormant-amber{% endif %}" style="font-family:'IBM Plex Mono',monospace;font-size:11.5px;margin-left:0">{{ c.days_dormant }}d</span>
+      <span class="svc-ago {% if c.days_dormant >= 365 %}dormant-red{% elif c.days_dormant >= 180 %}dormant-amber{% endif %}" style="font-family:'IBM Plex Mono',monospace;font-size:11.5px">{{ c.days_dormant }}d</span>
       {% else %}
       <span class="act-empty">—</span>
       {% endif %}
     </div>
 
-    {# Last interaction #}
+    {# Last interaction — date + type stacked #}
     <div>
       {% if c.last_interaction %}
         {% set li = c.last_interaction %}
-        <span class="svc-line">{{ li.date.strftime('%b %-d, %Y') }}</span>
-        <span class="svc-ago">{% if li.direction == 'inbound' %}Reply{% else %}Outreach{% endif %}</span>
+        <div class="svc-cell">
+          <span class="svc-line">{{ li.date.strftime('%b %-d, %Y') }}</span>
+          <span class="svc-sub">{% if li.direction == 'inbound' %}Customer reply{% else %}Outreach sent{% endif %}</span>
+        </div>
       {% else %}
         <span class="act-empty">—</span>
       {% endif %}
-    </div>
-
-    {# Outreach status pill #}
-    <div>
-      <span class="os-pill {{ c.outreach_status_cls }}">{{ c.outreach_status }}</span>
     </div>
 
     {# Primary action — cycle-aware #}
