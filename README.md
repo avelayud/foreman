@@ -2,7 +2,7 @@
 
 AI-powered customer reengagement and scheduling workflow for small field service businesses (HVAC, plumbing, electrical, etc.).
 
-**Live:** https://web-production-3df3a.up.railway.app  
+**Live:** https://web-production-3df3a.up.railway.app
 **Repo:** https://github.com/avelayud/foreman
 
 ---
@@ -13,30 +13,31 @@ Foreman helps an operator run outbound reactivation with agent support:
 
 1. Learns operator voice from sent Gmail (Tone Profiler)
 2. Finds dormant customers and drafts personalized outreach (Reactivation Analyzer)
-3. Builds customer context from correspondence (Customer Analyzer)
-4. Tracks replies by Gmail thread and feeds follow-up logic (Reply Detector + Follow-up Sequencer)
-5. Keeps the operator in control through approval, scheduling, and send actions
+3. Builds customer context from Gmail correspondence (Customer Analyzer)
+4. Tracks replies by Gmail thread and feeds context-aware follow-up drafts (Reply Detector + Follow-up Sequencer)
+5. Keeps the operator in control: review drafts, approve/schedule/send, manage conversations
 
 ---
 
-## Current Product State (as of 2026-03-10)
+## Product State (2026-03-11)
 
 | Area | Status |
 |---|---|
 | Core models + DB (Operator, Customer, Job, Booking, OutreachLog) | ✅ |
-| Tone Profiler agent (Gmail + Claude voice extraction) | ✅ |
-| Reactivation Analyzer agent (dormant customer targeting + draft queueing) | ✅ |
-| Customer Analyzer agent (relationship profile fields on customer) | ✅ |
-| Reply Detector agent (thread-based reply capture) | ✅ |
-| Follow-up Sequencer agent (context-aware follow-up drafts) | ✅ (manual run) |
-| Dry Run / Production mode toggle in-app | ✅ |
-| Outreach queue with approve + schedule + send-now flow | ✅ |
-| Scheduled sender worker (sends due scheduled items in production mode) | ✅ |
-| Active Conversations page (operator-friendly cards + health state) | ✅ |
-| Individual Conversation page (operator recap + message timeline + selected message view) | ✅ |
-| Agents page with status cards and CLI commands | ✅ |
+| Tone Profiler agent | ✅ |
+| Reactivation Analyzer agent | ✅ |
+| Customer Analyzer agent | ✅ |
+| Reply Detector agent (background, 15-min poll) | ✅ |
+| Follow-up Sequencer agent | ✅ |
+| Dry Run / Production mode toggle | ✅ |
+| Outreach queue (approve + schedule + send-now) | ✅ |
+| Scheduled sender worker | ✅ |
+| Dashboard with segments, top prospects, browse-all + search | ✅ |
+| Active Conversations page (health state, attention badge) | ✅ |
+| Conversation workspace (AI timeline, context-aware draft, expandable messages) | ✅ |
+| Agents page with status + manual run | ✅ |
 | Railway deploy with Postgres | ✅ |
-| Railway startup hardening (DB URL normalization, startup retries, robust port launcher) | ✅ |
+| UTC timestamp storage + EDT/EST display | ✅ |
 
 ---
 
@@ -48,15 +49,14 @@ Foreman helps an operator run outbound reactivation with agent support:
 | Web | FastAPI + Jinja2 |
 | DB | SQLAlchemy + PostgreSQL (Railway) / SQLite (local) |
 | AI | Anthropic Claude (`claude-sonnet-4-20250514`) |
-| Email integration | Gmail API (OAuth2) |
-| Scheduling | APScheduler + internal background polling worker |
+| Email | Gmail API (OAuth2) |
 | Deployment | Railway |
 
 ---
 
 ## Project Structure
 
-```text
+```
 foreman/
 ├── api/
 │   ├── app.py                 # FastAPI app (pages + JSON API)
@@ -68,9 +68,9 @@ foreman/
 │   ├── reply_detector.py
 │   └── follow_up.py
 ├── core/
-│   ├── config.py              # Env parsing / settings
-│   ├── database.py            # Engine/session/init + schema patches
-│   └── models.py              # ORM models
+│   ├── config.py
+│   ├── database.py
+│   └── models.py
 ├── integrations/
 │   └── gmail.py
 ├── templates/
@@ -83,10 +83,10 @@ foreman/
 │   └── agents.html
 ├── data/
 │   ├── seed.py
-│   └── reseed.py
+│   ├── reseed.py
+│   └── fix_inbound_timestamps.py
 ├── Procfile
-├── requirements.txt
-└── PROJECT_PLAN.md
+└── requirements.txt
 ```
 
 ---
@@ -95,12 +95,12 @@ foreman/
 
 | URL | Description |
 |---|---|
-| `/` | Dashboard: pipeline metrics, segments, top prospects |
-| `/customer/{id}` | Customer detail: account context + account timeline |
-| `/conversations` | Active conversations with latest interaction + queue context |
-| `/conversations/{id}` | Conversation workspace: recap, talking points, message timeline, selected email |
-| `/outreach` | Outreach queue: review/edit drafts, approve/schedule, send now |
-| `/agents` | Agent catalog with status/coverage and manual run cues |
+| `/` | Dashboard: pipeline metrics, segments, top prospects, browse all customers |
+| `/customer/{id}` | Customer detail: account context + full history |
+| `/conversations` | Active conversations with health state and attention indicators |
+| `/conversations/{id}` | Conversation workspace: AI timeline, draft panel, recap |
+| `/outreach` | Outreach queue: review/edit/approve/schedule/send |
+| `/agents` | Agent catalog with status and manual run |
 
 ---
 
@@ -114,88 +114,47 @@ python3 -m venv venv
 venv/bin/pip install -r requirements.txt
 
 cp .env.example .env
-# Fill in at minimum:
-# - ANTHROPIC_API_KEY
-# - GOOGLE_CLIENT_ID
-# - GOOGLE_CLIENT_SECRET
-# - DATABASE_URL
+# Fill in: ANTHROPIC_API_KEY, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, DATABASE_URL
 
-# Seed data (optional)
+# Optional: seed synthetic data
 venv/bin/python -m data.reseed
 
-# Run app (same entrypoint shape used on Railway)
-venv/bin/python -m api.run
-# Opens on http://localhost:8000 by default
-```
-
-Alternative dev command:
-
-```bash
-venv/bin/uvicorn api.app:app --reload
+# Run
+DATABASE_URL=sqlite:///./foreman.db venv/bin/python -m api.run
+# → http://localhost:8000
 ```
 
 ---
 
-## Important Environment Variables
+## Environment Variables
 
 ```bash
 ANTHROPIC_API_KEY
 GOOGLE_CLIENT_ID
 GOOGLE_CLIENT_SECRET
 GOOGLE_REDIRECT_URI
-
-DATABASE_URL
-# Local machine: use sqlite or Railway public proxy URL
-# Railway runtime: use Railway internal URL (postgres.railway.internal)
-
+DATABASE_URL          # sqlite:///./foreman.db locally; internal Railway URL in prod
 APP_ENV
 APP_PORT
 DRY_RUN
-
-SENDGRID_API_KEY
-SENDGRID_FROM_EMAIL
-TWILIO_ACCOUNT_SID
-TWILIO_AUTH_TOKEN
-TWILIO_FROM_NUMBER
+PYTHONUNBUFFERED=1    # required on Railway
 ```
 
 ---
 
-## Railway Notes
+## Railway
 
-- `Procfile` uses `web: python -m api.run`
-- `api/run.py` reads `PORT` safely from env and starts uvicorn
-- Startup includes DB init retries to avoid transient boot race conditions
-- DB URL normalization handles legacy `postgres://` inputs
-
-Recommended Railway Web service vars:
-
-```bash
-DATABASE_URL=<internal Railway Postgres URL>
-ANTHROPIC_API_KEY=<value>
-GOOGLE_CLIENT_ID=<value>
-GOOGLE_CLIENT_SECRET=<value>
-```
+- `Procfile`: `web: python -m api.run`
+- DB URL normalization handles `postgres://` → `postgresql://` automatically
+- Startup retries handle transient DB boot races
+- To connect to Postgres from local: `railway login` → `railway link` → `railway connect Postgres`
+- Public networking must be enabled on the Postgres service for external psql access
 
 ---
 
-## Security Note
+## Security
 
-If secrets are ever pasted in logs/chat or committed by accident, rotate them immediately:
-
+Rotate immediately if any of these are exposed in logs or chat:
 - Anthropic API key
 - Google OAuth client secret
-- Postgres password/connection credentials
-
----
-
-## Roadmap Snapshot
-
-| Phase | Name | Status |
-|---|---|---|
-| 1 | Foundation | ✅ Complete |
-| 2 | Tone Profiler + Core UI | ✅ Complete |
-| 3 | Reactivation Analyzer + Queue | ✅ Complete |
-| 4 | Gmail Send + Follow-up Intelligence | 🟡 In Progress (core built, scheduler polish/deploy stabilization) |
-| 5 | SMS channel (Twilio) | ⬜ Not Started |
-| 6+ | Booking, reminders, calendar sync, broader niche support | ⬜ Planned |
+- Railway Postgres credentials (Postgres service → Settings → Regenerate)

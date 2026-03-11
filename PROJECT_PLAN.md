@@ -6,71 +6,48 @@
 
 ## Current Status
 
-- **Active Phase:** Phase 4 (Gmail send + intelligent follow-up + operator UX)  
-- **State:** Core workflows are built and usable; deploy stability is being finalized on Railway.
-- **Last Updated:** 2026-03-10
+- **Active Phase:** Phase 4 (complete) → Phase 5 planning
+- **State:** Core workflows fully operational. Conversations, drafts, reply detection, and follow-up all working end-to-end against real Gmail.
+- **Last Updated:** 2026-03-11
 - **Live URL:** https://web-production-3df3a.up.railway.app
 - **Repo:** https://github.com/avelayud/foreman
 
 ---
 
-## Recently Completed (2026-03-10)
+## Recently Completed (2026-03-11)
 
-### Agent + workflow coverage
-- Added/confirmed agent coverage in app + menu:
-  - Tone Profiler
-  - Reactivation Analyzer
-  - Customer Analyzer
-  - Reply Detector
-  - Follow-up Sequencer
-- Added `/agents` page status cards for each agent, with live stats and CLI commands.
-- Added `/api/agent/status` for aggregate runtime/coverage metrics.
+### Conversation workspace
+- Redesigned **Conversation Detail** page:
+  - Two-column layout: timeline (left) + draft panel + expanded message (right)
+  - Timeline sorted newest-first; each item shows AI-generated one-sentence summary
+  - Click any timeline item to expand full email body on the right
+  - Draft panel auto-loads on page open; context-aware (reply vs. follow-up)
+  - Approve & Queue button moves draft directly to outreach queue
+  - Full-width collapsible sections: Opportunity Snapshot + Conversation Recap & Talking Points
+- Active Conversations list shows most recent message (inbound or outbound) with "Customer replied" signal
 
-### Outreach operating model
-- Added Dry Run vs Production mode toggle in app (`/api/operator/mode`).
-- Built `approve + schedule` and `send now` flows for queue items (`/api/outreach/{log_id}/approve-send`).
-- Queue behavior now supports:
-  - pending approval
-  - approved/scheduled waiting to send
-  - sent
-  - failed
-- Added scheduled send default logic (business-hour aware) and due-message sender worker.
-- Kept scheduled items in queue until actually sent.
+### Draft generation
+- Reply drafts: read full conversation thread + customer job history; answer specific questions with real domain knowledge (HVAC filter lifespans, equipment ages, etc.)
+- Follow-up drafts: include full previous outreach thread so draft explicitly references what was sent
+- Body normalization: collapses single newlines within paragraphs to prevent broken email formatting
+- Draft panel shows informative error if no sent emails exist for the customer
 
-### Conversation UX
-- Reworked **Active Conversations** cards for operational triage:
-  - color-coded by conversation health
-  - last outbound snapshot
-  - needs-response/follow-up signal
-  - opportunity estimate and job type
-- Built separate **Conversation Detail** page (`/conversations/{customer_id}`):
-  - operator recap section in plain English
-  - discussion summary + structured briefing fields
-  - talking points + operator tips
-  - conversation-only vertical timeline (message events only)
-  - expandable selected-message panel
-  - opportunity snapshot + auto next steps
-- Moved account-life timeline concerns to customer context (not conversation timeline).
+### Dashboard
+- "View all →" now scrolls to browse section and activates tab via JS
+- Live search box on browse card — filter any customer by name in real time
 
-### Data model / DB alignment
-- Added/used `customers.customer_profile` with fields:
-  - `relationship_history`
-  - `topics_discussed`
-  - `customer_tone`
-  - `prior_concerns`
-  - `response_patterns`
-  - `interest_signals`
-  - `context_notes`
-  - `analyzed_at`
-- Added/used `outreach_logs.gmail_thread_id` for thread-based reply detection.
-- Confirmed schema patching path in app startup.
+### Sidebar
+- Attention badge on Conversations nav item (needs_response + needs_follow_up count)
 
-### Deployment hardening
-- Updated Procfile entrypoint to `python -m api.run`.
-- Added `api/run.py` to resolve `PORT` robustly in Railway.
-- Normalized DB URLs in `core/database.py` (supports `postgres://` → `postgresql://`).
-- Added startup DB init retry loop in `api/app.py` for transient DB boot races.
-- Added env trimming in config parser to reduce whitespace misconfiguration failures.
+### Timestamp handling
+- All timestamps stored as UTC; display filter converts to Eastern (EDT/EST auto via `America/New_York`)
+- Fixed Gmail inbound timestamp bug: was stripping timezone before UTC conversion, storing local EDT as naive datetime
+- Migration script `data/fix_inbound_timestamps.py` corrects existing inbound logs (adds EDT offset)
+- Railway Postgres: run `UPDATE outreach_logs SET sent_at = sent_at + INTERVAL '4 hours' WHERE direction = 'inbound' AND gmail_thread_id IS NOT NULL AND sent_at IS NOT NULL;` once to fix existing records
+
+### Railway / infra
+- Railway CLI workflow confirmed: `brew install railway` → `railway login` → `railway link` → `railway connect Postgres`
+- Public networking must be enabled on Postgres service for external psql access
 
 ---
 
@@ -81,65 +58,58 @@
 | 1 | Foundation (models/config/DB) | ✅ Complete | Stable |
 | 2 | Tone Profiler + Dashboard UI | ✅ Complete | Stable |
 | 3 | Reactivation Analyzer + Approval Queue | ✅ Complete | Stable |
-| 4 | Gmail Send + Follow-up Intelligence | 🟡 In Progress | Core done, scheduler automation + deploy polish pending |
+| 4 | Gmail Send + Follow-up Intelligence + Conversation UX | ✅ Complete | Fully operational |
 | 5 | SMS Channel (Twilio) | ⬜ Not Started | Planned |
 | 6 | Booking + Slot Management | ⬜ Not Started | Planned |
 | 7+ | Reminders, Calendar sync, onboarding expansion | ⬜ Planned | Future |
 
 ---
 
-## Phase 4 Breakdown
+## Phase 4 — All Done
 
-### Implemented
 - [x] Gmail send path on approval/send-now
 - [x] Thread ID persistence on outbound logs
-- [x] Customer Analyzer agent (`agents/customer_analyzer.py`)
-- [x] Reply Detector agent (`agents/reply_detector.py`)
-- [x] Follow-up Sequencer agent (`agents/follow_up.py`)
+- [x] Customer Analyzer agent
+- [x] Reply Detector agent (background thread, every 15 min)
+- [x] Follow-up Sequencer agent
 - [x] Reactivation agent integrated with analyzer context
-- [x] Active Conversations page
-- [x] Conversation Detail page (recap + timeline + opportunity/next steps)
-- [x] Outreach queue redesign + action grouping
+- [x] Active Conversations page (health state, attention badge)
+- [x] Conversation Detail page (AI timeline summaries, draft panel, expandable messages)
+- [x] Outreach queue redesign + approve/schedule/send-now flow
 - [x] Production/dry-run toggle in UI
 - [x] Scheduled send worker loop in app
-
-### Remaining for Phase 4 closeout
-- [ ] Add reliable recurring scheduler wiring for `reply_detector` + `follow_up` (currently manual/CLI)
-- [ ] Add operator-facing run controls for non-reactivation agents (optional polish)
-- [ ] Finish Railway deploy debugging and verify healthy boots + web responses after fresh deploy
-- [ ] Rotate exposed secrets after successful deploy validation
+- [x] Timestamp UTC normalization + EDT/EST display filter
+- [x] Dashboard browse-all with search
 
 ---
 
-## Deployment Debug Checklist (Current Priority)
+## Known Risks / Watch-outs
 
-1. Confirm Railway **Web** service variables:
-   - `DATABASE_URL` = internal Railway URL (`postgres.railway.internal`)
-   - `ANTHROPIC_API_KEY`
-   - `GOOGLE_CLIENT_ID`
-   - `GOOGLE_CLIENT_SECRET`
-2. Do not set a custom `PORT`; Railway injects it.
-3. Confirm deploy includes:
-   - `Procfile` using `python -m api.run`
-   - `api/run.py`
-   - DB URL normalization + startup retry code
-4. If app still fails:
-   - capture first traceback from Railway deploy/runtime logs
-   - capture request ID from the Railway error page
-   - verify DB connectivity from Railway runtime context
+- `reply_detector` + `follow_up` run as background threads (15-min poll); not backed by a durable scheduler — will miss cycles on dyno restart. Acceptable for now; move to cron/Celery if reliability becomes an issue.
+- Postgres password was shared in a chat session — **rotate credentials** in Railway (Postgres → Settings → Regenerate).
+- Single-tenant: `OPERATOR_ID = 1` hardcoded throughout.
 
 ---
 
-## Local Run Modes
+## Backlog
 
-### Local (SQLite)
+- **Durable scheduler**: wire `reply_detector` and `follow_up` to a cron or task queue so they survive restarts
+- **Email draft quality loop**: operator feedback signal, prompt A/B testing, tone calibration refinement
+- **Voice profiles from Gmail**: generate profiles from actual sent mail instead of manual seed
+- **Voice profile config screen**: let operator fine-tune each voice's response style
+- **SMS channel**: Twilio integration (Phase 5)
+- **Booking + slot management** (Phase 6)
+
+---
+
+## Local Run
+
 ```bash
+# SQLite (default local dev)
 DATABASE_URL=sqlite:///./foreman.db venv/bin/python -m api.run
-```
 
-### Local against Railway public DB
-```bash
-DATABASE_URL=postgresql://<user>:<pass>@hopper.proxy.rlwy.net:<port>/railway venv/bin/python -m api.run
+# Against Railway Postgres (public proxy must be enabled)
+DATABASE_URL=postgresql://<user>:<pass>@hopper.proxy.rlwy.net:26095/railway venv/bin/python -m api.run
 ```
 
 ### Manual agent runs
@@ -153,65 +123,30 @@ venv/bin/python -m agents.follow_up --operator-id 1 --limit 20
 
 ---
 
-## Environment Variables
-
-```bash
-ANTHROPIC_API_KEY
-GOOGLE_CLIENT_ID
-GOOGLE_CLIENT_SECRET
-GOOGLE_REDIRECT_URI
-DATABASE_URL
-APP_ENV
-APP_PORT
-DRY_RUN
-SENDGRID_API_KEY
-SENDGRID_FROM_EMAIL
-TWILIO_ACCOUNT_SID
-TWILIO_AUTH_TOKEN
-TWILIO_FROM_NUMBER
-```
-
----
-
 ## Decisions Log
 
 | Date | Topic | Decision |
 |---|---|---|
 | 2026-03-08 | Product direction | Reactivation-first wedge before full FSM stack |
 | 2026-03-09 | Deployment platform | Railway for Python + Postgres simplicity |
-| 2026-03-10 | Agent naming | “Reactivation” renamed in UI to **Reactivation Analyzer** |
+| 2026-03-10 | Agent naming | "Reactivation" renamed in UI to **Reactivation Analyzer** |
 | 2026-03-10 | Operator safety | Added Dry Run / Production mode toggle |
 | 2026-03-10 | Queue behavior | Approved but unsent drafts remain visible as scheduled/pending |
 | 2026-03-10 | Conversation UX | Separate conversation page; conversation-only timeline |
 | 2026-03-10 | Deploy hardening | Added startup retries, DB URL normalization, and Python launcher |
+| 2026-03-11 | Timestamps | All stored as UTC; display via `America/New_York` zoneinfo filter |
+| 2026-03-11 | Draft context | Follow-up drafts now include full thread; reply drafts include job history + domain knowledge |
 
 ---
 
-## To-Do / Backlog
-
-- **Email draft fine-tuning**: The AI-generated draft quality (formatting, tone calibration, personalization depth) needs iterative improvement. Future work: prompt engineering, operator feedback loop, A/B testing different draft styles.
-
----
-
-## Known Risks
-
-- Secrets were exposed in chat/local env during troubleshooting and must be rotated.
-- Railway app still reported “Application failed to respond” after one deploy; resolved via background DB init + deadlock fix.
-- `reply_detector` runs in a background thread (every 15 min); not yet backed by a durable scheduler (e.g., cron/Celery) — will miss cycles if the dyno restarts mid-poll.
-
----
-
-## New Chat Resume Prompt (General)
-
-Use this when resuming build work:
+## New Chat Resume Prompt
 
 ```text
-I’m continuing Foreman from PROJECT_PLAN.md (attached).
-Current focus: Phase 4 closeout and deploy stabilization.
+I'm continuing Foreman from PROJECT_PLAN.md.
+Phase 4 is complete. Next focus: backlog items or Phase 5 (SMS/Twilio).
 
 Please:
 1) Read PROJECT_PLAN.md and README.md first.
-2) Verify implemented features against code (agents, conversations UI, outreach queue workflow, dry-run/production mode).
-3) Continue from the “Remaining for Phase 4 closeout” checklist.
-4) Make code changes directly, run validation, and summarize exactly what changed.
+2) Check the Backlog section for current priorities.
+3) Make code changes directly and summarize what changed.
 ```
