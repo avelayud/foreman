@@ -1483,6 +1483,8 @@ def generate_conversation_draft(customer_id: int):
         if inbound_logs and effective_status not in ("booked", "sequence_complete", "unsubscribed", "replied"):
             effective_status = "replied"
         is_reply = bool(last_inbound and (not last_outbound_at or last_inbound_at > last_outbound_at))
+        # Serialize ORM attributes before session closes to avoid DetachedInstanceError
+        last_outbound_subject = (last_outbound.subject or "our previous email") if last_outbound else "our previous email"
 
     voice_section = (
         f"Write in the voice of {voice['name']} ({voice.get('role', 'team member')}).\n\n"
@@ -1507,7 +1509,7 @@ def generate_conversation_draft(customer_id: int):
                 name=cust_name,
                 service_type=cust_service_type,
                 days=days,
-                last_subject=(last_outbound.subject or "our previous email") if last_outbound else "our previous email",
+                last_subject=last_outbound_subject,
             )
         message = client.messages.create(
             model=config.CLAUDE_MODEL,
