@@ -33,49 +33,63 @@
   .filter-tab .count{font-size:10px;font-family:'IBM Plex Mono',monospace;margin-left:4px;opacity:0.75}
 
   /* ── PRIORITY TABLE ── */
+  /* Cols: Score | Customer | Last Service | Est.Value | Status | Action | Mark Booked | ··· */
+  --pt-cols: 52px 185px 110px 82px 112px 122px 108px 40px;
   .priority-table{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;box-shadow:var(--shadow-sm)}
-  .pt-head{display:grid;grid-template-columns:64px 1fr 120px 90px 100px 130px 130px;padding:10px 18px;background:var(--navy-soft);border-bottom:1px solid var(--border);gap:8px}
-  .pt-th{font-size:9px;font-family:'IBM Plex Mono',monospace;letter-spacing:1.4px;text-transform:uppercase;color:var(--text-3);font-weight:400}
-  .pt-row{display:grid;grid-template-columns:64px 1fr 120px 90px 100px 130px 130px;padding:13px 18px;border-bottom:1px solid var(--border);align-items:center;gap:8px;transition:background 0.1s;cursor:pointer}
+  .pt-head{display:grid;grid-template-columns:var(--pt-cols);padding:9px 16px;background:var(--navy-soft);border-bottom:1px solid var(--border);gap:10px;align-items:center}
+  .pt-th{font-size:9px;font-family:'IBM Plex Mono',monospace;letter-spacing:1.4px;text-transform:uppercase;color:var(--text-3);font-weight:400;white-space:nowrap}
+  .pt-row{display:grid;grid-template-columns:var(--pt-cols);padding:11px 16px;border-bottom:1px solid var(--border);align-items:center;gap:10px;transition:background 0.1s}
   .pt-row:last-child{border-bottom:none}
   .pt-row:hover{background:var(--navy-soft)}
   .pt-row.hidden{display:none}
 
   /* Score badge */
-  .score-badge{display:inline-flex;align-items:center;justify-content:center;width:40px;height:40px;border-radius:8px;font-family:'IBM Plex Mono',monospace;font-size:14px;font-weight:700;flex-shrink:0}
+  .score-badge{display:inline-flex;align-items:center;justify-content:center;width:38px;height:38px;border-radius:7px;font-family:'IBM Plex Mono',monospace;font-size:13px;font-weight:700;flex-shrink:0}
   .score-high{background:#d1fae5;color:#065f46;border:1.5px solid #6ee7b7}
   .score-med{background:#fef3c7;color:#92400e;border:1.5px solid #fcd34d}
   .score-low{background:#fee2e2;color:#991b1b;border:1.5px solid #fca5a5}
 
-  /* Customer name col */
-  .c-name{font-size:13.5px;font-weight:600;color:var(--navy);line-height:1.3}
-  .c-email{font-size:11px;color:var(--text-3);font-family:'IBM Plex Mono',monospace;margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  /* Customer col — name + email on ONE line */
+  .c-line{display:flex;align-items:baseline;gap:6px;min-width:0;overflow:hidden}
+  .c-name{font-size:13px;font-weight:600;color:var(--navy);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex-shrink:0;max-width:110px}
+  .c-sep{font-size:10px;color:var(--text-4);flex-shrink:0}
+  .c-email{font-size:10.5px;color:var(--text-3);font-family:'IBM Plex Mono',monospace;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
 
-  /* Last service col */
-  .last-svc-date{font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--text-2);font-weight:500}
-  .last-svc-ago{font-size:10.5px;color:var(--text-3);margin-top:2px}
-  .dormant-red{color:var(--red)!important}
-  .dormant-amber{color:var(--amber)!important}
+  /* Last service col — single line */
+  .svc-line{font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:var(--text-2);white-space:nowrap}
+  .svc-ago{font-size:10px;color:var(--text-3);margin-left:4px}
+  .dormant-red .svc-ago{color:var(--red)!important}
+  .dormant-amber .svc-ago{color:var(--amber)!important}
 
   /* Est value col */
-  .est-val{font-family:'IBM Plex Mono',monospace;font-size:13px;font-weight:600;color:var(--green)}
+  .est-val{font-family:'IBM Plex Mono',monospace;font-size:12.5px;font-weight:600;color:var(--green);white-space:nowrap}
 
   /* Status pills */
-  .os-pill{display:inline-block;padding:3px 9px;border-radius:12px;font-size:10.5px;font-weight:600;font-family:'IBM Plex Mono',monospace;white-space:nowrap}
+  .os-pill{display:inline-block;padding:3px 9px;border-radius:12px;font-size:10px;font-weight:600;font-family:'IBM Plex Mono',monospace;white-space:nowrap}
   .s-none{background:#f1f5f9;color:var(--text-3)}
   .s-contacted{background:var(--blue-pale);color:var(--blue)}
   .s-replied{background:var(--amber-pale);color:var(--amber)}
   .s-booked{background:var(--green-pale);color:var(--green)}
   .s-unsub{background:#f8f8f8;color:var(--text-4)}
 
-  /* Action button col */
-  .act-btn{font-size:11.5px;padding:6px 12px;border-radius:6px;cursor:pointer;font-family:'IBM Plex Sans',sans-serif;font-weight:500;white-space:nowrap;border:none;transition:all 0.15s;text-decoration:none;display:inline-block;text-align:center}
-  .act-draft{background:var(--navy);color:#fff}
+  /* Action buttons */
+  .act-btn{font-size:11px;padding:5px 11px;border-radius:6px;cursor:pointer;font-family:'IBM Plex Sans',sans-serif;font-weight:500;white-space:nowrap;border:1px solid transparent;transition:all 0.15s;text-decoration:none;display:inline-block;text-align:center;line-height:1.4}
+  .act-draft{background:var(--navy);color:#fff;border-color:var(--navy)}
   .act-draft:hover{background:#1a2a4a}
-  .act-view{background:var(--surface);color:var(--navy);border:1px solid var(--border-2)}
-  .act-view:hover{background:var(--navy-soft)}
-  .act-book{background:var(--green);color:#fff}
+  .act-book{background:var(--green);color:#fff;border-color:var(--green)}
   .act-book:hover{background:#156347}
+  .act-booked-done{font-size:10.5px;color:var(--green);font-family:'IBM Plex Mono',monospace;font-weight:600}
+  .act-empty{font-size:10.5px;color:var(--text-4);font-family:'IBM Plex Mono',monospace}
+
+  /* ··· more menu */
+  .more-wrap{position:relative;display:flex;justify-content:center}
+  .more-btn{background:none;border:1px solid var(--border);border-radius:6px;width:28px;height:28px;cursor:pointer;color:var(--text-3);font-size:14px;line-height:1;display:flex;align-items:center;justify-content:center;transition:all 0.15s;flex-shrink:0}
+  .more-btn:hover{border-color:var(--border-2);color:var(--navy);background:var(--navy-soft)}
+  .more-dropdown{display:none;position:absolute;right:0;top:calc(100% + 4px);background:var(--surface);border:1px solid var(--border);border-radius:8px;box-shadow:var(--shadow-md);min-width:160px;z-index:100;overflow:hidden}
+  .more-dropdown.open{display:block}
+  .more-item{display:block;padding:9px 14px;font-size:12.5px;color:var(--text-2);text-decoration:none;transition:background 0.1s;font-family:'IBM Plex Sans',sans-serif;white-space:nowrap}
+  .more-item:hover{background:var(--navy-soft);color:var(--navy)}
+  .more-item.danger{color:var(--red)}
 
   /* Empty state */
   .empty-state{padding:40px;text-align:center;color:var(--text-3);font-size:13px}
@@ -175,81 +189,86 @@
     <div class="pt-th">Customer</div>
     <div class="pt-th">Last Service</div>
     <div class="pt-th">Est. Value</div>
-    <div class="pt-th">Tier</div>
     <div class="pt-th">Status</div>
     <div class="pt-th">Action</div>
+    <div class="pt-th">Mark Booked</div>
+    <div class="pt-th"></div>
   </div>
 
   {% for c in priority_queue %}
   <div class="pt-row"
        data-tier="{{ c.priority_tier }}"
-       data-status="{{ c.reactivation_status }}"
-       onclick="window.location='/customer/{{ c.id }}'">
+       data-status="{{ c.reactivation_status }}">
 
     {# Score badge #}
     <div>
       <div class="score-badge {{ c.score_cls }}">{{ c.score }}</div>
     </div>
 
-    {# Customer name #}
-    <div style="min-width:0">
-      <div class="c-name">{{ c.name }}</div>
-      <div class="c-email">{{ c.email or '—' }}</div>
+    {# Customer — name · email on one line #}
+    <div class="c-line">
+      <span class="c-name">{{ c.name }}</span>
+      <span class="c-sep">·</span>
+      <span class="c-email">{{ c.email or '—' }}</span>
     </div>
 
-    {# Last service #}
-    <div>
+    {# Last service — date + "Xd ago" on one line #}
+    <div class="{% if c.days_dormant >= 365 %}dormant-red{% elif c.days_dormant >= 180 %}dormant-amber{% endif %}">
       {% if c.last_service_date %}
-      <div class="last-svc-date">{{ c.last_service_date.strftime('%b %-d, %Y') }}</div>
-      <div class="last-svc-ago {% if c.days_dormant >= 365 %}dormant-red{% elif c.days_dormant >= 180 %}dormant-amber{% endif %}">
-        {{ c.days_dormant }}d ago
-      </div>
+      <span class="svc-line">{{ c.last_service_date.strftime('%b %-d, %Y') }}</span>
+      <span class="svc-ago">{{ c.days_dormant }}d</span>
       {% else %}
-      <div class="last-svc-date" style="color:var(--text-4)">—</div>
+      <span class="svc-line" style="color:var(--text-4)">—</span>
       {% endif %}
     </div>
 
-    {# Estimated job value #}
+    {# Est. job value #}
     <div>
       {% if c.estimated_job_value and c.estimated_job_value > 0 %}
-      <div class="est-val">${{ "{:,.0f}".format(c.estimated_job_value) }}</div>
+      <span class="est-val">${{ "{:,.0f}".format(c.estimated_job_value) }}</span>
       {% else %}
-      <div style="color:var(--text-4);font-family:'IBM Plex Mono',monospace;font-size:12px">—</div>
+      <span class="act-empty">—</span>
       {% endif %}
     </div>
 
-    {# Priority tier #}
-    <div>
-      {% if c.priority_tier == 'high' %}
-      <span class="os-pill" style="background:#d1fae5;color:#065f46">High</span>
-      {% elif c.priority_tier == 'medium' %}
-      <span class="os-pill" style="background:#fef3c7;color:#92400e">Medium</span>
-      {% else %}
-      <span class="os-pill" style="background:#f1f5f9;color:var(--text-3)">Low</span>
-      {% endif %}
-    </div>
-
-    {# Outreach status #}
+    {# Outreach status pill #}
     <div>
       <span class="os-pill {{ c.outreach_status_cls }}">{{ c.outreach_status }}</span>
     </div>
 
-    {# Action button #}
+    {# Primary action #}
     <div onclick="event.stopPropagation()">
-      {% if c.reactivation_status == 'booked' %}
-        <span style="font-size:11px;color:var(--green);font-family:'IBM Plex Mono',monospace">Booked</span>
-      {% elif c.reactivation_status in ('replied',) %}
-        <a href="/conversations/{{ c.id }}" class="act-btn act-view">View Convo</a>
-      {% elif c.reactivation_status in ('outreach_sent','sequence_step_2','sequence_step_3') %}
-        <div style="display:flex;gap:6px;flex-wrap:wrap">
-          <a href="/conversations/{{ c.id }}" class="act-btn act-view">Convo</a>
-          <button class="act-btn act-book" onclick="openBookModal({{ c.id }}, '{{ c.name|replace("'","\\'")|e }}')">Mark Booked</button>
-        </div>
-      {% elif c.reactivation_status == 'unsubscribed' %}
-        <span style="font-size:11px;color:var(--text-4);font-family:'IBM Plex Mono',monospace">Unsubscribed</span>
-      {% else %}
+      {% if c.reactivation_status == 'never_contacted' %}
         <a href="/customer/{{ c.id }}" class="act-btn act-draft">Draft Outreach</a>
+      {% elif c.reactivation_status == 'booked' %}
+        <span class="act-booked-done">Booked</span>
+      {% elif c.reactivation_status == 'unsubscribed' %}
+        <span class="act-empty">Unsubscribed</span>
+      {% else %}
+        <span class="act-empty">—</span>
       {% endif %}
+    </div>
+
+    {# Mark Booked column #}
+    <div onclick="event.stopPropagation()">
+      {% if c.reactivation_status not in ('booked', 'unsubscribed', 'never_contacted') %}
+        <button class="act-btn act-book" onclick="openBookModal({{ c.id }}, '{{ c.name|replace("'","\\'")|e }}')">Mark Booked</button>
+      {% elif c.reactivation_status == 'booked' %}
+        <span class="act-booked-done">Done</span>
+      {% else %}
+        <span class="act-empty">—</span>
+      {% endif %}
+    </div>
+
+    {# ··· more menu #}
+    <div class="more-wrap" onclick="event.stopPropagation()">
+      <button class="more-btn" onclick="toggleMore(event, this)" title="More options">⋯</button>
+      <div class="more-dropdown">
+        <a href="/customer/{{ c.id }}" class="more-item">View Customer</a>
+        {% if c.reactivation_status not in ('never_contacted', 'unsubscribed') %}
+        <a href="/conversations/{{ c.id }}" class="more-item">View Conversation</a>
+        {% endif %}
+      </div>
     </div>
   </div>
   {% else %}
@@ -295,6 +314,20 @@
       row.classList.toggle('hidden', !show);
     });
   }
+
+  // ── ··· more menu ──────────────────────────────────────────────────────────
+  function toggleMore(e, btn) {
+    e.stopPropagation();
+    const dropdown = btn.nextElementSibling;
+    const isOpen = dropdown.classList.contains('open');
+    // close all open dropdowns
+    document.querySelectorAll('.more-dropdown.open').forEach(d => d.classList.remove('open'));
+    if (!isOpen) dropdown.classList.add('open');
+  }
+  // close on outside click
+  document.addEventListener('click', () => {
+    document.querySelectorAll('.more-dropdown.open').forEach(d => d.classList.remove('open'));
+  });
 
   // ── Mark as Booked modal ───────────────────────────────────────────────────
   let _bookCustomerId = null;
