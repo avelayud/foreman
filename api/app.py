@@ -18,6 +18,7 @@ JSON API:
 
 import json
 import os
+import sys
 import threading
 import time
 from datetime import datetime, timedelta, timezone
@@ -687,6 +688,35 @@ def _conversation_recap(customer: dict, stage: dict, health: dict, logs: list[di
 
 # ── Startup ───────────────────────────────────────────────────────────────────
 
+def _try_init_db_once(timeout_seconds: float = 8.0) -> None:
+    """Run init_db() in a sub-thread with a hard wall-clock timeout.
+
+    psycopg2's connect_timeout only covers the TCP handshake; DNS hangs are
+    not covered and can block indefinitely. This wrapper enforces a true
+    deadline regardless of where the hang occurs.
+    """
+    done = threading.Event()
+    error_holder: list[Exception | None] = [None]
+
+    def _worker():
+        try:
+            init_db()
+        except Exception as exc:
+            error_holder[0] = exc
+        finally:
+            done.set()
+
+    t = threading.Thread(target=_worker, daemon=True)
+    t.start()
+    if not done.wait(timeout_seconds):
+        raise RuntimeError(
+            f"DB init timed out after {timeout_seconds}s "
+            f"(DATABASE_URL={os.getenv('DATABASE_URL', 'not set')[:40]}…)"
+        )
+    if error_holder[0]:
+        raise error_holder[0]
+
+
 def _init_db_background():
     """
     Initialise the database in a background thread so uvicorn can bind to PORT
@@ -694,22 +724,27 @@ def _init_db_background():
     transient connection failure at boot time must not crash the process.
     """
     global _db_ready, _db_init_error
+    print("[db-init] starting background DB init…", flush=True, file=sys.stderr)
     for attempt in range(1, DB_STARTUP_MAX_ATTEMPTS + 1):
         try:
-            init_db()
+            _try_init_db_once(timeout_seconds=8.0)
             _db_ready = True
             _db_init_error = None
-            print("✅ Database ready.")
+            print("✅ Database ready.", flush=True, file=sys.stderr)
             _start_scheduled_sender()
             return
         except Exception as exc:
             _db_init_error = exc
             print(
-                f"[startup] init_db attempt {attempt}/{DB_STARTUP_MAX_ATTEMPTS} failed: {exc}"
+                f"[db-init] attempt {attempt}/{DB_STARTUP_MAX_ATTEMPTS} failed: {exc}",
+                flush=True, file=sys.stderr,
             )
             if attempt < DB_STARTUP_MAX_ATTEMPTS:
                 time.sleep(DB_STARTUP_RETRY_SECONDS)
-    print(f"[startup] FATAL: DB init failed after all retries: {_db_init_error}")
+    print(
+        f"[db-init] FATAL: all retries exhausted. Last error: {_db_init_error}",
+        flush=True, file=sys.stderr,
+    )
 
 
 @app.on_event("startup")
@@ -1144,7 +1179,22 @@ def health():
         "status": "ok",
         "db_ready": _db_ready,
         "db_error": str(_db_init_error) if _db_init_error else None,
+        "database_url_prefix": os.getenv("DATABASE_URL", "not set")[:40],
     }
+
+
+@app.get("/debug-db")
+def debug_db():
+    """Synchronously attempt a DB connection and return the result. Temp diagnostics only."""
+    db_url = os.getenv("DATABASE_URL", "not set")
+    try:
+        _try_init_db_once(timeout_seconds=8.0)
+        return {"result": "ok", "db_url_prefix": db_url[:40]}
+    except Exception as exc:
+        return JSONResponse(
+            status_code=500,
+            content={"result": "error", "error": str(exc), "db_url_prefix": db_url[:40]},
+        )
 
 
 @app.get("/api/operator/{operator_id}")
