@@ -33,11 +33,11 @@
   .filter-tab .count{font-size:10px;font-family:'IBM Plex Mono',monospace;margin-left:4px;opacity:0.75}
 
   /* ── PRIORITY TABLE ── */
-  /* Cols: Score | Customer | Est.Value | Last Service | Last Interaction | Status | Action | Mark as Booked | ··· */
+  /* Cols: Score | Customer | Est.Value | Last Service | Dormant | Last Interaction | Status | Action | Mark as Booked | ··· */
   .priority-table{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;box-shadow:var(--shadow-sm)}
-  .pt-head{display:grid;grid-template-columns:52px 1fr 88px 130px 150px 112px 122px 130px 40px;padding:9px 16px;background:var(--navy-soft);border-bottom:1px solid var(--border);gap:10px;align-items:center}
+  .pt-head{display:grid;grid-template-columns:52px 1fr 80px 108px 68px 138px 108px 130px 122px 40px;padding:9px 16px;background:var(--navy-soft);border-bottom:1px solid var(--border);gap:10px;align-items:center}
   .pt-th{font-size:9px;font-family:'IBM Plex Mono',monospace;letter-spacing:1.4px;text-transform:uppercase;color:var(--text-3);font-weight:400;white-space:nowrap}
-  .pt-row{display:grid;grid-template-columns:52px 1fr 88px 130px 150px 112px 122px 130px 40px;padding:11px 16px;border-bottom:1px solid var(--border);align-items:center;gap:10px;transition:background 0.1s}
+  .pt-row{display:grid;grid-template-columns:52px 1fr 80px 108px 68px 138px 108px 130px 122px 40px;padding:11px 16px;border-bottom:1px solid var(--border);align-items:center;gap:10px;transition:background 0.1s}
   .pt-row:last-child{border-bottom:none}
   .pt-row:hover{background:var(--navy-soft)}
   .pt-row.hidden{display:none}
@@ -51,11 +51,11 @@
   /* Customer col */
   .c-name{font-size:13px;font-weight:600;color:var(--navy);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block}
 
-  /* Last service col — single line */
+  /* Last service col */
   .svc-line{font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:var(--text-2);white-space:nowrap}
-  .svc-ago{font-size:10px;color:var(--text-3);margin-left:4px}
-  .dormant-red .svc-ago{color:var(--red)!important}
-  .dormant-amber .svc-ago{color:var(--amber)!important}
+  .svc-ago{font-size:11px;color:var(--text-3);white-space:nowrap}
+  .dormant-red{color:var(--red)!important}
+  .dormant-amber{color:var(--amber)!important}
 
   /* Est value col */
   .est-val{font-family:'IBM Plex Mono',monospace;font-size:12.5px;font-weight:600;color:var(--green);white-space:nowrap}
@@ -72,9 +72,16 @@
   .act-btn{font-size:11px;padding:5px 11px;border-radius:6px;cursor:pointer;font-family:'IBM Plex Sans',sans-serif;font-weight:500;white-space:nowrap;border:1px solid transparent;transition:all 0.15s;text-decoration:none;display:inline-block;text-align:center;line-height:1.4}
   .act-draft{background:var(--navy);color:#fff;border-color:var(--navy)}
   .act-draft:hover{background:#1a2a4a}
+  .act-followup{background:var(--blue-pale);color:var(--blue);border-color:#93c5fd}
+  .act-followup:hover{background:#dbeafe;border-color:var(--blue)}
+  .act-call{background:var(--amber-pale);color:var(--amber);border-color:#fcd34d;font-weight:600}
+  .act-call:hover{background:#fef3c7;border-color:var(--amber)}
   .act-book{background:var(--green);color:#fff;border-color:var(--green)}
   .act-book:hover{background:#156347}
-  .act-booked-done{font-size:10.5px;color:var(--green);font-family:'IBM Plex Mono',monospace;font-weight:600}
+  .act-badge{display:inline-block;padding:3px 9px;border-radius:12px;font-size:10px;font-weight:600;font-family:'IBM Plex Mono',monospace;white-space:nowrap}
+  .act-badge-booked{background:var(--green-pale);color:var(--green)}
+  .act-badge-unsub{background:#f1f5f9;color:var(--text-4)}
+  .act-badge-done{background:var(--navy-soft);color:var(--text-3)}
   .act-empty{font-size:10.5px;color:var(--text-4);font-family:'IBM Plex Mono',monospace}
 
   /* ··· more menu */
@@ -185,6 +192,7 @@
     <div class="pt-th">Customer</div>
     <div class="pt-th">Est. Value</div>
     <div class="pt-th">Last Service</div>
+    <div class="pt-th">Dormant</div>
     <div class="pt-th">Last Interaction</div>
     <div class="pt-th">Status</div>
     <div class="pt-th">Action</div>
@@ -216,13 +224,21 @@
       {% endif %}
     </div>
 
-    {# Last service — date + "Xd ago" on one line #}
-    <div class="{% if c.days_dormant >= 365 %}dormant-red{% elif c.days_dormant >= 180 %}dormant-amber{% endif %}">
+    {# Last service — date only #}
+    <div>
       {% if c.last_service_date %}
       <span class="svc-line">{{ c.last_service_date.strftime('%b %-d, %Y') }}</span>
-      <span class="svc-ago">{{ c.days_dormant }}d</span>
       {% else %}
       <span class="svc-line" style="color:var(--text-4)">—</span>
+      {% endif %}
+    </div>
+
+    {# Dormant days — separate column #}
+    <div>
+      {% if c.days_dormant is not none %}
+      <span class="svc-ago {% if c.days_dormant >= 365 %}dormant-red{% elif c.days_dormant >= 180 %}dormant-amber{% endif %}" style="font-family:'IBM Plex Mono',monospace;font-size:11.5px;margin-left:0">{{ c.days_dormant }}d</span>
+      {% else %}
+      <span class="act-empty">—</span>
       {% endif %}
     </div>
 
@@ -242,14 +258,20 @@
       <span class="os-pill {{ c.outreach_status_cls }}">{{ c.outreach_status }}</span>
     </div>
 
-    {# Primary action #}
+    {# Primary action — cycle-aware #}
     <div onclick="event.stopPropagation()">
       {% if c.reactivation_status == 'never_contacted' %}
         <a href="/customer/{{ c.id }}" class="act-btn act-draft">Draft Outreach</a>
+      {% elif c.reactivation_status in ('outreach_sent', 'sequence_step_2', 'sequence_step_3') %}
+        <a href="/conversations/{{ c.id }}" class="act-btn act-followup">Draft Follow-up</a>
+      {% elif c.reactivation_status == 'replied' %}
+        <a href="/conversations/{{ c.id }}" class="act-btn act-call">Book Call</a>
       {% elif c.reactivation_status == 'booked' %}
-        <span class="act-booked-done">Booked</span>
+        <span class="act-badge act-badge-booked">Booked</span>
+      {% elif c.reactivation_status == 'sequence_complete' %}
+        <span class="act-badge act-badge-done">Seq. Done</span>
       {% elif c.reactivation_status == 'unsubscribed' %}
-        <span class="act-empty">Unsubscribed</span>
+        <span class="act-badge act-badge-unsub">Unsubscribed</span>
       {% else %}
         <span class="act-empty">—</span>
       {% endif %}
