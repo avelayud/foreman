@@ -34,11 +34,10 @@
 
   /* ── PRIORITY TABLE ── */
   /* Cols: Score | Customer | Last Service | Est.Value | Status | Action | Mark Booked | ··· */
-  --pt-cols: 52px 185px 110px 82px 112px 122px 108px 40px;
   .priority-table{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;box-shadow:var(--shadow-sm)}
-  .pt-head{display:grid;grid-template-columns:var(--pt-cols);padding:9px 16px;background:var(--navy-soft);border-bottom:1px solid var(--border);gap:10px;align-items:center}
+  .pt-head{display:grid;grid-template-columns:52px 185px 110px 82px 112px 122px 108px 40px;padding:9px 16px;background:var(--navy-soft);border-bottom:1px solid var(--border);gap:10px;align-items:center}
   .pt-th{font-size:9px;font-family:'IBM Plex Mono',monospace;letter-spacing:1.4px;text-transform:uppercase;color:var(--text-3);font-weight:400;white-space:nowrap}
-  .pt-row{display:grid;grid-template-columns:var(--pt-cols);padding:11px 16px;border-bottom:1px solid var(--border);align-items:center;gap:10px;transition:background 0.1s}
+  .pt-row{display:grid;grid-template-columns:52px 185px 110px 82px 112px 122px 108px 40px;padding:11px 16px;border-bottom:1px solid var(--border);align-items:center;gap:10px;transition:background 0.1s}
   .pt-row:last-child{border-bottom:none}
   .pt-row:hover{background:var(--navy-soft)}
   .pt-row.hidden{display:none}
