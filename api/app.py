@@ -21,6 +21,7 @@ import os
 import sys
 import threading
 import time
+from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -92,6 +93,56 @@ def _get_queue_count(db) -> int:
     return db.query(OutreachLog).filter_by(
         operator_id=OPERATOR_ID, dry_run=True
     ).count()
+
+
+def _get_conversations_attention_count(db) -> int:
+    """Count conversation threads needing action (needs_response + needs_follow_up) for sidebar badge.
+    Uses two efficient queries instead of N+1 per customer."""
+    active_statuses = set(FOLLOW_UP_DUE_DAYS.keys()) | {"replied"}
+    customers = (
+        db.query(Customer.id, Customer.reactivation_status)
+        .filter(
+            Customer.operator_id == OPERATOR_ID,
+            Customer.reactivation_status.in_(active_statuses),
+        )
+        .all()
+    )
+    if not customers:
+        return 0
+    customer_ids = [c.id for c in customers]
+    status_by_id = {c.id: c.reactivation_status for c in customers}
+    logs = (
+        db.query(
+            OutreachLog.customer_id,
+            OutreachLog.direction,
+            OutreachLog.sent_at,
+            OutreachLog.created_at,
+        )
+        .filter(
+            OutreachLog.operator_id == OPERATOR_ID,
+            OutreachLog.customer_id.in_(customer_ids),
+            OutreachLog.dry_run == False,
+        )
+        .all()
+    )
+    logs_by_customer = defaultdict(list)
+    for log in logs:
+        logs_by_customer[log.customer_id].append(log)
+    count = 0
+    for cid, status in status_by_id.items():
+        clogs = logs_by_customer.get(cid, [])
+        outbound = [l for l in clogs if l.direction == "outbound"]
+        inbound = [l for l in clogs if l.direction == "inbound"]
+        last_outbound_at = max((l.sent_at or l.created_at for l in outbound), default=None)
+        last_inbound_at = max((l.sent_at or l.created_at for l in inbound), default=None)
+        # Override status if inbound logs exist but status wasn't updated yet
+        effective = status
+        if inbound and effective not in ("booked", "sequence_complete", "unsubscribed", "replied"):
+            effective = "replied"
+        health = _conversation_health(effective, last_outbound_at, last_inbound_at)
+        if health["needs_response"] or health["needs_follow_up"]:
+            count += 1
+    return count
 
 
 def _parse_iso_datetime(value: str):
@@ -481,6 +532,19 @@ def _conversation_health(status: str, last_outbound_at, last_inbound_at):
             "needs_follow_up": False,
         }
 
+    # "replied" always means the customer is waiting for our response
+    if status == "replied":
+        key = "needs_response"
+        meta = CONVERSATION_HEALTH_META[key]
+        return {
+            "key": key,
+            "label": meta["label"],
+            "chip_cls": meta["chip_cls"],
+            "rank": meta["rank"],
+            "needs_response": True,
+            "needs_follow_up": False,
+        }
+
     due_days = FOLLOW_UP_DUE_DAYS.get(status)
     if due_days and last_outbound_at and days_since(last_outbound_at) >= due_days:
         key = "needs_follow_up"
@@ -831,6 +895,7 @@ def dashboard(request: Request):
         queue_count = db.query(OutreachLog).filter_by(
             operator_id=OPERATOR_ID, dry_run=True
         ).count()
+        conversations_attention_count = _get_conversations_attention_count(db)
         operator_data = _operator_data(operator)
         customers = sorted(
             [add_segment(enrich(c)) for c in raw_customers],
@@ -876,6 +941,7 @@ def dashboard(request: Request):
         "categories": cats,
         "top_prospects": top_prospects,
         "queue_count": queue_count,
+        "conversations_attention_count": conversations_attention_count,
         "today_str": today_str,
     })
 
@@ -894,6 +960,7 @@ def customer_detail(request: Request, customer_id: int):
 
         operator_data = _operator_data(operator)
         queue_count = _get_queue_count(db)
+        conversations_attention_count = _get_conversations_attention_count(db)
         customer_data = enrich(customer)
         customer_data = add_segment(customer_data)
         customer_data["assigned_voice_id"] = customer.assigned_voice_id
@@ -939,6 +1006,7 @@ def customer_detail(request: Request, customer_id: int):
         "active": "customers",
         "operator": operator_data,
         "queue_count": queue_count,
+        "conversations_attention_count": conversations_attention_count,
         "customer": customer_data,
         "jobs": jobs,
         "logs": logs,
@@ -1001,12 +1069,14 @@ def outreach_queue(request: Request):
             )
         )
         queue_count = len(pending)
+        conversations_attention_count = _get_conversations_attention_count(db)
 
     return templates.TemplateResponse("outreach.html", {
         "request": request,
         "active": "outreach",
         "operator": operator_data,
         "queue_count": queue_count,
+        "conversations_attention_count": conversations_attention_count,
         "pending": pending,
     })
 
@@ -1045,30 +1115,39 @@ def conversations(request: Request):
             latest_inbound = inbound_logs[0] if inbound_logs else None
             last_outbound_at = _log_timestamp(latest_outbound)
             last_inbound_at = _log_timestamp(latest_inbound)
-            stage = _conversation_stage(customer.reactivation_status)
-            health = _conversation_health(customer.reactivation_status, last_outbound_at, last_inbound_at)
+            # Derive effective status from actual log activity — handles race where
+            # reply_detector logged the inbound message but didn't yet update reactivation_status
+            effective_status = customer.reactivation_status
+            if inbound_logs and effective_status not in ("booked", "sequence_complete", "unsubscribed", "replied"):
+                effective_status = "replied"
+            stage = _conversation_stage(effective_status)
+            health = _conversation_health(effective_status, last_outbound_at, last_inbound_at)
             summary = add_segment(enrich(customer))
             health_counts[health["key"]] += 1
 
-            preview_source = latest_outbound or last_touch_log
+            # Preview: show most recent message (could be inbound reply)
+            last_message_is_inbound = last_touch_log.direction == "inbound"
 
             conversations_data.append({
                 "customer_id": customer.id,
                 "customer_name": customer.name,
                 "customer_email": customer.email,
                 "status_label": stage["label"],
-                "last_interaction_label": "Customer reply" if last_touch_log.direction == "inbound" else "Agent outreach",
+                "last_interaction_label": "Customer reply" if last_message_is_inbound else "Agent outreach",
                 "health_label": health["label"],
                 "health_chip_cls": health["chip_cls"],
                 "health_rank": health["rank"],
-                "reactivation_status": customer.reactivation_status,
+                "reactivation_status": effective_status,
                 "outbound_count": len(outbound_logs),
                 "inbound_count": len(inbound_logs),
                 "last_touch_at": _log_timestamp(last_touch_log),
                 "last_touch_direction": last_touch_log.direction,
                 "last_outbound_at": last_outbound_at,
-                "last_outbound_subject": (preview_source.subject or "(no subject)") if preview_source else "(no subject)",
-                "last_outbound_preview": _compact_summary(preview_source.content if preview_source else "", 180),
+                # Latest message preview (inbound reply if most recent, else last outbound)
+                "last_message_is_inbound": last_message_is_inbound,
+                "last_message_at": _log_timestamp(last_touch_log),
+                "last_message_subject": (last_touch_log.subject or "(no subject)") if last_touch_log else "(no subject)",
+                "last_message_preview": _compact_summary(last_touch_log.content or "", 180) if last_touch_log else "",
                 "needs_response": health["needs_response"],
                 "needs_follow_up": health["needs_follow_up"],
                 "opp_est": summary.get("opp_est"),
@@ -1080,11 +1159,16 @@ def conversations(request: Request):
     conversations_data.sort(key=lambda row: row["last_touch_at"] or datetime.min, reverse=True)
     conversations_data.sort(key=lambda row: row["health_rank"])
 
+    conversations_attention_count = sum(
+        1 for item in conversations_data if item["needs_response"] or item["needs_follow_up"]
+    )
+
     return templates.TemplateResponse("conversations.html", {
         "request": request,
         "active": "conversations",
         "operator": operator_data,
         "queue_count": queue_count,
+        "conversations_attention_count": conversations_attention_count,
         "conversations": conversations_data,
         "awaiting_reply_count": health_counts["awaiting_reply"],
         "needs_response_count": health_counts["needs_response"],
@@ -1110,9 +1194,9 @@ def conversation_detail(request: Request, customer_id: int):
         )
         operator_data = _operator_data(operator)
         queue_count = _get_queue_count(db)
+        conversations_attention_count = _get_conversations_attention_count(db)
         customer_data = add_segment(enrich(customer))
         customer_data["customer_profile"] = _normalize_customer_profile(customer.customer_profile)
-        stage = _conversation_stage(customer.reactivation_status)
 
         log_entries = []
         for log in logs:
@@ -1136,8 +1220,14 @@ def conversation_detail(request: Request, customer_id: int):
         latest_inbound = next((log for log in logs if log.direction == "inbound"), None)
         last_outbound_at = _log_timestamp(latest_outbound)
         last_inbound_at = _log_timestamp(latest_inbound)
-        health = _conversation_health(customer.reactivation_status, last_outbound_at, last_inbound_at)
-        next_steps = _auto_next_steps(customer.reactivation_status, last_outbound_at, last_inbound_at)
+        # Derive effective status from actual log activity so chips stay consistent
+        # with the timeline even if reactivation_status wasn't updated yet
+        effective_status = customer.reactivation_status
+        if latest_inbound and effective_status not in ("booked", "sequence_complete", "unsubscribed", "replied"):
+            effective_status = "replied"
+        stage = _conversation_stage(effective_status)
+        health = _conversation_health(effective_status, last_outbound_at, last_inbound_at)
+        next_steps = _auto_next_steps(effective_status, last_outbound_at, last_inbound_at)
 
         timeline_events = []
         for entry in log_entries:
@@ -1192,6 +1282,7 @@ def conversation_detail(request: Request, customer_id: int):
         "active": "conversations",
         "operator": operator_data,
         "queue_count": queue_count,
+        "conversations_attention_count": conversations_attention_count,
         "customer": customer_data,
         "stage": stage,
         "health": health,
@@ -1755,12 +1846,14 @@ def agents_page(request: Request):
             )
             .count()
         )
+        conversations_attention_count = _get_conversations_attention_count(db)
 
     return templates.TemplateResponse("agents.html", {
         "request": request,
         "active": "agents",
         "operator": operator_data,
         "queue_count": queued_count,
+        "conversations_attention_count": conversations_attention_count,
         "agents": [
             {
                 "key": "tone_profiler",

@@ -98,10 +98,10 @@
 
       <div class="conv-preview">
         <div style="font-size:11px;color:var(--text-3);font-family:'IBM Plex Mono',monospace;margin-bottom:5px">
-          Last outbound email · {% if item.last_outbound_at %}{{ item.last_outbound_at.strftime('%b %-d, %Y · %-I:%M %p') }}{% else %}No outbound yet{% endif %}
+          {% if item.last_message_is_inbound %}<span style="color:var(--red);font-weight:600">Customer replied</span>{% else %}Last outbound email{% endif %} · {% if item.last_message_at %}{{ item.last_message_at.strftime('%b %-d, %Y · %-I:%M %p') }}{% else %}—{% endif %}
         </div>
-        <div style="font-size:12px;font-weight:600;color:var(--navy);margin-bottom:6px">{{ item.last_outbound_subject }}</div>
-        {{ item.last_outbound_preview }}
+        <div style="font-size:12px;font-weight:600;color:var(--navy);margin-bottom:6px">{{ item.last_message_subject }}</div>
+        {{ item.last_message_preview }}
       </div>
     </div>
 
