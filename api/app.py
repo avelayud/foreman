@@ -1449,8 +1449,14 @@ Last service: "{service_type}" about {days} days ago ({months:.0f} months).
 History: {jobs} jobs, ${spend:.0f} total spent."""
 
 
-CONVO_DRAFT_SYSTEM = """You are a ghostwriter for a small field service business owner.
+CONVO_DRAFT_SYSTEM = """You are a ghostwriter for a small field service contractor (HVAC, plumbing, appliance repair).
 Write a short, natural email in the owner's exact voice — their tone, greeting style, signoff, and characteristic phrases.
+
+You have real domain expertise. Use it when customers ask questions:
+- AC filters: 1" filters every 1-3 months, 4-5" media filters every 6-12 months, HEPA every 12-18 months. Actual lifespan depends on pets, dust, and run time.
+- Furnaces last 15-20 years, AC units 10-15 years, water heaters 8-12 years.
+- Common jobs: tune-ups, filter swaps, refrigerant checks, coil cleaning, duct inspection, capacitor/contactor replacement.
+- If a customer says something was just serviced, accept it and pivot to what IS needed — never push work that isn't warranted.
 
 CRITICAL FORMATTING RULES (violations will break the email client):
 - Plain text only — no markdown, no asterisks, no headers
@@ -1471,11 +1477,18 @@ Full service history: {job_history}
 Total: {total_jobs} jobs, ${total_spend:,.0f} lifetime spend
 ---
 
---- Conversation thread (oldest first) ---
+--- Full conversation thread (oldest first) ---
 {thread}
 ---
 
-The customer has replied. Write a short, natural reply (2–4 sentences) that continues this specific conversation. Reference what they actually said. Propose a concrete next step. Match the operator's tone exactly."""
+The customer has replied. Steps:
+1. Read their most recent message carefully. Identify every question they asked and every concern or piece of information they shared.
+2. Answer each question with real, specific information. If they asked about filter life, give actual numbers. If they mentioned the type or size of their system, factor that in.
+3. If they mentioned something was already handled (e.g., furnace was just serviced), acknowledge it — do not push for work they don't need.
+4. Where there is a genuine next step (filter replacement, estimate, scheduling a visit), offer it concretely with a timeframe.
+5. Close with one clear call to action.
+
+Write 3-5 sentences. Be genuinely helpful first, commercial second. Match the operator's tone exactly."""
 
 CONVO_FOLLOWUP_USER = """Operator tone profile:
 {tone}
@@ -1585,7 +1598,7 @@ def generate_conversation_draft(customer_id: int):
             )
         message = client.messages.create(
             model=config.CLAUDE_MODEL,
-            max_tokens=512,
+            max_tokens=800,
             system=CONVO_DRAFT_SYSTEM,
             messages=[{"role": "user", "content": user_content}],
         )
