@@ -63,16 +63,23 @@ def _apply_schema_patches():
     inspector = inspect(engine)
     table_names = set(inspector.get_table_names())
 
+    # Read ALL column info before opening any transaction.
+    # Opening a second connection inside engine.begin() while DDL locks are held
+    # causes a deadlock on Postgres — inspect() here, then never again inside the tx.
+    live_cols: dict[str, set[str]] = {
+        t: {col["name"] for col in inspector.get_columns(t)}
+        for t in SCHEMA_PATCHES
+        if t in table_names
+    }
+
     with engine.begin() as conn:
+        # Phase 1: add any missing columns
         for table_name, columns in SCHEMA_PATCHES.items():
             if table_name not in table_names:
                 continue
-
-            existing_columns = {col["name"] for col in inspector.get_columns(table_name)}
             for column_name, column_type in columns.items():
-                if column_name in existing_columns:
+                if column_name in live_cols.get(table_name, set()):
                     continue
-
                 conn.execute(
                     text(
                         f"ALTER TABLE {table_name} "
@@ -80,37 +87,33 @@ def _apply_schema_patches():
                     )
                 )
                 print(f"✅ Added missing column {table_name}.{column_name}")
+                live_cols.setdefault(table_name, set()).add(column_name)
 
-        inspector = inspect(engine)
-
-        if "outreach_logs" in table_names:
-            outreach_columns = {col["name"] for col in inspector.get_columns("outreach_logs")}
-            if "approval_status" in outreach_columns:
-                conn.execute(
-                    text(
-                        """
-                        UPDATE outreach_logs
-                        SET approval_status = CASE
-                            WHEN approval_status IS NOT NULL THEN approval_status
-                            WHEN dry_run THEN 'pending'
-                            ELSE 'sent'
-                        END
-                        """
-                    )
+        # Phase 2: backfill defaults (idempotent CASE WHEN, safe to re-run)
+        if "outreach_logs" in table_names and "approval_status" in live_cols.get("outreach_logs", set()):
+            conn.execute(
+                text(
+                    """
+                    UPDATE outreach_logs
+                    SET approval_status = CASE
+                        WHEN approval_status IS NOT NULL THEN approval_status
+                        WHEN dry_run THEN 'pending'
+                        ELSE 'sent'
+                    END
+                    """
                 )
+            )
 
-        if "operators" in table_names:
-            operator_columns = {col["name"] for col in inspector.get_columns("operators")}
-            if "outreach_mode" in operator_columns:
-                conn.execute(
-                    text(
-                        """
-                        UPDATE operators
-                        SET outreach_mode = 'dry_run'
-                        WHERE outreach_mode IS NULL OR outreach_mode = ''
-                        """
-                    )
+        if "operators" in table_names and "outreach_mode" in live_cols.get("operators", set()):
+            conn.execute(
+                text(
+                    """
+                    UPDATE operators
+                    SET outreach_mode = 'dry_run'
+                    WHERE outreach_mode IS NULL OR outreach_mode = ''
+                    """
                 )
+            )
 
 
 def init_db():

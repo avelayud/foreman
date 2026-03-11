@@ -727,7 +727,7 @@ def _init_db_background():
     print("[db-init] starting background DB init…", flush=True, file=sys.stderr)
     for attempt in range(1, DB_STARTUP_MAX_ATTEMPTS + 1):
         try:
-            _try_init_db_once(timeout_seconds=8.0)
+            _try_init_db_once(timeout_seconds=20.0)
             _db_ready = True
             _db_init_error = None
             print("✅ Database ready.", flush=True, file=sys.stderr)
@@ -1188,7 +1188,7 @@ def debug_db():
     """Synchronously attempt a DB connection and return the result. Temp diagnostics only."""
     db_url = os.getenv("DATABASE_URL", "not set")
     try:
-        _try_init_db_once(timeout_seconds=8.0)
+        _try_init_db_once(timeout_seconds=20.0)
         return {"result": "ok", "db_url_prefix": db_url[:40]}
     except Exception as exc:
         return JSONResponse(
