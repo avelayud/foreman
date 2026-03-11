@@ -45,6 +45,12 @@ def run():
         print(f"Found {len(logs)} inbound Gmail log(s) to inspect.")
         for log in logs:
             old_ts = log.sent_at
+            created = log.created_at
+            # If sent_at is already within 2h before created_at it's already UTC — skip.
+            # If sent_at is 3-6h before created_at it was stored as local EDT — fix it.
+            if created and (created - old_ts) < timedelta(hours=2):
+                print(f"  Log {log.id}: {old_ts}  already looks correct, skipping.")
+                continue
             new_ts = old_ts + EDT_OFFSET
             print(f"  Log {log.id}: {old_ts}  →  {new_ts}")
             log.sent_at = new_ts
