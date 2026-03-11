@@ -19,6 +19,8 @@ Usage (CLI test):
 
 import base64
 import email as emaillib
+import json
+import os
 import re
 from datetime import datetime
 from email.mime.text import MIMEText
@@ -43,26 +45,48 @@ TOKEN_PATH = PROJECT_ROOT / "token.json"
 # ── Auth ──────────────────────────────────────────────────────────────────────
 
 def _get_gmail_service():
-    """Authenticate and return an authorized Gmail API service."""
+    """Authenticate and return an authorized Gmail API service.
+
+    Credential resolution order:
+      1. GMAIL_TOKEN_JSON env var  — used on Railway (paste contents of token.json)
+      2. token.json file           — used locally
+    If the token is expired it is refreshed in-memory using the refresh_token.
+    """
     creds = None
 
-    if TOKEN_PATH.exists():
+    # 1. Env var (Railway production)
+    token_env = os.getenv("GMAIL_TOKEN_JSON", "").strip()
+    if token_env:
+        try:
+            creds = Credentials.from_authorized_user_info(
+                json.loads(token_env), SCOPES
+            )
+        except Exception as exc:
+            raise RuntimeError(f"GMAIL_TOKEN_JSON is set but could not be parsed: {exc}") from exc
+
+    # 2. File fallback (local development)
+    if not creds and TOKEN_PATH.exists():
         creds = Credentials.from_authorized_user_file(str(TOKEN_PATH), SCOPES)
 
-    if not creds or not creds.valid:
-        if creds and creds.expired and creds.refresh_token:
-            creds.refresh(Request())
-        else:
-            if not CREDENTIALS_PATH.exists():
-                raise FileNotFoundError(
-                    f"credentials.json not found at {CREDENTIALS_PATH}. "
-                    "Download from Google Cloud Console → APIs & Services → Credentials."
-                )
-            flow = InstalledAppFlow.from_client_secrets_file(
-                str(CREDENTIALS_PATH), SCOPES
-            )
-            creds = flow.run_local_server(port=0)
+    # 3. Refresh if expired (refresh_token is long-lived — no browser needed)
+    if creds and creds.expired and creds.refresh_token:
+        creds.refresh(Request())
+        # Persist locally if possible so subsequent local runs skip the refresh
+        try:
+            TOKEN_PATH.write_text(creds.to_json())
+        except OSError:
+            pass
 
+    elif not creds or not creds.valid:
+        # Need a fresh OAuth browser flow — only works locally
+        if not CREDENTIALS_PATH.exists():
+            raise FileNotFoundError(
+                f"⚠ credentials.json not found at {CREDENTIALS_PATH}. "
+                "Download from Google Cloud Console → APIs & Services → Credentials.\n"
+                "On Railway: set GMAIL_TOKEN_JSON to the contents of your local token.json."
+            )
+        flow = InstalledAppFlow.from_client_secrets_file(str(CREDENTIALS_PATH), SCOPES)
+        creds = flow.run_local_server(port=0)
         TOKEN_PATH.write_text(creds.to_json())
 
     return build("gmail", "v1", credentials=creds)
