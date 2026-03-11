@@ -115,7 +115,7 @@
           <div class="vtl-card">
             <div class="vtl-dir {{ event.type }}">{% if event.type == 'inbound' %}↙ Customer{% else %}↗ You{% endif %}</div>
             <div class="vtl-summary">{{ event.summary }}</div>
-            <div class="vtl-date">{% if event.at %}{{ event.at.strftime('%b %-d, %Y · %-I:%M %p') }}{% else %}Unknown{% endif %}</div>
+            <div class="vtl-date">{{ event.at | est }}</div>
           </div>
         </div>
         {% endfor %}

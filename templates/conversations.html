@@ -98,7 +98,7 @@
 
       <div class="conv-preview">
         <div style="font-size:11px;color:var(--text-3);font-family:'IBM Plex Mono',monospace;margin-bottom:5px">
-          {% if item.last_message_is_inbound %}<span style="color:var(--red);font-weight:600">Customer replied</span>{% else %}Last outbound email{% endif %} · {% if item.last_message_at %}{{ item.last_message_at.strftime('%b %-d, %Y · %-I:%M %p') }}{% else %}—{% endif %}
+          {% if item.last_message_is_inbound %}<span style="color:var(--red);font-weight:600">Customer replied</span>{% else %}Last outbound email{% endif %} · {{ item.last_message_at | est }}
         </div>
         <div style="font-size:12px;font-weight:600;color:var(--navy);margin-bottom:6px">{{ item.last_message_subject }}</div>
         {{ item.last_message_preview }}
@@ -110,7 +110,7 @@
         <div class="right-label">Last Interaction</div>
         <div class="right-value" style="font-family:'IBM Plex Mono',monospace">{{ item.last_interaction_label }}</div>
         <div class="conv-meta-item" style="margin-top:2px">
-          {% if item.last_touch_at %}{{ item.last_touch_at.strftime('%b %-d, %Y · %-I:%M %p') }}{% else %}—{% endif %}
+          {{ item.last_touch_at | est }}
         </div>
       </div>
 

@@ -214,7 +214,7 @@
 {% if top_prospects %}
 <div class="section-hd">
   <h2>Top Prospects <span class="muted">— ranked by opportunity</span></h2>
-  <a href="#" onclick="event.preventDefault(); showTab('prime'); document.querySelector('.browse-card').scrollIntoView({behavior:'smooth', block:'start'})">View all →</a>
+  <a href="#all-customers">View all →</a>
 </div>
 <div class="prospect-table">
   <div class="pt-thead">
@@ -278,7 +278,13 @@
   ("recent",      "🕐 Recent",          categories.recent|length),
 ] %}
 
-<div class="browse-card">
+<div class="browse-card" id="all-customers">
+  <div style="padding:10px 20px;border-bottom:1px solid var(--border);background:var(--bg);display:flex;align-items:center;gap:10px">
+    <input id="customer-search" type="text" placeholder="Search customers by name or email…"
+           style="flex:1;border:1px solid var(--border);border-radius:6px;padding:7px 12px;font-size:12.5px;outline:none;font-family:'IBM Plex Sans',sans-serif;color:var(--text);background:var(--surface)"
+           oninput="filterCustomers(this.value)">
+    <span id="customer-search-count" style="font-size:11px;color:var(--text-3);font-family:'IBM Plex Mono',monospace;white-space:nowrap"></span>
+  </div>
   <div class="tab-strip">
     {% for key, label, count in tabs %}
     <button class="tab-btn" id="tab-btn-{{ key }}" onclick="showTab('{{ key }}')">
@@ -362,6 +368,28 @@
     const btn   = document.getElementById('tab-btn-' + key);
     if (panel) panel.classList.add('active');
     if (btn)   btn.classList.add('active');
+  }
+
+  function filterCustomers(query) {
+    const q = query.toLowerCase().trim();
+    let visibleCount = 0;
+    document.querySelectorAll('.browse-table tbody tr').forEach(row => {
+      const text = row.textContent.toLowerCase();
+      const match = !q || text.includes(q);
+      row.style.display = match ? '' : 'none';
+      if (match) visibleCount++;
+    });
+    const countEl = document.getElementById('customer-search-count');
+    if (countEl) countEl.textContent = q ? `${visibleCount} match${visibleCount !== 1 ? 'es' : ''}` : '';
+    // If searching, show first tab with results
+    if (q) {
+      for (const key of TAB_KEYS) {
+        const panel = document.getElementById('tab-' + key);
+        if (!panel) continue;
+        const visible = panel.querySelectorAll('tbody tr:not([style*="display: none"])').length;
+        if (visible > 0) { showTab(key); break; }
+      }
+    }
   }
 
   // Scroll browse card into view when clicking segment tiles

@@ -40,6 +40,21 @@ app = FastAPI(title="Foreman", version="0.2.0")
 TEMPLATES_DIR = Path(__file__).parent.parent / "templates"
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 
+from zoneinfo import ZoneInfo as _ZoneInfo
+from datetime import timezone as _tz
+
+_EASTERN = _ZoneInfo("America/New_York")
+
+def _jinja_est(dt, fmt="%-m/%-d/%y %-I:%M %p %Z"):
+    """Format a naive UTC datetime as Eastern time for display."""
+    if dt is None:
+        return "—"
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=_tz.utc)
+    return dt.astimezone(_EASTERN).strftime(fmt)
+
+templates.env.filters["est"] = _jinja_est
+
 OPERATOR_ID = 1  # Single-tenant for now
 SCHEDULE_POLL_SECONDS = 60
 DB_STARTUP_MAX_ATTEMPTS = max(1, int(os.getenv("DB_STARTUP_MAX_ATTEMPTS", "8")))
@@ -1292,7 +1307,7 @@ def conversation_detail(request: Request, customer_id: int):
     timeline_events_json = [
         {
             **event,
-            "at": event["at"].isoformat() if event.get("at") else None,
+            "at": event["at"].isoformat() + "Z" if event.get("at") else None,
         }
         for event in timeline_events
     ]
@@ -1557,12 +1572,19 @@ def generate_conversation_draft(customer_id: int):
             body = " ".join((l.content or "").split())[:500]  # flatten + truncate
             thread_lines.append(f"[{direction}] Subject: {l.subject or '(no subject)'}\n{body}")
         thread = "\n\n".join(thread_lines)
+        has_thread = bool(thread_lines)
         effective_status = customer.reactivation_status
         if inbound_logs and effective_status not in ("booked", "sequence_complete", "unsubscribed", "replied"):
             effective_status = "replied"
         is_reply = bool(last_inbound and (not last_outbound_at or last_inbound_at > last_outbound_at))
         # Serialize ORM attributes before session closes to avoid DetachedInstanceError
         last_outbound_subject = (last_outbound.subject or "our previous email") if last_outbound else "our previous email"
+
+    if not has_thread:
+        raise HTTPException(
+            status_code=400,
+            detail="No sent emails on record for this customer. Use the customer page to generate initial outreach."
+        )
 
     voice_section = (
         f"Write in the voice of {voice['name']} ({voice.get('role', 'team member')}).\n\n"
