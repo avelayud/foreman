@@ -1451,36 +1451,44 @@ History: {jobs} jobs, ${spend:.0f} total spent."""
 
 CONVO_DRAFT_SYSTEM = """You are a ghostwriter for a small field service business owner.
 Write a short, natural email in the owner's exact voice — their tone, greeting style, signoff, and characteristic phrases.
-Formatting rules: use plain text only, no markdown. Separate paragraphs with a single blank line (\\n\\n). Do not add extra blank lines. No bullet points or headers.
-Return ONLY a JSON object with keys "subject" and "body". No markdown, no code fences."""
 
-CONVO_REPLY_USER = """Tone profile:
+CRITICAL FORMATTING RULES (violations will break the email client):
+- Plain text only — no markdown, no asterisks, no headers
+- Inside a paragraph: ZERO line breaks. Every sentence in the same paragraph must be on one continuous line.
+- Between paragraphs: exactly one blank line (two newline characters). No more.
+- No leading or trailing blank lines in the body.
+- No bullet points or lists.
+
+Return ONLY valid JSON: {"subject": "...", "body": "..."}. No code fences, no extra text."""
+
+CONVO_REPLY_USER = """Operator tone profile:
 {tone}
 
-{voice_section}Write a reply to this customer's message. Stay on topic, be helpful, and propose a clear next step.
-Keep it short — 2–4 sentences.
-
-Customer: {name}
-Last service: "{service_type}"
+{voice_section}--- Customer account context ---
+Name: {name}
+Last service: {service_type} ({days} days ago)
+Full service history: {job_history}
+Total: {total_jobs} jobs, ${total_spend:,.0f} lifetime spend
+---
 
 --- Conversation thread (oldest first) ---
 {thread}
 ---
 
-Draft a reply from the operator's perspective."""
+The customer has replied. Write a short, natural reply (2–4 sentences) that continues this specific conversation. Reference what they actually said. Propose a concrete next step. Match the operator's tone exactly."""
 
-CONVO_FOLLOWUP_USER = """Tone profile:
+CONVO_FOLLOWUP_USER = """Operator tone profile:
 {tone}
 
-{voice_section}Write a brief follow-up email to {name}. We reached out previously but haven't heard back.
-Use a slightly different angle — reference their service history, mention seasonal timing, or offer to answer any questions.
-Keep it to 2–3 sentences. Don't be pushy.
+{voice_section}--- Customer account context ---
+Name: {name}
+Last service: {service_type} ({days} days ago)
+Full service history: {job_history}
+Total: {total_jobs} jobs, ${total_spend:,.0f} lifetime spend
+---
 
-Customer: {name}
-Last service: "{service_type}" ({days} days ago)
-Previous outreach subject: "{last_subject}"
-
-Draft the follow-up."""
+Previous outreach (subject: "{last_subject}") went unanswered. Write a brief follow-up (2–3 sentences).
+Take a different angle from the first email — draw on their specific service history, mention timing or seasonality, or ask a direct question. Don't be pushy or repeat the first email."""
 
 
 class DraftRequest(BaseModel):
@@ -1508,6 +1516,21 @@ def generate_conversation_draft(customer_id: int):
         cust_name = customer.name
         cust_service_type = customer.last_service_type or "service"
         cust_last_service_date = customer.last_service_date
+        cust_total_jobs = customer.total_jobs or 0
+        cust_total_spend = customer.total_spend or 0.0
+        # Fetch full job history for context
+        jobs = (
+            db.query(Job)
+            .filter_by(customer_id=customer_id)
+            .order_by(Job.completed_at.desc())
+            .limit(8)
+            .all()
+        )
+        job_history_parts = []
+        for j in jobs:
+            date_str = j.completed_at.strftime("%b %Y") if j.completed_at else "unknown date"
+            job_history_parts.append(f"{j.service_type} ({date_str}, ${j.amount:,.0f})" if j.amount else f"{j.service_type} ({date_str})")
+        job_history = "; ".join(job_history_parts) if job_history_parts else "No prior jobs on record"
         inbound_logs = [l for l in logs if l.direction == "inbound"]
         outbound_logs = [l for l in logs if l.direction == "outbound"]
         last_outbound = outbound_logs[-1] if outbound_logs else None
@@ -1518,8 +1541,8 @@ def generate_conversation_draft(customer_id: int):
         thread_lines = []
         for l in logs[-6:]:
             direction = "Customer" if l.direction == "inbound" else "You"
-            body = (l.content or "")[:400].strip()
-            thread_lines.append(f"[{direction}] {l.subject or '(no subject)'}\n{body}")
+            body = " ".join((l.content or "").split())[:500]  # flatten + truncate
+            thread_lines.append(f"[{direction}] Subject: {l.subject or '(no subject)'}\n{body}")
         thread = "\n\n".join(thread_lines)
         effective_status = customer.reactivation_status
         if inbound_logs and effective_status not in ("booked", "sequence_complete", "unsubscribed", "replied"):
@@ -1542,6 +1565,10 @@ def generate_conversation_draft(customer_id: int):
                 voice_section=voice_section,
                 name=cust_name,
                 service_type=cust_service_type,
+                days=days,
+                job_history=job_history,
+                total_jobs=cust_total_jobs,
+                total_spend=cust_total_spend,
                 thread=thread,
             )
         else:
@@ -1551,6 +1578,9 @@ def generate_conversation_draft(customer_id: int):
                 name=cust_name,
                 service_type=cust_service_type,
                 days=days,
+                job_history=job_history,
+                total_jobs=cust_total_jobs,
+                total_spend=cust_total_spend,
                 last_subject=last_outbound_subject,
             )
         message = client.messages.create(
@@ -1569,7 +1599,10 @@ def generate_conversation_draft(customer_id: int):
     except json.JSONDecodeError:
         draft = {"subject": "Following up", "body": raw}
     if draft.get("body"):
-        draft["body"] = _re.sub(r'\n{3,}', '\n\n', draft["body"].strip())
+        _body = draft["body"].strip()
+        _paras = _re.split(r'\n\n+', _body)
+        _paras = [' '.join(p.split('\n')) for p in _paras if p.strip()]
+        draft["body"] = '\n\n'.join(_paras)
     draft["draft_type"] = "reply" if is_reply else "follow_up"
     return draft
 
@@ -1674,9 +1707,12 @@ def generate_draft(customer_id: int, req: DraftRequest = None):
     except json.JSONDecodeError:
         draft = {"subject": "Checking in", "body": raw}
 
-    # Normalize body: collapse 3+ consecutive newlines to 2, strip edges
+    # Normalize body: collapse single newlines within paragraphs, keep double between
     if draft.get("body"):
-        draft["body"] = _re.sub(r'\n{3,}', '\n\n', draft["body"].strip())
+        _body = draft["body"].strip()
+        _paras = _re.split(r'\n\n+', _body)
+        _paras = [' '.join(p.split('\n')) for p in _paras if p.strip()]
+        draft["body"] = '\n\n'.join(_paras)
 
     if voice:
         draft["voice_name"] = voice["name"]

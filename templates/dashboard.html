@@ -214,7 +214,7 @@
 {% if top_prospects %}
 <div class="section-hd">
   <h2>Top Prospects <span class="muted">— ranked by opportunity</span></h2>
-  <a href="/?tab=prime">View all →</a>
+  <a href="#" onclick="event.preventDefault(); showTab('prime'); document.querySelector('.browse-card').scrollIntoView({behavior:'smooth', block:'start'})">View all →</a>
 </div>
 <div class="prospect-table">
   <div class="pt-thead">
