@@ -5,7 +5,7 @@
 <style>
   .top-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.25fr);gap:14px;margin-bottom:14px;align-items:start}
   .panel{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow-sm);overflow:hidden}
-  .panel-head{padding:14px 16px;border-bottom:1px solid var(--border);background:var(--bg)}
+  .panel-head{padding:14px 16px;border-bottom:1px solid var(--border);background:var(--bg);display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
   .panel-title{font-size:12px;font-weight:600;color:var(--text);font-family:'IBM Plex Mono',monospace;letter-spacing:0.5px}
   .panel-body{padding:14px 16px}
 
@@ -40,6 +40,19 @@
   .next-step-title{font-size:12.5px;font-weight:700;color:var(--navy);margin-bottom:3px}
   .next-step-meta{font-size:11px;color:var(--text-3);font-family:'IBM Plex Mono',monospace}
 
+  .message-box{font-size:13px;color:var(--text-2);line-height:1.65;white-space:pre-wrap;border:1px solid var(--border);background:var(--bg);border-radius:8px;padding:10px 11px}
+
+  /* Draft panel */
+  .draft-panel{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow-sm);overflow:hidden;margin-bottom:14px}
+  .draft-panel-head{padding:14px 16px;border-bottom:1px solid var(--border);background:var(--bg);display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+  .draft-label{font-size:10px;font-family:'IBM Plex Mono',monospace;letter-spacing:1px;text-transform:uppercase;color:var(--text-3);margin-bottom:5px}
+  .draft-subject-input{width:100%;border:1px solid var(--border);border-radius:7px;padding:8px 12px;font-size:13px;font-family:'IBM Plex Sans',sans-serif;color:var(--navy);font-weight:600;background:var(--bg);outline:none;transition:border-color 0.15s;box-sizing:border-box}
+  .draft-subject-input:focus{border-color:var(--navy)}
+  .draft-body-textarea{width:100%;min-height:160px;border:1px solid var(--border);border-radius:7px;padding:10px 12px;font-size:13px;font-family:'IBM Plex Sans',sans-serif;color:var(--text);line-height:1.65;background:var(--bg);outline:none;resize:vertical;transition:border-color 0.15s;box-sizing:border-box}
+  .draft-body-textarea:focus{border-color:var(--navy)}
+  .draft-spinner{display:flex;align-items:center;gap:10px;font-size:13px;color:var(--text-3);padding:24px 0}
+
+  /* Recap */
   .recap-grid{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,1fr);gap:12px}
   .recap-summary{font-size:13px;color:var(--text-2);line-height:1.65;border:1px solid var(--border);background:var(--bg);border-radius:8px;padding:10px 11px;margin-bottom:9px}
   .briefing-list{display:flex;flex-direction:column;gap:8px}
@@ -48,8 +61,6 @@
   .briefing-value{font-size:12px;color:var(--text-2);line-height:1.55}
   .talking-list{display:flex;flex-direction:column;gap:8px}
   .talking-item{font-size:12.5px;color:var(--text);line-height:1.5;border:1px solid var(--border);background:var(--bg);border-radius:8px;padding:9px 10px}
-
-  .message-box{font-size:13px;color:var(--text-2);line-height:1.65;white-space:pre-wrap;border:1px solid var(--border);background:var(--bg);border-radius:8px;padding:10px 11px}
 
   @media (max-width: 980px){
     .top-grid{grid-template-columns:1fr}
@@ -67,71 +78,56 @@
   </div>
   <div style="display:flex;gap:8px">
     <a href="/customer/{{ customer.id }}" class="btn-ghost" style="text-decoration:none;font-size:12px">Customer Page</a>
-    <a href="/conversations" class="btn-ghost" style="text-decoration:none;font-size:12px">Active Conversations</a>
-  </div>
-</div>
-
-<div class="panel" style="margin-bottom:14px">
-  <div class="panel-head">
-    <div class="panel-title">Conversation Recap</div>
-  </div>
-  <div class="panel-body">
-    <div class="recap-grid">
-      <div>
-        <div class="field-label" style="margin-bottom:7px">Discussion Summary</div>
-        <div class="recap-summary">{{ conversation_recap.operator_summary }}</div>
-        <div class="briefing-list">
-          {% for row in conversation_recap.briefing_rows %}
-          <div class="briefing-item">
-            <div class="briefing-label">{{ row.label }}</div>
-            <div class="briefing-value">{{ row.value }}</div>
-          </div>
-          {% endfor %}
-        </div>
-      </div>
-      <div>
-        <div class="field-label" style="margin-bottom:7px">Talking Points + Operator Tips</div>
-        <div class="talking-list">
-          {% for point in conversation_recap.talking_points %}
-          <div class="talking-item">{{ loop.index }}. {{ point }}</div>
-          {% endfor %}
-        </div>
-      </div>
-    </div>
+    <a href="/conversations" class="btn-ghost" style="text-decoration:none;font-size:12px">All Conversations</a>
   </div>
 </div>
 
 <div class="top-grid">
-  <div class="panel">
-    <div class="panel-head" style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">
-      <div class="panel-title">Conversation Timeline</div>
-      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-        <span class="status-pill {{ stage.status_cls }}">{{ stage.label }}</span>
-        <span class="stage-chip stage-{{ health.chip_cls }}">{{ health.label }}</span>
+  {# ── LEFT: Timeline + Selected Message ── #}
+  <div style="display:flex;flex-direction:column;gap:14px">
+    <div class="panel">
+      <div class="panel-head">
+        <div class="panel-title">Conversation Timeline</div>
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+          <span class="status-pill {{ stage.status_cls }}">{{ stage.label }}</span>
+          <span class="stage-chip stage-{{ health.chip_cls }}">{{ health.label }}</span>
+        </div>
+      </div>
+      <div class="panel-body">
+        {% if timeline_events %}
+        <div class="vtl" id="timeline-list">
+          {% for event in timeline_events %}
+          <div class="vtl-event {% if loop.first %}active{% endif %}" data-index="{{ loop.index0 }}">
+            <button type="button" onclick="selectTimelineEvent({{ loop.index0 }})">
+              <span class="vtl-dot {{ event.type }}"></span>
+              <div class="vtl-card">
+                <div class="vtl-date">{% if event.at %}{{ event.at.strftime('%b %-d, %Y · %-I:%M %p') }}{% else %}Unknown date{% endif %} · <span style="color:{% if event.type == 'inbound' %}var(--green){% else %}var(--amber){% endif %}">{{ event.sender_label }}</span></div>
+                <div class="vtl-title">{{ event.subject }}</div>
+                <div class="vtl-detail">{{ event.summary }}</div>
+              </div>
+            </button>
+          </div>
+          {% endfor %}
+        </div>
+        {% else %}
+        <div style="font-size:13px;color:var(--text-3)">No conversation messages on record yet.</div>
+        {% endif %}
       </div>
     </div>
-    <div class="panel-body">
-      {% if timeline_events %}
-      <div class="vtl" id="timeline-list">
-        {% for event in timeline_events %}
-        <div class="vtl-event {% if loop.first %}active{% endif %}" data-index="{{ loop.index0 }}">
-          <button type="button" onclick="selectTimelineEvent({{ loop.index0 }})">
-            <span class="vtl-dot {{ event.type }}"></span>
-            <div class="vtl-card">
-              <div class="vtl-date">{% if event.at %}{{ event.at.strftime('%b %-d, %Y · %-I:%M %p') }}{% else %}Unknown date{% endif %}</div>
-              <div class="vtl-title">{{ event.title }} · {{ event.sender_label }}</div>
-              <div class="vtl-detail">{{ event.summary }}</div>
-            </div>
-          </button>
-        </div>
-        {% endfor %}
+
+    <div class="panel">
+      <div class="panel-head">
+        <div class="panel-title" id="msg-panel-title">Selected Message</div>
+        <div style="font-size:11px;color:var(--text-3);font-family:'IBM Plex Mono',monospace" id="msg-meta"></div>
       </div>
-      {% else %}
-      <div style="font-size:13px;color:var(--text-3)">No conversation messages on record yet.</div>
-      {% endif %}
+      <div class="panel-body">
+        <div style="font-size:13px;font-weight:700;color:var(--navy);margin-bottom:4px" id="msg-subject">Select a timeline item</div>
+        <div class="message-box" id="msg-content">Click any message in the timeline to view the full email body.</div>
+      </div>
     </div>
   </div>
 
+  {# ── RIGHT: Opportunity + Next Steps ── #}
   <div class="panel">
     <div class="panel-head">
       <div class="panel-title">Opportunity Snapshot + Next Steps</div>
@@ -176,18 +172,73 @@
   </div>
 </div>
 
-<div class="panel">
-  <div class="panel-head">
-    <div class="panel-title">Selected Message</div>
-  </div>
-  <div class="panel-body">
-    <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:8px">
-      <div>
-        <div style="font-size:13px;font-weight:700;color:var(--navy)" id="msg-subject">Select a timeline item</div>
-        <div style="font-size:11px;color:var(--text-3);font-family:'IBM Plex Mono',monospace" id="msg-meta"></div>
+{# ── DRAFT RESPONSE PANEL ── #}
+{% if health.needs_response or health.needs_follow_up %}
+<div class="draft-panel" id="draft-panel">
+  <div class="draft-panel-head">
+    <div>
+      <div class="panel-title">
+        {% if health.needs_response %}Reply to Customer{% else %}Draft Follow-up{% endif %}
+      </div>
+      <div style="font-size:11.5px;color:var(--text-3);margin-top:2px">
+        {% if health.needs_response %}Customer replied — draft a response and approve it to the queue.{% else %}Follow-up due — draft a message and approve it to the queue.{% endif %}
       </div>
     </div>
-    <div class="message-box" id="msg-content">Click any message in the timeline to view the full email body.</div>
+    <button class="btn-ghost" onclick="regenerateDraft()" id="regen-btn" style="font-size:12px">↺ Regenerate</button>
+  </div>
+  <div class="panel-body">
+    <div id="draft-loading" class="draft-spinner">
+      <div class="spinner"></div>
+      <span>Drafting {% if health.needs_response %}reply{% else %}follow-up{% endif %}…</span>
+    </div>
+    <div id="draft-form" style="display:none">
+      <div style="margin-bottom:12px">
+        <div class="draft-label">Subject</div>
+        <input type="text" class="draft-subject-input" id="draft-subject" placeholder="Subject line">
+      </div>
+      <div style="margin-bottom:16px">
+        <div class="draft-label">Body</div>
+        <textarea class="draft-body-textarea" id="draft-body" placeholder="Email body"></textarea>
+      </div>
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+        <button class="btn-success" onclick="approveDraft()" id="approve-btn" style="font-size:13px">Approve & Queue →</button>
+        <span id="draft-status" style="font-size:12px;color:var(--text-3)"></span>
+      </div>
+    </div>
+    <div id="draft-error" style="display:none;font-size:13px;color:var(--red);padding:8px 0"></div>
+  </div>
+</div>
+{% endif %}
+
+{# ── CONVERSATION RECAP (bottom) ── #}
+<div class="panel" style="margin-top:4px">
+  <div class="panel-head" style="cursor:pointer" onclick="this.nextElementSibling.classList.toggle('hidden')">
+    <div class="panel-title">Conversation Recap &amp; Talking Points</div>
+    <span style="font-size:11px;color:var(--text-3);font-family:'IBM Plex Mono',monospace">▾ expand</span>
+  </div>
+  <div class="panel-body hidden">
+    <div class="recap-grid">
+      <div>
+        <div class="field-label" style="margin-bottom:7px">Discussion Summary</div>
+        <div class="recap-summary">{{ conversation_recap.operator_summary }}</div>
+        <div class="briefing-list">
+          {% for row in conversation_recap.briefing_rows %}
+          <div class="briefing-item">
+            <div class="briefing-label">{{ row.label }}</div>
+            <div class="briefing-value">{{ row.value }}</div>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+      <div>
+        <div class="field-label" style="margin-bottom:7px">Talking Points + Operator Tips</div>
+        <div class="talking-list">
+          {% for point in conversation_recap.talking_points %}
+          <div class="talking-item">{{ loop.index }}. {{ point }}</div>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
   </div>
 </div>
 {% endblock %}
@@ -195,6 +246,8 @@
 {% block scripts %}
 <script>
   const TIMELINE_EVENTS = {{ timeline_events_json|tojson }};
+  const CUSTOMER_ID = {{ customer.id }};
+  const NEEDS_ACTION = {{ 'true' if (health.needs_response or health.needs_follow_up) else 'false' }};
 
   function selectTimelineEvent(index) {
     const event = TIMELINE_EVENTS[index];
@@ -204,19 +257,87 @@
     const selected = document.querySelector(`.vtl-event[data-index="${index}"]`);
     if (selected) selected.classList.add('active');
 
-    const subjectEl = document.getElementById('msg-subject');
     const metaEl = document.getElementById('msg-meta');
+    const subjectEl = document.getElementById('msg-subject');
     const contentEl = document.getElementById('msg-content');
 
     subjectEl.textContent = event.subject || '(no subject)';
     const dateText = event.at ? new Date(event.at).toLocaleString() : 'Unknown date';
-    const threadText = event.gmail_thread_id ? ` · Thread ${event.gmail_thread_id}` : '';
-    metaEl.textContent = `${event.sender_label} · Step ${event.sequence_step} · ${dateText}${threadText}`;
+    metaEl.textContent = `${event.sender_label} · ${dateText}`;
     contentEl.textContent = event.content || 'No message content.';
   }
 
   if (TIMELINE_EVENTS.length > 0) {
     selectTimelineEvent(0);
+  }
+
+  // Draft generation
+  async function loadDraft() {
+    const loading = document.getElementById('draft-loading');
+    const form = document.getElementById('draft-form');
+    const errorEl = document.getElementById('draft-error');
+    const regenBtn = document.getElementById('regen-btn');
+    if (!loading) return;
+    loading.style.display = 'flex';
+    form.style.display = 'none';
+    errorEl.style.display = 'none';
+    if (regenBtn) regenBtn.disabled = true;
+    try {
+      const res = await fetch(`/api/conversation/${CUSTOMER_ID}/draft`, { method: 'POST' });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.detail || `Error ${res.status}`);
+      }
+      const draft = await res.json();
+      document.getElementById('draft-subject').value = draft.subject || '';
+      document.getElementById('draft-body').value = draft.body || '';
+      loading.style.display = 'none';
+      form.style.display = 'block';
+    } catch (e) {
+      loading.style.display = 'none';
+      errorEl.textContent = `Failed to generate draft: ${e.message}`;
+      errorEl.style.display = 'block';
+    } finally {
+      if (regenBtn) regenBtn.disabled = false;
+    }
+  }
+
+  function regenerateDraft() {
+    document.getElementById('draft-status').textContent = '';
+    loadDraft();
+  }
+
+  async function approveDraft() {
+    const subject = document.getElementById('draft-subject').value.trim();
+    const body = document.getElementById('draft-body').value.trim();
+    const statusEl = document.getElementById('draft-status');
+    const btn = document.getElementById('approve-btn');
+    if (!subject || !body) { statusEl.textContent = 'Subject and body are required.'; return; }
+    btn.disabled = true;
+    statusEl.textContent = 'Queuing…';
+    try {
+      const res = await fetch(`/api/conversation/${CUSTOMER_ID}/queue`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ subject, body, sequence_step: 0 }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.detail || `Error ${res.status}`);
+      }
+      statusEl.style.color = 'var(--green)';
+      statusEl.textContent = '✓ Added to outreach queue';
+      btn.textContent = 'Queued ✓';
+      btn.disabled = true;
+    } catch (e) {
+      statusEl.style.color = 'var(--red)';
+      statusEl.textContent = `Failed: ${e.message}`;
+      btn.disabled = false;
+    }
+  }
+
+  if (NEEDS_ACTION) {
+    loadDraft();
   }
 </script>
 {% endblock %}

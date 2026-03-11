@@ -1407,8 +1407,158 @@ Last service: "{service_type}" about {days} days ago ({months:.0f} months).
 History: {jobs} jobs, ${spend:.0f} total spent."""
 
 
+CONVO_DRAFT_SYSTEM = """You are a ghostwriter for a small field service business owner.
+Write a short, natural email in the owner's exact voice — their tone, greeting style, signoff, and characteristic phrases.
+Formatting rules: use plain text only, no markdown. Separate paragraphs with a single blank line (\\n\\n). Do not add extra blank lines. No bullet points or headers.
+Return ONLY a JSON object with keys "subject" and "body". No markdown, no code fences."""
+
+CONVO_REPLY_USER = """Tone profile:
+{tone}
+
+{voice_section}Write a reply to this customer's message. Stay on topic, be helpful, and propose a clear next step.
+Keep it short — 2–4 sentences.
+
+Customer: {name}
+Last service: "{service_type}"
+
+--- Conversation thread (oldest first) ---
+{thread}
+---
+
+Draft a reply from the operator's perspective."""
+
+CONVO_FOLLOWUP_USER = """Tone profile:
+{tone}
+
+{voice_section}Write a brief follow-up email to {name}. We reached out previously but haven't heard back.
+Use a slightly different angle — reference their service history, mention seasonal timing, or offer to answer any questions.
+Keep it to 2–3 sentences. Don't be pushy.
+
+Customer: {name}
+Last service: "{service_type}" ({days} days ago)
+Previous outreach subject: "{last_subject}"
+
+Draft the follow-up."""
+
+
 class DraftRequest(BaseModel):
     voice_id: str = None
+
+
+@app.post("/api/conversation/{customer_id}/draft")
+def generate_conversation_draft(customer_id: int):
+    """Generate a context-aware reply (if customer replied) or follow-up (if overdue) draft."""
+    with get_db() as db:
+        customer = db.query(Customer).filter_by(id=customer_id, operator_id=OPERATOR_ID).first()
+        if not customer:
+            raise HTTPException(status_code=404, detail="Customer not found")
+        operator = db.query(Operator).filter_by(id=OPERATOR_ID).first()
+        logs = (
+            db.query(OutreachLog)
+            .filter_by(operator_id=OPERATOR_ID, customer_id=customer_id, dry_run=False)
+            .order_by(OutreachLog.sent_at.asc(), OutreachLog.created_at.asc())
+            .all()
+        )
+        voice_id = customer.assigned_voice_id
+        profiles = operator.voice_profiles or []
+        voice = next((p for p in profiles if p["id"] == voice_id), profiles[0] if profiles else None)
+        tone = json.dumps(operator.tone_profile, indent=2)
+        cust_name = customer.name
+        cust_service_type = customer.last_service_type or "service"
+        cust_last_service_date = customer.last_service_date
+        inbound_logs = [l for l in logs if l.direction == "inbound"]
+        outbound_logs = [l for l in logs if l.direction == "outbound"]
+        last_outbound = outbound_logs[-1] if outbound_logs else None
+        last_inbound = inbound_logs[-1] if inbound_logs else None
+        last_outbound_at = _log_timestamp(last_outbound)
+        last_inbound_at = _log_timestamp(last_inbound)
+        # Build thread context (up to last 6 messages)
+        thread_lines = []
+        for l in logs[-6:]:
+            direction = "Customer" if l.direction == "inbound" else "You"
+            body = (l.content or "")[:400].strip()
+            thread_lines.append(f"[{direction}] {l.subject or '(no subject)'}\n{body}")
+        thread = "\n\n".join(thread_lines)
+        effective_status = customer.reactivation_status
+        if inbound_logs and effective_status not in ("booked", "sequence_complete", "unsubscribed", "replied"):
+            effective_status = "replied"
+        is_reply = bool(last_inbound and (not last_outbound_at or last_inbound_at > last_outbound_at))
+
+    voice_section = (
+        f"Write in the voice of {voice['name']} ({voice.get('role', 'team member')}).\n\n"
+        if voice else ""
+    )
+    days = days_since(cust_last_service_date)
+
+    try:
+        client = anthropic.Anthropic(api_key=config.ANTHROPIC_API_KEY)
+        if is_reply:
+            user_content = CONVO_REPLY_USER.format(
+                tone=tone,
+                voice_section=voice_section,
+                name=cust_name,
+                service_type=cust_service_type,
+                thread=thread,
+            )
+        else:
+            user_content = CONVO_FOLLOWUP_USER.format(
+                tone=tone,
+                voice_section=voice_section,
+                name=cust_name,
+                service_type=cust_service_type,
+                days=days,
+                last_subject=(last_outbound.subject or "our previous email") if last_outbound else "our previous email",
+            )
+        message = client.messages.create(
+            model=config.CLAUDE_MODEL,
+            max_tokens=512,
+            system=CONVO_DRAFT_SYSTEM,
+            messages=[{"role": "user", "content": user_content}],
+        )
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Claude API error: {e}")
+
+    import re as _re
+    raw = message.content[0].text.strip()
+    try:
+        draft = json.loads(raw)
+    except json.JSONDecodeError:
+        draft = {"subject": "Following up", "body": raw}
+    if draft.get("body"):
+        draft["body"] = _re.sub(r'\n{3,}', '\n\n', draft["body"].strip())
+    draft["draft_type"] = "reply" if is_reply else "follow_up"
+    return draft
+
+
+class QueueDraftRequest(BaseModel):
+    subject: str
+    body: str
+    sequence_step: int = 0
+
+
+@app.post("/api/conversation/{customer_id}/queue")
+def queue_conversation_draft(customer_id: int, req: QueueDraftRequest):
+    """Queue a conversation reply/follow-up draft for operator review before sending."""
+    with get_db() as db:
+        customer = db.query(Customer).filter_by(id=customer_id, operator_id=OPERATOR_ID).first()
+        if not customer:
+            raise HTTPException(status_code=404, detail="Customer not found")
+        log = OutreachLog(
+            operator_id=OPERATOR_ID,
+            customer_id=customer_id,
+            channel="email",
+            direction="outbound",
+            subject=req.subject,
+            content=req.body,
+            dry_run=True,
+            approval_status="pending",
+            approved_at=None,
+            scheduled_send_at=None,
+            send_error=None,
+            sequence_step=req.sequence_step,
+        )
+        db.add(log)
+    return {"status": "queued", "customer_id": customer_id}
 
 
 @app.post("/api/draft/{customer_id}")
