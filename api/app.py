@@ -1179,6 +1179,16 @@ def customer_detail(request: Request, customer_id: int):
         customer_data = add_segment(customer_data)
         customer_data["assigned_voice_id"] = customer.assigned_voice_id
         customer_data["customer_profile"] = _normalize_customer_profile(customer.customer_profile)
+        # Score data for breakdown module
+        try:
+            score_bd = json.loads(customer.score_breakdown or "{}")
+        except Exception:
+            score_bd = {}
+        customer_data["score"] = customer.score or 0
+        customer_data["score_breakdown"] = score_bd
+        customer_data["priority_tier"] = customer.priority_tier or "low"
+        customer_data["estimated_job_value"] = customer.estimated_job_value or 0.0
+        customer_data["predicted_next_service"] = customer.predicted_next_service
         jobs = [{"service_type": j.service_type, "completed_at": j.completed_at,
                  "status": j.status, "amount": j.amount} for j in jobs_raw]
         logs = [{"id": l.id, "subject": l.subject, "content": l.content,
