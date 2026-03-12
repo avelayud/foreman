@@ -70,6 +70,7 @@ _db_init_error: Exception | None = None
 
 REPLY_POLL_SECONDS = 900  # 15 minutes
 _scoring_scheduler: BackgroundScheduler | None = None
+_last_analyzer_run: datetime | None = None
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -377,13 +378,61 @@ def _run_scoring_job():
         print(f"[scoring] error: {exc}", flush=True)
 
 
+def _run_customer_analyzer_job():
+    """Run customer analyzer on all customers with correspondence or no profile yet."""
+    global _last_analyzer_run
+    import json as _json
+    from datetime import datetime as _dt, timezone as _tz
+    try:
+        from agents.customer_analyzer import analyze_customer
+        with get_db() as db:
+            customer_ids_with_logs = {
+                row[0] for row in
+                db.query(OutreachLog.customer_id)
+                .filter_by(operator_id=OPERATOR_ID)
+                .distinct()
+                .all()
+            }
+            customers = db.query(Customer).filter_by(operator_id=OPERATOR_ID).all()
+            to_analyze = []
+            for c in customers:
+                if not c.email:
+                    continue
+                raw = c.customer_profile
+                profile = {}
+                if isinstance(raw, dict):
+                    profile = raw
+                elif isinstance(raw, str):
+                    try:
+                        profile = _json.loads(raw)
+                    except Exception:
+                        profile = {}
+                not_analyzed = not profile or not profile.get("analyzed_at")
+                has_history = c.id in customer_ids_with_logs
+                if not_analyzed or has_history:
+                    to_analyze.append(c.id)
+        for cid in to_analyze:
+            try:
+                analyze_customer(OPERATOR_ID, cid, verbose=False)
+            except Exception as exc:
+                print(f"[customer_analyzer] error on customer {cid}: {exc}", flush=True)
+        _last_analyzer_run = _dt.now(_tz.utc).replace(tzinfo=None)
+        print(f"[customer_analyzer] Analyzed {len(to_analyze)} customers.", flush=True)
+        return len(to_analyze)
+    except Exception as exc:
+        print(f"[customer_analyzer] job error: {exc}", flush=True)
+        return 0
+
+
 def _start_scoring_scheduler():
     global _scoring_scheduler
     if _scoring_scheduler is not None:
         return
     _run_scoring_job()  # run once immediately
+    _run_customer_analyzer_job()
     scheduler = BackgroundScheduler(daemon=True)
     scheduler.add_job(_run_scoring_job, "interval", hours=24, id="daily_scoring")
+    scheduler.add_job(_run_customer_analyzer_job, "interval", hours=24, id="daily_analyzer")
     scheduler.start()
     _scoring_scheduler = scheduler
     print("✅ Scoring scheduler started (daily).", flush=True)
@@ -2177,6 +2226,22 @@ def run_agent(req: AgentRunRequest = None):
     return {"status": "started", "limit": req.limit}
 
 
+@app.post("/api/agent/run-customer-analyzer")
+def run_agent_customer_analyzer():
+    import threading
+    t = threading.Thread(target=_run_customer_analyzer_job, daemon=True)
+    t.start()
+    return {"status": "started"}
+
+
+@app.post("/api/agent/run-scoring")
+def run_agent_scoring():
+    import threading
+    t = threading.Thread(target=_run_scoring_job, daemon=True)
+    t.start()
+    return {"status": "started"}
+
+
 @app.get("/api/agent/status")
 def agent_status():
     with get_db() as db:
@@ -2371,6 +2436,17 @@ def agents_page(request: Request):
         )
         conversations_attention_count = _get_conversations_attention_count(db)
 
+        scored_count = (
+            db.query(Customer)
+            .filter(Customer.operator_id == OPERATOR_ID, Customer.score > 0)
+            .count()
+        )
+        high_priority_count = (
+            db.query(Customer)
+            .filter(Customer.operator_id == OPERATOR_ID, Customer.priority_tier == "high")
+            .count()
+        )
+
     return templates.TemplateResponse("agents.html", {
         "request": request,
         "active": "agents",
@@ -2405,12 +2481,26 @@ def agents_page(request: Request):
                 "phase": "Phase 3",
             },
             {
+                "key": "scoring",
+                "name": "Priority Scorer",
+                "icon": "📊",
+                "description": "Scores every customer on 5 signals (Recency, Lifetime Value, Frequency, Job Type, Engagement) to produce a 0–100 priority score and tier. Runs at startup and every 24 hours.",
+                "status": "active",
+                "status_label": "Active (scheduled daily)",
+                "last_run_at": None,
+                "stat_label": "Customers scored",
+                "stat_value": str(scored_count),
+                "stat_meta": f"{high_priority_count} high priority",
+                "cli": "python -m core.scoring",
+                "phase": "Phase 5",
+            },
+            {
                 "key": "customer_analyzer",
                 "name": "Customer Analyzer",
                 "icon": "🧠",
                 "description": "Builds a structured customer profile from prior Gmail correspondence and stores relationship context for more personalized drafts.",
                 "status": "active",
-                "status_label": "Active (auto-triggered)",
+                "status_label": "Active (scheduled daily)",
                 "last_run_at": latest_analyzed_at,
                 "stat_label": "Profiles built",
                 "stat_value": str(analyzed_profiles),

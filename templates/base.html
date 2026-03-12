@@ -190,16 +190,16 @@
       <a href="/" class="sb-link {% if active == 'dashboard' %}active{% endif %}">
         <span>◼</span> Dashboard
       </a>
-      <a href="/outreach" class="sb-link {% if active == 'outreach' %}active{% endif %}">
-        <span>✉</span> Outreach Queue
-        {% if queue_count is defined and queue_count > 0 %}
-        <span style="margin-left:auto;background:var(--gold);color:#fff;font-size:9.5px;font-weight:600;font-family:'IBM Plex Mono',monospace;padding:1px 7px;border-radius:20px">{{ queue_count }}</span>
-        {% endif %}
-      </a>
       <a href="/conversations" class="sb-link {% if active == 'conversations' %}active{% endif %}">
         <span>💬</span> Conversations
         {% if conversations_attention_count is defined and conversations_attention_count > 0 %}
         <span style="margin-left:auto;background:var(--red);color:#fff;font-size:9.5px;font-weight:600;font-family:'IBM Plex Mono',monospace;padding:1px 7px;border-radius:20px">{{ conversations_attention_count }}</span>
+        {% endif %}
+      </a>
+      <a href="/outreach" class="sb-link {% if active == 'outreach' %}active{% endif %}">
+        <span>✉</span> Outreach Queue
+        {% if queue_count is defined and queue_count > 0 %}
+        <span style="margin-left:auto;background:var(--gold);color:#fff;font-size:9.5px;font-weight:600;font-family:'IBM Plex Mono',monospace;padding:1px 7px;border-radius:20px">{{ queue_count }}</span>
         {% endif %}
       </a>
       <div class="sb-section">Pipeline</div>
@@ -218,6 +218,10 @@
       <a href="/agents#reactivation" class="sb-link">
         <span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#4ade80;flex-shrink:0"></span>
         Reactivation Analyzer
+      </a>
+      <a href="/agents#scoring" class="sb-link">
+        <span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#4ade80;flex-shrink:0"></span>
+        Priority Scorer
       </a>
       <a href="/agents#customer_analyzer" class="sb-link">
         <span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#4ade80;flex-shrink:0"></span>

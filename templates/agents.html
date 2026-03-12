@@ -95,6 +95,14 @@
         <button class="btn-primary" id="runBtn-{{ agent.key }}" onclick="runReactivation()" style="font-size:11.5px;padding:7px 16px">
           Run Now
         </button>
+        {% elif agent.key == 'customer_analyzer' %}
+        <button class="btn-primary" id="runBtn-{{ agent.key }}" onclick="runAgent('customer_analyzer', '/api/agent/run-customer-analyzer')" style="font-size:11.5px;padding:7px 16px">
+          Run Now
+        </button>
+        {% elif agent.key == 'scoring' %}
+        <button class="btn-primary" id="runBtn-{{ agent.key }}" onclick="runAgent('scoring', '/api/agent/run-scoring')" style="font-size:11.5px;padding:7px 16px">
+          Run Now
+        </button>
         {% elif agent.key == 'tone_profiler' and not operator.tone_profile_set %}
         <button class="btn-secondary" style="font-size:11.5px;padding:7px 16px;cursor:not-allowed;opacity:0.6" disabled title="Run from CLI with Gmail connected">
           Run from CLI
@@ -116,6 +124,30 @@
   if (hash) {
     const el = document.querySelector(hash);
     if (el) setTimeout(() => el.scrollIntoView({behavior: 'smooth', block: 'center'}), 100);
+  }
+
+  async function runAgent(key, url) {
+    const btn = document.getElementById('runBtn-' + key);
+    btn.disabled = true;
+    btn.textContent = 'Running…';
+    try {
+      const res = await fetch(url, {method: 'POST', headers: {'Content-Type': 'application/json'}});
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.detail || 'Server error');
+      }
+      btn.textContent = 'Started ✓';
+      btn.style.background = 'var(--green)';
+      setTimeout(() => {
+        btn.textContent = 'Refresh to see results';
+        btn.onclick = () => window.location.reload();
+        btn.disabled = false;
+      }, 1500);
+    } catch (e) {
+      btn.textContent = 'Error — ' + e.message;
+      btn.style.background = 'var(--red)';
+      btn.disabled = false;
+    }
   }
 
   async function runReactivation() {
