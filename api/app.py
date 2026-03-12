@@ -1459,6 +1459,17 @@ def customer_detail(request: Request, customer_id: int):
                  "direction": l.direction, "channel": l.channel}
                 for l in logs_raw]
 
+        # Active conversation state for the CTA card
+        sent_logs = [l for l in logs_raw if not l.dry_run]
+        has_active_conversation = bool(sent_logs)
+        last_sent_log = sent_logs[0] if sent_logs else None  # already desc by sent_at
+        inbound_logs = [l for l in sent_logs if l.direction == "inbound"]
+        last_inbound_log = inbound_logs[0] if inbound_logs else None
+        active_conv_last_at = _log_timestamp(last_sent_log) if last_sent_log else None
+        active_conv_last_direction = last_sent_log.direction if last_sent_log else None
+        active_conv_reply_count = len(inbound_logs)
+        unique_threads = len({l.gmail_thread_id for l in sent_logs if l.gmail_thread_id})
+
         account_events = []
         for j in jobs_raw:
             event_at = j.completed_at or j.scheduled_at or j.created_at
@@ -1498,6 +1509,11 @@ def customer_detail(request: Request, customer_id: int):
         "jobs": jobs,
         "logs": logs,
         "account_events": account_events,
+        "has_active_conversation": has_active_conversation,
+        "active_conv_last_at": active_conv_last_at,
+        "active_conv_last_direction": active_conv_last_direction,
+        "active_conv_reply_count": active_conv_reply_count,
+        "unique_threads": unique_threads,
     })
 
 

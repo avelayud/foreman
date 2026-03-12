@@ -231,6 +231,43 @@ def get_thread(thread_id: str) -> list[dict]:
     return [_parse_message(m) for m in messages]
 
 
+def search_inbox_by_sender(email_address: str, since_date=None, max_results: int = 10) -> list[dict]:
+    """
+    Search the operator's inbox for messages FROM a specific email address.
+    Optionally filter to messages sent after `since_date` (datetime).
+
+    Used as a fallback in reply_detector when a customer's reply lands on a
+    different Gmail thread than the one we sent (client threading differences).
+
+    Returns a list of parsed message dicts, newest first.
+    """
+    service = _get_gmail_service()
+
+    query = f"from:{email_address} in:inbox"
+    if since_date:
+        # Gmail search uses YYYY/MM/DD — subtract 1 day buffer for timezone slop
+        from datetime import timedelta
+        since_str = (since_date - timedelta(days=1)).strftime("%Y/%m/%d")
+        query += f" after:{since_str}"
+
+    result = service.users().messages().list(
+        userId="me", q=query, maxResults=max_results
+    ).execute()
+
+    messages = result.get("messages", [])
+    parsed = []
+    for stub in messages:
+        try:
+            msg = service.users().messages().get(
+                userId="me", id=stub["id"], format="full"
+            ).execute()
+            parsed.append(_parse_message(msg))
+        except Exception as e:
+            print(f"  [gmail] search_inbox_by_sender: error fetching {stub['id']}: {e}")
+
+    return parsed
+
+
 def get_inbox_replies(thread_ids: list[str]) -> dict[str, list[dict]]:
     """
     For each thread_id, return any inbound (customer reply) messages.
