@@ -233,12 +233,33 @@ def _next_business_send_time(now: datetime | None = None) -> datetime:
     return candidate
 
 
-def _gmail_send_message(to: str, subject: str, body: str) -> str:
+def _gmail_send_message(to: str, subject: str, body: str, thread_id: str = None) -> str:
     """Send a message through Gmail and return thread ID."""
     from integrations.gmail import send_email as gmail_send
 
-    _, thread_id = gmail_send(to=to, subject=subject, body=body)
-    return thread_id
+    _, returned_thread_id = gmail_send(to=to, subject=subject, body=body, thread_id=thread_id)
+    return returned_thread_id
+
+
+def _get_customer_thread_id(log_id: int) -> str | None:
+    """Look up the existing gmail_thread_id for the customer associated with this log."""
+    with get_db() as db:
+        log = db.query(OutreachLog).filter_by(id=log_id, operator_id=OPERATOR_ID).first()
+        if not log:
+            return None
+        customer_id = log.customer_id
+        existing_thread = (
+            db.query(OutreachLog.gmail_thread_id)
+            .filter(
+                OutreachLog.customer_id == customer_id,
+                OutreachLog.operator_id == OPERATOR_ID,
+                OutreachLog.gmail_thread_id != None,
+                OutreachLog.dry_run == False,
+            )
+            .order_by(OutreachLog.sent_at.desc())
+            .first()
+        )
+        return existing_thread[0] if existing_thread else None
 
 
 def _deliver_outreach_log(
@@ -258,10 +279,12 @@ def _deliver_outreach_log(
 
     if customer_email:
         try:
+            existing_thread_id = _get_customer_thread_id(log_id)
             thread_id = _gmail_send_message(
                 to=customer_email,
                 subject=subject,
                 body=body,
+                thread_id=existing_thread_id,
             )
         except Exception as exc:
             send_error = str(exc)

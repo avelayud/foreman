@@ -158,6 +158,7 @@ def _parse_message(msg: dict) -> dict:
 
     return {
         "message_id": msg.get("id"),
+        "rfc_message_id": _get_header(headers, "Message-ID"),  # RFC 2822 id for In-Reply-To
         "thread_id": msg.get("threadId"),
         "from": _get_header(headers, "From"),
         "to": _get_header(headers, "To"),
@@ -268,7 +269,9 @@ def send_email(
         to:        Recipient email address
         subject:   Email subject line
         body:      Plain-text body
-        thread_id: If replying in a thread, pass the existing thread_id
+        thread_id: If replying in a thread, pass the existing gmail thread_id.
+                   The function will fetch the thread to set In-Reply-To /
+                   References headers so the recipient sees it in the same thread.
 
     Returns:
         (message_id, thread_id) — store thread_id on OutreachLog for reply tracking
@@ -278,6 +281,31 @@ def send_email(
     msg = MIMEText(body, "plain", "utf-8")
     msg["to"] = to
     msg["subject"] = subject
+
+    # When replying, set RFC 2822 threading headers so the recipient's mail
+    # client groups this message in the same thread.
+    if thread_id:
+        try:
+            thread_result = service.users().threads().get(
+                userId="me", id=thread_id, format="full"
+            ).execute()
+            messages = thread_result.get("messages", [])
+            if messages:
+                last_msg = messages[-1]
+                last_headers = last_msg.get("payload", {}).get("headers", [])
+                last_rfc_id = _get_header(last_headers, "Message-ID")
+                # Collect all Message-IDs in thread for References header
+                all_rfc_ids = [
+                    _get_header(m.get("payload", {}).get("headers", []), "Message-ID")
+                    for m in messages
+                ]
+                all_rfc_ids = [mid for mid in all_rfc_ids if mid]
+                if last_rfc_id:
+                    msg["In-Reply-To"] = last_rfc_id
+                if all_rfc_ids:
+                    msg["References"] = " ".join(all_rfc_ids)
+        except Exception as e:
+            print(f"[gmail] Could not fetch thread headers for threading: {e}")
 
     raw = base64.urlsafe_b64encode(msg.as_bytes()).decode()
     request_body = {"raw": raw}
