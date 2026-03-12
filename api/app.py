@@ -1026,16 +1026,90 @@ def _db_starting_response() -> HTMLResponse | None:
 
 # ── Web pages ─────────────────────────────────────────────────────────────────
 
+def _get_enriched_customers(operator_id: int) -> list[dict]:
+    """Fetch and enrich all customers. Returns plain dicts, safe to use outside DB session."""
+    with get_db() as db:
+        raw_customers = db.query(Customer).filter_by(operator_id=operator_id).all()
+        last_interaction_rows = (
+            db.query(OutreachLog.customer_id, OutreachLog.sent_at, OutreachLog.direction)
+            .filter(OutreachLog.operator_id == operator_id, OutreachLog.dry_run == False)
+            .order_by(OutreachLog.sent_at.desc())
+            .all()
+        )
+        last_interaction: dict[int, dict] = {}
+        for row in last_interaction_rows:
+            if row.customer_id not in last_interaction:
+                last_interaction[row.customer_id] = {
+                    "date": row.sent_at,
+                    "direction": row.direction,
+                }
+        customers_raw = []
+        for c in raw_customers:
+            score_bd = {}
+            try:
+                score_bd = json.loads(c.score_breakdown or "{}")
+            except Exception:
+                pass
+            customers_raw.append({
+                "id": c.id,
+                "name": c.name,
+                "email": c.email,
+                "phone": c.phone,
+                "address": c.address,
+                "last_service_date": c.last_service_date,
+                "last_service_type": c.last_service_type,
+                "total_jobs": c.total_jobs,
+                "total_spend": c.total_spend,
+                "reactivation_status": c.reactivation_status,
+                "score": c.score or 0,
+                "score_breakdown": score_bd,
+                "priority_tier": c.priority_tier or "low",
+                "estimated_job_value": c.estimated_job_value or 0.0,
+                "service_interval_days": c.service_interval_days,
+                "predicted_next_service": c.predicted_next_service,
+                "last_interaction": last_interaction.get(c.id),
+            })
+
+    enriched = []
+    for cd in customers_raw:
+        days = days_since(cd["last_service_date"])
+        status = cd["reactivation_status"]
+        cat = categorize_from_dict(cd, days, status)
+        cd["days_dormant"] = days
+        cd["category"] = cat
+        if status == "booked":
+            cd["outreach_status"] = "Booked"
+            cd["outreach_status_cls"] = "s-booked"
+        elif status == "replied":
+            cd["outreach_status"] = "Replied"
+            cd["outreach_status_cls"] = "s-replied"
+        elif status in ("outreach_sent", "sequence_step_2", "sequence_step_3"):
+            cd["outreach_status"] = "Contacted"
+            cd["outreach_status_cls"] = "s-contacted"
+        elif status == "unsubscribed":
+            cd["outreach_status"] = "Unsubscribed"
+            cd["outreach_status_cls"] = "s-unsub"
+        else:
+            cd["outreach_status"] = "Not Contacted"
+            cd["outreach_status_cls"] = "s-none"
+        score = cd["score"]
+        if score >= 70:
+            cd["score_cls"] = "score-high"
+        elif score >= 40:
+            cd["score_cls"] = "score-med"
+        else:
+            cd["score_cls"] = "score-low"
+        enriched.append(cd)
+    return enriched
+
+
 @app.get("/", response_class=HTMLResponse)
 def dashboard(request: Request):
     if (guard := _db_starting_response()):
         return guard
 
-    ninety_days_ago = datetime.utcnow() - timedelta(days=90)
-
     with get_db() as db:
         operator = db.query(Operator).filter_by(id=OPERATOR_ID).first()
-        raw_customers = db.query(Customer).filter_by(operator_id=OPERATOR_ID).all()
         queue_count = db.query(OutreachLog).filter_by(
             operator_id=OPERATOR_ID, dry_run=True
         ).count()
@@ -1064,88 +1138,25 @@ def dashboard(request: Request):
             (l.converted_job_value or 0.0) for l in booked_logs
         )
 
-        # Batch-fetch last interaction per customer (one query, not N)
-        last_interaction_rows = (
-            db.query(OutreachLog.customer_id, OutreachLog.sent_at, OutreachLog.direction)
-            .filter(OutreachLog.operator_id == OPERATOR_ID, OutreachLog.dry_run == False)
-            .order_by(OutreachLog.sent_at.desc())
-            .all()
-        )
-        last_interaction: dict[int, dict] = {}
-        for row in last_interaction_rows:
-            if row.customer_id not in last_interaction:
-                last_interaction[row.customer_id] = {
-                    "date": row.sent_at,
-                    "direction": row.direction,
-                }
+    enriched = _get_enriched_customers(OPERATOR_ID)
 
-        # Serialize everything we need from ORM before session closes
-        customers_raw_data = []
-        for c in raw_customers:
-            score_bd = {}
-            try:
-                score_bd = json.loads(c.score_breakdown or "{}")
-            except Exception:
-                pass
-            customers_raw_data.append({
-                "id": c.id,
-                "name": c.name,
-                "email": c.email,
-                "phone": c.phone,
-                "address": c.address,
-                "last_service_date": c.last_service_date,
-                "last_service_type": c.last_service_type,
-                "total_jobs": c.total_jobs,
-                "total_spend": c.total_spend,
-                "reactivation_status": c.reactivation_status,
-                "score": c.score or 0,
-                "score_breakdown": score_bd,
-                "priority_tier": c.priority_tier or "low",
-                "estimated_job_value": c.estimated_job_value or 0.0,
-                "service_interval_days": c.service_interval_days,
-                "predicted_next_service": c.predicted_next_service,
-                "last_interaction": last_interaction.get(c.id),
-            })
-
-    # Enrich customers with derived fields
-    enriched = []
-    for cd in customers_raw_data:
-        days = days_since(cd["last_service_date"])
-        status = cd["reactivation_status"]
-        cat = categorize_from_dict(cd, days, status)
-        cd["days_dormant"] = days
-        cd["category"] = cat
-
-        # Outreach status pill
-        if status == "booked":
-            cd["outreach_status"] = "Booked"
-            cd["outreach_status_cls"] = "s-booked"
-        elif status in ("replied",):
-            cd["outreach_status"] = "Replied"
-            cd["outreach_status_cls"] = "s-replied"
-        elif status in ("outreach_sent", "sequence_step_2", "sequence_step_3"):
-            cd["outreach_status"] = "Contacted"
-            cd["outreach_status_cls"] = "s-contacted"
-        elif status == "unsubscribed":
-            cd["outreach_status"] = "Unsubscribed"
-            cd["outreach_status_cls"] = "s-unsub"
-        else:
-            cd["outreach_status"] = "Not Contacted"
-            cd["outreach_status_cls"] = "s-none"
-
-        # Score badge color
-        score = cd["score"]
-        if score >= 70:
-            cd["score_cls"] = "score-high"
-        elif score >= 40:
-            cd["score_cls"] = "score-med"
-        else:
-            cd["score_cls"] = "score-low"
-
-        enriched.append(cd)
-
-    # Sort by score descending (primary queue)
-    priority_queue = sorted(enriched, key=lambda x: x["score"], reverse=True)
+    # Partition into 4 groups
+    group_upcoming = sorted(
+        [c for c in enriched if c["reactivation_status"] == "booked"],
+        key=lambda x: -x["score"],
+    )
+    group_attention = sorted(
+        [c for c in enriched if c["reactivation_status"] in ("replied", "outreach_sent", "sequence_step_2", "sequence_step_3")],
+        key=lambda x: (0 if x["reactivation_status"] == "replied" else 1, -x["score"]),
+    )
+    group_ripe = sorted(
+        [c for c in enriched if c["reactivation_status"] == "never_contacted"],
+        key=lambda x: -x["score"],
+    )
+    group_declined = sorted(
+        [c for c in enriched if c["reactivation_status"] in ("sequence_complete", "unsubscribed")],
+        key=lambda x: -x["score"],
+    )
 
     # ── 8 dashboard metric cards ───────────────────────────────────────────
     dormant_customers = [
@@ -1202,10 +1213,38 @@ def dashboard(request: Request):
         "active": "dashboard",
         "operator": operator_data,
         "metrics": metrics,
-        "priority_queue": priority_queue,
+        "group_upcoming": group_upcoming,
+        "group_attention": group_attention,
+        "group_ripe": group_ripe,
+        "group_declined": group_declined,
         "queue_count": queue_count,
         "conversations_attention_count": conversations_attention_count,
         "today_str": today_str,
+    })
+
+
+@app.get("/customers", response_class=HTMLResponse)
+def customers_list(request: Request, search: str = "", group: str = "all"):
+    if (guard := _db_starting_response()):
+        return guard
+    with get_db() as db:
+        op = db.query(Operator).filter_by(id=OPERATOR_ID).first()
+        operator_data = _operator_data(op)
+        queue_count = db.query(OutreachLog).filter_by(operator_id=OPERATOR_ID, dry_run=True).count()
+        conversations_attention_count = _get_conversations_attention_count(db)
+
+    enriched = _get_enriched_customers(OPERATOR_ID)
+    all_customers = sorted(enriched, key=lambda x: -x["score"])
+
+    return templates.TemplateResponse("customers.html", {
+        "request": request,
+        "active": "customers",
+        "operator": operator_data,
+        "queue_count": queue_count,
+        "conversations_attention_count": conversations_attention_count,
+        "all_customers": all_customers,
+        "search": search,
+        "group_filter": group,
     })
 
 

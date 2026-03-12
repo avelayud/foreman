@@ -25,12 +25,20 @@
   .metric-sub{font-size:11px;color:var(--text-3);margin-top:5px}
   .metric-cell.accent .metric-sub,.metric-cell.accent-green .metric-sub{color:rgba(255,255,255,0.3)}
 
-  /* ── FILTER BAR ── */
-  .filter-bar{display:flex;align-items:center;gap:8px;margin-bottom:12px;flex-wrap:wrap}
-  .filter-tab{padding:7px 14px;border-radius:20px;font-size:12px;font-weight:500;cursor:pointer;border:1px solid var(--border);background:var(--surface);color:var(--text-2);transition:all 0.15s;font-family:'IBM Plex Sans',sans-serif}
-  .filter-tab:hover{border-color:var(--navy);color:var(--navy)}
-  .filter-tab.active{background:var(--navy);color:#fff;border-color:var(--navy)}
-  .filter-tab .count{font-size:10px;font-family:'IBM Plex Mono',monospace;margin-left:4px;opacity:0.75}
+  /* ── GROUP SECTIONS ── */
+  .pg-section{}
+  .pg-header{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius) var(--radius) 0 0;border-bottom:none;gap:12px}
+  .pg-title{font-size:13px;font-weight:700;color:var(--navy);font-family:'IBM Plex Sans',sans-serif}
+  .pg-count{font-size:10px;font-weight:700;font-family:'IBM Plex Mono',monospace;padding:2px 8px;border-radius:10px}
+  .pg-desc{font-size:11.5px;color:var(--text-3);margin-top:2px;font-family:'IBM Plex Sans',sans-serif}
+  .pg-viewall{font-size:11.5px;color:var(--blue);text-decoration:none;font-family:'IBM Plex Sans',sans-serif;font-weight:500;white-space:nowrap;flex-shrink:0}
+  .pg-viewall:hover{text-decoration:underline}
+  .pg-more-btn{background:none;border:1px solid var(--border);border-radius:20px;padding:6px 20px;font-size:11.5px;color:var(--text-2);cursor:pointer;font-family:'IBM Plex Sans',sans-serif;transition:all 0.15s;margin-top:4px}
+  .pg-more-btn:hover{border-color:var(--navy);color:var(--navy)}
+  .pt-extra{display:none!important}
+  .pt-extra.visible{display:grid!important}
+  /* Attach the priority-table border-radius to the group context */
+  .pg-section .priority-table{border-radius:0 0 var(--radius) var(--radius)}
 
   /* ── PRIORITY TABLE ── */
   /* Cols: Score | Customer | Status | Est.Value | Dormant | Last Service | Last Interaction | Action | Mark as Booked | ··· */
@@ -170,153 +178,158 @@
   </div>
 </div>
 
-{# ── PRIORITY QUEUE ── #}
-<div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:12px">
-  <h2 style="font-size:13px;font-weight:600;color:var(--navy)">Priority Queue <span style="font-size:12px;color:var(--text-3);font-weight:400">— ranked by score</span></h2>
-  <span style="font-size:11.5px;color:var(--text-3);font-family:'IBM Plex Mono',monospace">{{ priority_queue|length }} customers</span>
+{# ── PRIORITY GROUPS ── #}
+<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
+  <h2 style="font-size:13px;font-weight:600;color:var(--navy)">Priority Queue</h2>
+  <a href="/customers" style="font-size:12px;color:var(--blue);text-decoration:none;font-family:'IBM Plex Sans',sans-serif;font-weight:500">View all customers →</a>
 </div>
 
-{# Filter tabs #}
-{% set all_count = priority_queue|length %}
-{% set high_count = priority_queue|selectattr('priority_tier','equalto','high')|list|length %}
-{% set not_contacted_count = priority_queue|selectattr('reactivation_status','equalto','never_contacted')|list|length %}
-{% set awaiting_count = priority_queue|selectattr('reactivation_status','in',['outreach_sent','sequence_step_2','sequence_step_3'])|list|length %}
-{% set replied_count = priority_queue|selectattr('reactivation_status','equalto','replied')|list|length %}
-{% set booked_count = priority_queue|selectattr('reactivation_status','equalto','booked')|list|length %}
-
-<div class="filter-bar" id="filterBar">
-  <button class="filter-tab active" data-filter="all" onclick="applyFilter('all',this)">All <span class="count">{{ all_count }}</span></button>
-  <button class="filter-tab" data-filter="high" onclick="applyFilter('high',this)">High Priority <span class="count">{{ high_count }}</span></button>
-  <button class="filter-tab" data-filter="not_contacted" onclick="applyFilter('not_contacted',this)">Not Contacted <span class="count">{{ not_contacted_count }}</span></button>
-  <button class="filter-tab" data-filter="awaiting" onclick="applyFilter('awaiting',this)">Awaiting Reply <span class="count">{{ awaiting_count }}</span></button>
-  <button class="filter-tab" data-filter="replied" onclick="applyFilter('replied',this)">Replied <span class="count">{{ replied_count }}</span></button>
-  <button class="filter-tab" data-filter="booked" onclick="applyFilter('booked',this)">Booked <span class="count">{{ booked_count }}</span></button>
-</div>
-
-<div class="priority-table">
-  <div class="pt-head">
-    <div class="pt-th">Score</div>
-    <div class="pt-th" style="text-align:left;padding-left:10px">Customer</div>
-    <div class="pt-th sep-th">Status</div>
-    <div class="pt-th">Est. Value</div>
-    <div class="pt-th">Dormant</div>
-    <div class="pt-th">Last Service</div>
-    <div class="pt-th">Last Interaction</div>
-    <div class="pt-th">Action</div>
-    <div class="pt-th">Mark as Booked</div>
-    <div class="pt-th"></div>
-  </div>
-
-  {% for c in priority_queue %}
-  <div class="pt-row"
-       data-tier="{{ c.priority_tier }}"
-       data-status="{{ c.reactivation_status }}">
-
-    {# Score badge #}
-    <div>
-      <div class="score-badge {{ c.score_cls }}">{{ c.score }}</div>
-    </div>
-
-    {# Customer name #}
-    <div class="c-cell">
-      <span class="c-name">{{ c.name }}</span>
-    </div>
-
-    {# Outreach status pill — next to customer, with left separator #}
-    <div class="sep-col">
-      <span class="os-pill {{ c.outreach_status_cls }}">{{ c.outreach_status }}</span>
-    </div>
-
-    {# Est. job value #}
-    <div>
-      {% if c.estimated_job_value and c.estimated_job_value > 0 %}
-      <span class="est-val">${{ "{:,.0f}".format(c.estimated_job_value) }}</span>
-      {% else %}
-      <span class="act-empty">—</span>
-      {% endif %}
-    </div>
-
-    {# Dormant days — immediately right of est. value #}
-    <div>
-      {% if c.days_dormant is not none %}
-      <span class="svc-ago {% if c.days_dormant >= 365 %}dormant-red{% elif c.days_dormant >= 180 %}dormant-amber{% endif %}" style="font-family:'IBM Plex Mono',monospace;font-size:11.5px">{{ c.days_dormant }}d</span>
-      {% else %}
-      <span class="act-empty">—</span>
-      {% endif %}
-    </div>
-
-    {# Last service — date + service type stacked #}
-    <div>
-      {% if c.last_service_date %}
-      <div class="svc-cell">
-        <span class="svc-line">{{ c.last_service_date.strftime('%b %-d, %Y') }}</span>
-        {% if c.last_service_type %}
-        <span class="svc-sub">{{ c.last_service_type }}</span>
-        {% endif %}
-      </div>
-      {% else %}
-      <span class="svc-line" style="color:var(--text-4)">—</span>
-      {% endif %}
-    </div>
-
-    {# Last interaction — date + type stacked #}
-    <div>
-      {% if c.last_interaction %}
-        {% set li = c.last_interaction %}
-        <div class="svc-cell">
-          <span class="svc-line">{{ li.date.strftime('%b %-d, %Y') }}</span>
-          <span class="svc-sub">{% if li.direction == 'inbound' %}Customer reply{% else %}Outreach sent{% endif %}</span>
+{% macro render_group(group_id, title, icon, accent_color, description, customers) %}
+<div class="pg-section" style="margin-bottom:28px">
+  <div class="pg-header" style="border-left:3px solid {{ accent_color }}">
+    <div style="display:flex;align-items:center;gap:10px;flex:1;min-width:0">
+      <span style="font-size:18px;line-height:1">{{ icon }}</span>
+      <div style="min-width:0">
+        <div style="display:flex;align-items:baseline;gap:10px">
+          <span class="pg-title">{{ title }}</span>
+          <span class="pg-count" style="background:{{ accent_color }}20;color:{{ accent_color }}">{{ customers|length }}</span>
         </div>
-      {% else %}
-        <span class="act-empty">—</span>
-      {% endif %}
-    </div>
-
-    {# Primary action — cycle-aware #}
-    <div onclick="event.stopPropagation()">
-      {% if c.reactivation_status == 'never_contacted' %}
-        <a href="/customer/{{ c.id }}" class="act-btn act-draft">Draft Outreach</a>
-      {% elif c.reactivation_status in ('outreach_sent', 'sequence_step_2', 'sequence_step_3') %}
-        <a href="/conversations/{{ c.id }}" class="act-btn act-followup">Draft Follow-up</a>
-      {% elif c.reactivation_status == 'replied' %}
-        <a href="/conversations/{{ c.id }}" class="act-btn act-call">Book Call</a>
-      {% elif c.reactivation_status == 'booked' %}
-        <span class="act-badge act-badge-booked">Booked</span>
-      {% elif c.reactivation_status == 'sequence_complete' %}
-        <span class="act-badge act-badge-done">Seq. Done</span>
-      {% elif c.reactivation_status == 'unsubscribed' %}
-        <span class="act-badge act-badge-unsub">Unsubscribed</span>
-      {% else %}
-        <span class="act-empty">—</span>
-      {% endif %}
-    </div>
-
-    {# Mark Booked column #}
-    <div onclick="event.stopPropagation()">
-      {% if c.reactivation_status not in ('booked', 'unsubscribed', 'never_contacted') %}
-        <button class="act-btn act-book" onclick="openBookModal({{ c.id }}, '{{ c.name|replace("'","\\'")|e }}')">Mark as Booked</button>
-      {% elif c.reactivation_status == 'booked' %}
-        <span class="act-booked-done">Done</span>
-      {% else %}
-        <span class="act-empty">—</span>
-      {% endif %}
-    </div>
-
-    {# ··· more menu #}
-    <div class="more-wrap" onclick="event.stopPropagation()">
-      <button class="more-btn" onclick="toggleMore(event, this)" title="More options">⋯</button>
-      <div class="more-dropdown">
-        <a href="/customer/{{ c.id }}" class="more-item">View Customer</a>
-        {% if c.reactivation_status not in ('never_contacted', 'unsubscribed') %}
-        <a href="/conversations/{{ c.id }}" class="more-item">View Conversation</a>
-        {% endif %}
+        <div class="pg-desc">{{ description }}</div>
       </div>
     </div>
+    <a href="/customers?group={{ group_id }}" class="pg-viewall">View all →</a>
   </div>
+
+  {% if customers %}
+  <div class="priority-table">
+    <div class="pt-head">
+      <div class="pt-th">Score</div>
+      <div class="pt-th" style="text-align:left;padding-left:10px">Customer</div>
+      <div class="pt-th sep-th">Status</div>
+      <div class="pt-th">Est. Value</div>
+      <div class="pt-th">Dormant</div>
+      <div class="pt-th">Last Service</div>
+      <div class="pt-th">Last Interaction</div>
+      <div class="pt-th">Action</div>
+      <div class="pt-th">Mark as Booked</div>
+      <div class="pt-th"></div>
+    </div>
+
+    {% for c in customers[:10] %}
+    <div class="pt-row{% if loop.index > 5 %} pt-extra pt-extra-{{ group_id }}{% endif %}"
+         data-tier="{{ c.priority_tier }}"
+         data-status="{{ c.reactivation_status }}">
+
+      <div>
+        <div class="score-badge {{ c.score_cls }}">{{ c.score }}</div>
+      </div>
+
+      <div class="c-cell">
+        <span class="c-name">{{ c.name }}</span>
+      </div>
+
+      <div class="sep-col">
+        <span class="os-pill {{ c.outreach_status_cls }}">{{ c.outreach_status }}</span>
+      </div>
+
+      <div>
+        {% if c.estimated_job_value and c.estimated_job_value > 0 %}
+        <span class="est-val">${{ "{:,.0f}".format(c.estimated_job_value) }}</span>
+        {% else %}
+        <span class="act-empty">—</span>
+        {% endif %}
+      </div>
+
+      <div>
+        {% if c.days_dormant is not none %}
+        <span class="svc-ago {% if c.days_dormant >= 365 %}dormant-red{% elif c.days_dormant >= 180 %}dormant-amber{% endif %}" style="font-family:'IBM Plex Mono',monospace;font-size:11.5px">{{ c.days_dormant }}d</span>
+        {% else %}
+        <span class="act-empty">—</span>
+        {% endif %}
+      </div>
+
+      <div>
+        {% if c.last_service_date %}
+        <div class="svc-cell">
+          <span class="svc-line">{{ c.last_service_date.strftime('%b %-d, %Y') }}</span>
+          {% if c.last_service_type %}<span class="svc-sub">{{ c.last_service_type }}</span>{% endif %}
+        </div>
+        {% else %}
+        <span class="svc-line" style="color:var(--text-4)">—</span>
+        {% endif %}
+      </div>
+
+      <div>
+        {% if c.last_interaction %}
+          {% set li = c.last_interaction %}
+          <div class="svc-cell">
+            <span class="svc-line">{{ li.date.strftime('%b %-d, %Y') }}</span>
+            <span class="svc-sub">{% if li.direction == 'inbound' %}Customer reply{% else %}Outreach sent{% endif %}</span>
+          </div>
+        {% else %}
+          <span class="act-empty">—</span>
+        {% endif %}
+      </div>
+
+      <div onclick="event.stopPropagation()">
+        {% if c.reactivation_status == 'never_contacted' %}
+          <a href="/customer/{{ c.id }}" class="act-btn act-draft">Draft Outreach</a>
+        {% elif c.reactivation_status in ('outreach_sent', 'sequence_step_2', 'sequence_step_3') %}
+          <a href="/conversations/{{ c.id }}" class="act-btn act-followup">Draft Follow-up</a>
+        {% elif c.reactivation_status == 'replied' %}
+          <a href="/conversations/{{ c.id }}" class="act-btn act-call">Book Call</a>
+        {% elif c.reactivation_status == 'booked' %}
+          <span class="act-badge act-badge-booked">Booked</span>
+        {% elif c.reactivation_status == 'sequence_complete' %}
+          <span class="act-badge act-badge-done">Seq. Done</span>
+        {% elif c.reactivation_status == 'unsubscribed' %}
+          <span class="act-badge act-badge-unsub">Unsubscribed</span>
+        {% else %}
+          <span class="act-empty">—</span>
+        {% endif %}
+      </div>
+
+      <div onclick="event.stopPropagation()">
+        {% if c.reactivation_status not in ('booked', 'unsubscribed', 'never_contacted') %}
+          <button class="act-btn act-book" onclick="openBookModal({{ c.id }}, '{{ c.name|replace("'","\\'")|e }}')">Mark as Booked</button>
+        {% elif c.reactivation_status == 'booked' %}
+          <span class="act-empty" style="font-size:10px;color:var(--green)">✓ Done</span>
+        {% else %}
+          <span class="act-empty">—</span>
+        {% endif %}
+      </div>
+
+      <div class="more-wrap" onclick="event.stopPropagation()">
+        <button class="more-btn" onclick="toggleMore(event, this)" title="More options">⋯</button>
+        <div class="more-dropdown">
+          <a href="/customer/{{ c.id }}" class="more-item">View Customer</a>
+          {% if c.reactivation_status not in ('never_contacted', 'unsubscribed') %}
+          <a href="/conversations/{{ c.id }}" class="more-item">View Conversation</a>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+
+  {% if customers|length > 5 %}
+  <div style="text-align:center;margin-top:8px">
+    <button class="pg-more-btn" id="more-{{ group_id }}" onclick="toggleExtra('{{ group_id }}', this)">
+      Show {{ [customers|length - 5, 5]|min }} more
+    </button>
+  </div>
+  {% endif %}
+
   {% else %}
-  <div class="empty-state">No customers found.</div>
-  {% endfor %}
+  <div class="empty-state">No customers in this group.</div>
+  {% endif %}
 </div>
+{% endmacro %}
+
+{{ render_group('upcoming', 'Upcoming Jobs', '📅', '#1a7a4a', 'Customers with booked jobs — confirm details and prepare for service.', group_upcoming) }}
+{{ render_group('attention', 'Active — Requires Attention', '🔥', '#d97706', 'Customers who have replied or are in an active outreach sequence. Act now.', group_attention) }}
+{{ render_group('ripe', 'Ripe for Reactivation', '🎯', '#1e3a5f', 'Dormant customers ranked by priority score. Start the conversation.', group_ripe) }}
+{{ render_group('declined', 'On Hold / Declined', '⏸', '#6b7280', 'Customers who completed the sequence with no response, or unsubscribed.', group_declined) }}
 
 {# ── MARK AS BOOKED MODAL ── #}
 <div class="modal-overlay" id="bookModal">
@@ -338,23 +351,17 @@
 
 {% block scripts %}
 <script>
-  // ── Filter tabs ────────────────────────────────────────────────────────────
-  function applyFilter(filter, btn) {
-    document.querySelectorAll('.filter-tab').forEach(t => t.classList.remove('active'));
-    btn.classList.add('active');
-    const rows = document.querySelectorAll('.pt-row');
-    rows.forEach(row => {
-      const tier = row.dataset.tier;
-      const status = row.dataset.status;
-      let show = false;
-      if (filter === 'all') show = true;
-      else if (filter === 'high') show = tier === 'high';
-      else if (filter === 'not_contacted') show = status === 'never_contacted';
-      else if (filter === 'awaiting') show = ['outreach_sent','sequence_step_2','sequence_step_3'].includes(status);
-      else if (filter === 'replied') show = status === 'replied';
-      else if (filter === 'booked') show = status === 'booked';
-      row.classList.toggle('hidden', !show);
-    });
+  // ── Group expand/collapse ──────────────────────────────────────────────────
+  function toggleExtra(groupId, btn) {
+    const rows = document.querySelectorAll('.pt-extra-' + groupId);
+    const showing = btn.dataset.showing === '1';
+    rows.forEach(r => r.classList.toggle('visible', !showing));
+    btn.dataset.showing = showing ? '0' : '1';
+    if (showing) {
+      btn.textContent = 'Show ' + rows.length + ' more';
+    } else {
+      btn.textContent = 'Show less';
+    }
   }
 
   // ── ··· more menu ──────────────────────────────────────────────────────────

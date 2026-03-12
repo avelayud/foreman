@@ -1,0 +1,323 @@
+{% extends "base.html" %}
+{% block page_title %}All Customers{% endblock %}
+
+{% block extra_styles %}
+<style>
+  .page-eyebrow{font-size:10.5px;font-family:'IBM Plex Mono',monospace;letter-spacing:1.5px;text-transform:uppercase;color:var(--text-3);margin-bottom:6px}
+  .page-title{font-family:'Playfair Display',serif;font-size:28px;font-weight:700;color:var(--navy);line-height:1.2;margin-bottom:20px}
+
+  /* Search + filter bar */
+  .cust-bar{display:flex;align-items:center;gap:12px;margin-bottom:16px;flex-wrap:wrap}
+  .cust-search{flex:1;min-width:200px;max-width:340px;position:relative}
+  .cust-search input{width:100%;padding:8px 12px 8px 34px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:'IBM Plex Sans',sans-serif;color:var(--text);background:var(--surface);outline:none;transition:border-color 0.15s}
+  .cust-search input:focus{border-color:var(--navy)}
+  .cust-search-icon{position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--text-4);font-size:13px;pointer-events:none}
+  .filter-tab{padding:7px 14px;border-radius:20px;font-size:12px;font-weight:500;cursor:pointer;border:1px solid var(--border);background:var(--surface);color:var(--text-2);transition:all 0.15s;font-family:'IBM Plex Sans',sans-serif}
+  .filter-tab:hover{border-color:var(--navy);color:var(--navy)}
+  .filter-tab.active{background:var(--navy);color:#fff;border-color:var(--navy)}
+  .filter-tab .count{font-size:10px;font-family:'IBM Plex Mono',monospace;margin-left:4px;opacity:0.75}
+  .cust-total{font-size:11.5px;color:var(--text-3);font-family:'IBM Plex Mono',monospace;margin-left:auto}
+
+  /* Table — same grid as dashboard */
+  .priority-table{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;box-shadow:var(--shadow-sm)}
+  .pt-head{display:grid;grid-template-columns:64px 1.7fr 1.1fr 0.9fr 0.6fr 1.2fr 1.5fr 1.0fr 1.0fr 40px;padding:9px 16px;background:var(--navy-soft);border-bottom:1px solid var(--border);gap:10px;align-items:center}
+  .pt-th{font-size:9px;font-family:'IBM Plex Mono',monospace;letter-spacing:1.4px;text-transform:uppercase;color:var(--text-3);font-weight:700;white-space:nowrap;text-align:center}
+  .pt-row{display:grid;grid-template-columns:64px 1.7fr 1.1fr 0.9fr 0.6fr 1.2fr 1.5fr 1.0fr 1.0fr 40px;padding:11px 16px;border-bottom:1px solid var(--border);align-items:center;gap:10px;transition:background 0.1s}
+  .pt-row>div{text-align:center;display:flex;align-items:center;justify-content:center}
+  .pt-row:last-child{border-bottom:none}
+  .pt-row:hover{background:var(--navy-soft)}
+  .pt-row.hidden{display:none}
+
+  .score-badge{display:inline-flex;align-items:center;justify-content:center;width:38px;height:38px;border-radius:7px;font-family:'IBM Plex Mono',monospace;font-size:13px;font-weight:700;flex-shrink:0}
+  .score-high{background:#d1fae5;color:#065f46;border:1.5px solid #6ee7b7}
+  .score-med{background:#fef3c7;color:#92400e;border:1.5px solid #fcd34d}
+  .score-low{background:#fee2e2;color:#991b1b;border:1.5px solid #fca5a5}
+
+  .pt-row>.c-cell{justify-content:flex-start;text-align:left;min-width:0;padding-left:10px}
+  .c-name{font-size:13px;font-weight:600;color:var(--navy);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block;width:100%;text-align:left}
+  .pt-row>.sep-col,.pt-head>.sep-th{border-left:1.5px dashed #b0b8c8;padding-left:10px}
+
+  .svc-cell{display:flex;flex-direction:column;align-items:center;gap:2px}
+  .svc-line{font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:var(--text-2);white-space:nowrap}
+  .svc-sub{font-size:10px;color:var(--text-4);white-space:nowrap;font-family:'IBM Plex Sans',sans-serif}
+  .svc-ago{font-size:11px;color:var(--text-3);white-space:nowrap}
+  .dormant-red{color:var(--red)!important}
+  .dormant-amber{color:var(--amber)!important}
+  .est-val{font-family:'IBM Plex Mono',monospace;font-size:12.5px;font-weight:600;color:var(--green);white-space:nowrap}
+
+  .os-pill{display:inline-block;padding:3px 9px;border-radius:12px;font-size:10px;font-weight:600;font-family:'IBM Plex Mono',monospace;white-space:nowrap}
+  .s-none{background:var(--navy-soft);color:var(--text-3)}
+  .s-contacted{background:var(--blue-pale);color:var(--blue)}
+  .s-replied{background:var(--amber-pale);color:var(--amber)}
+  .s-booked{background:var(--green-pale);color:var(--green)}
+  .s-unsub{background:#eef0f3;color:#9ca3af;border:1.5px solid #e5e7eb}
+
+  .act-btn{font-size:11px;padding:5px 0;border-radius:6px;cursor:pointer;font-family:'IBM Plex Sans',sans-serif;font-weight:600;white-space:nowrap;border:1.5px solid transparent;transition:all 0.15s;text-decoration:none;display:block;text-align:center;line-height:1.4;width:80%;letter-spacing:0.1px}
+  .act-draft{background:var(--navy);color:#fff;border-color:var(--navy)}
+  .act-draft:hover{background:#1a2a4a}
+  .act-followup{background:var(--blue-pale);color:var(--blue);border-color:#93c5fd}
+  .act-followup:hover{background:#dbeafe;border-color:var(--blue)}
+  .act-call{background:var(--amber-pale);color:var(--amber);border-color:#fcd34d}
+  .act-call:hover{background:#fef3c7;border-color:var(--amber)}
+  .act-book{background:var(--green);color:#fff;width:80%;padding:5px 0;border-radius:6px;font-size:11px;font-weight:600;font-family:'IBM Plex Sans',sans-serif;cursor:pointer;border:1.5px solid var(--green);transition:all 0.15s;white-space:nowrap;display:block;text-align:center}
+  .act-book:hover{background:#156347}
+  .act-badge{display:block;width:80%;padding:5px 0;border-radius:20px;font-size:10px;font-weight:600;font-family:'IBM Plex Mono',monospace;white-space:nowrap;text-align:center;letter-spacing:0.5px}
+  .act-badge-booked{background:var(--green-pale);color:var(--green)}
+  .act-badge-unsub{background:#eef0f3;color:#9ca3af;border:1.5px solid #e5e7eb}
+  .act-badge-done{background:var(--navy-soft);color:var(--text-3)}
+  .act-empty{font-size:10.5px;color:var(--text-4);font-family:'IBM Plex Mono',monospace}
+
+  .more-wrap{position:relative;display:flex;justify-content:center}
+  .more-btn{background:none;border:1px solid var(--border);border-radius:6px;width:28px;height:28px;cursor:pointer;color:var(--text-3);font-size:14px;line-height:1;display:flex;align-items:center;justify-content:center;transition:all 0.15s;flex-shrink:0}
+  .more-btn:hover{border-color:var(--border-2);color:var(--navy);background:var(--navy-soft)}
+  .more-dropdown{display:none;position:absolute;right:0;top:calc(100% + 4px);background:var(--surface);border:1px solid var(--border);border-radius:8px;box-shadow:var(--shadow-md);min-width:160px;z-index:100;overflow:hidden}
+  .more-dropdown.open{display:block}
+  .more-item{display:block;padding:9px 14px;font-size:12.5px;color:var(--text-2);text-decoration:none;transition:background 0.1s;font-family:'IBM Plex Sans',sans-serif;white-space:nowrap}
+  .more-item:hover{background:var(--navy-soft);color:var(--navy)}
+  .empty-state{padding:40px;text-align:center;color:var(--text-3);font-size:13px}
+
+  /* Modal */
+  .modal-overlay{display:none;position:fixed;inset:0;background:rgba(10,22,40,0.45);z-index:1000;align-items:center;justify-content:center}
+  .modal-overlay.open{display:flex}
+  .modal{background:var(--surface);border-radius:12px;padding:28px 30px;width:380px;box-shadow:var(--shadow-lg)}
+  .modal h3{font-size:16px;font-weight:700;color:var(--navy);margin-bottom:8px;font-family:'Playfair Display',serif}
+  .modal p{font-size:13px;color:var(--text-2);margin-bottom:18px}
+  .modal label{display:block;font-size:11px;font-family:'IBM Plex Mono',monospace;letter-spacing:1px;text-transform:uppercase;color:var(--text-3);margin-bottom:5px}
+  .modal input,.modal textarea{width:100%;border:1px solid var(--border);border-radius:7px;padding:9px 12px;font-size:13.5px;font-family:'IBM Plex Sans',sans-serif;color:var(--text);outline:none;transition:border-color 0.15s;margin-bottom:14px}
+  .modal input:focus,.modal textarea:focus{border-color:var(--navy)}
+  .modal textarea{resize:vertical;height:70px}
+  .modal-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:6px}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-eyebrow">{{ operator.business_name }}</div>
+<h1 class="page-title">All Customers</h1>
+
+<div class="cust-bar">
+  <div class="cust-search">
+    <span class="cust-search-icon">⌕</span>
+    <input type="text" id="searchInput" placeholder="Search by name or email…" oninput="applyFilters()" autocomplete="off">
+  </div>
+  <button class="filter-tab active" data-group="all" onclick="setGroup('all',this)">All <span class="count" id="cnt-all"></span></button>
+  <button class="filter-tab" data-group="upcoming" onclick="setGroup('upcoming',this)">Upcoming Jobs <span class="count" id="cnt-upcoming"></span></button>
+  <button class="filter-tab" data-group="attention" onclick="setGroup('attention',this)">Active <span class="count" id="cnt-attention"></span></button>
+  <button class="filter-tab" data-group="ripe" onclick="setGroup('ripe',this)">Ripe <span class="count" id="cnt-ripe"></span></button>
+  <button class="filter-tab" data-group="declined" onclick="setGroup('declined',this)">On Hold <span class="count" id="cnt-declined"></span></button>
+  <span class="cust-total" id="visibleCount"></span>
+</div>
+
+<div class="priority-table">
+  <div class="pt-head">
+    <div class="pt-th">Score</div>
+    <div class="pt-th" style="text-align:left;padding-left:10px">Customer</div>
+    <div class="pt-th sep-th">Status</div>
+    <div class="pt-th">Est. Value</div>
+    <div class="pt-th">Dormant</div>
+    <div class="pt-th">Last Service</div>
+    <div class="pt-th">Last Interaction</div>
+    <div class="pt-th">Action</div>
+    <div class="pt-th">Mark as Booked</div>
+    <div class="pt-th"></div>
+  </div>
+
+  {% for c in all_customers %}
+  {% if c.reactivation_status == 'booked' %}{% set cgroup = 'upcoming' %}
+  {% elif c.reactivation_status in ('replied','outreach_sent','sequence_step_2','sequence_step_3') %}{% set cgroup = 'attention' %}
+  {% elif c.reactivation_status == 'never_contacted' %}{% set cgroup = 'ripe' %}
+  {% else %}{% set cgroup = 'declined' %}{% endif %}
+  <div class="pt-row"
+       data-group="{{ cgroup }}"
+       data-name="{{ c.name|lower }}"
+       data-email="{{ c.email|lower if c.email else '' }}">
+
+    <div><div class="score-badge {{ c.score_cls }}">{{ c.score }}</div></div>
+
+    <div class="c-cell"><span class="c-name">{{ c.name }}</span></div>
+
+    <div class="sep-col">
+      <span class="os-pill {{ c.outreach_status_cls }}">{{ c.outreach_status }}</span>
+    </div>
+
+    <div>
+      {% if c.estimated_job_value and c.estimated_job_value > 0 %}
+      <span class="est-val">${{ "{:,.0f}".format(c.estimated_job_value) }}</span>
+      {% else %}<span class="act-empty">—</span>{% endif %}
+    </div>
+
+    <div>
+      {% if c.days_dormant is not none %}
+      <span class="svc-ago {% if c.days_dormant >= 365 %}dormant-red{% elif c.days_dormant >= 180 %}dormant-amber{% endif %}" style="font-family:'IBM Plex Mono',monospace;font-size:11.5px">{{ c.days_dormant }}d</span>
+      {% else %}<span class="act-empty">—</span>{% endif %}
+    </div>
+
+    <div>
+      {% if c.last_service_date %}
+      <div class="svc-cell">
+        <span class="svc-line">{{ c.last_service_date.strftime('%b %-d, %Y') }}</span>
+        {% if c.last_service_type %}<span class="svc-sub">{{ c.last_service_type }}</span>{% endif %}
+      </div>
+      {% else %}<span class="svc-line" style="color:var(--text-4)">—</span>{% endif %}
+    </div>
+
+    <div>
+      {% if c.last_interaction %}
+        {% set li = c.last_interaction %}
+        <div class="svc-cell">
+          <span class="svc-line">{{ li.date.strftime('%b %-d, %Y') }}</span>
+          <span class="svc-sub">{% if li.direction == 'inbound' %}Customer reply{% else %}Outreach sent{% endif %}</span>
+        </div>
+      {% else %}<span class="act-empty">—</span>{% endif %}
+    </div>
+
+    <div onclick="event.stopPropagation()">
+      {% if c.reactivation_status == 'never_contacted' %}
+        <a href="/customer/{{ c.id }}" class="act-btn act-draft">Draft Outreach</a>
+      {% elif c.reactivation_status in ('outreach_sent','sequence_step_2','sequence_step_3') %}
+        <a href="/conversations/{{ c.id }}" class="act-btn act-followup">Draft Follow-up</a>
+      {% elif c.reactivation_status == 'replied' %}
+        <a href="/conversations/{{ c.id }}" class="act-btn act-call">Book Call</a>
+      {% elif c.reactivation_status == 'booked' %}
+        <span class="act-badge act-badge-booked">Booked</span>
+      {% elif c.reactivation_status == 'sequence_complete' %}
+        <span class="act-badge act-badge-done">Seq. Done</span>
+      {% elif c.reactivation_status == 'unsubscribed' %}
+        <span class="act-badge act-badge-unsub">Unsubscribed</span>
+      {% else %}<span class="act-empty">—</span>{% endif %}
+    </div>
+
+    <div onclick="event.stopPropagation()">
+      {% if c.reactivation_status not in ('booked','unsubscribed','never_contacted') %}
+        <button class="act-btn act-book" onclick="openBookModal({{ c.id }}, '{{ c.name|replace("'","\\'")|e }}')">Mark as Booked</button>
+      {% elif c.reactivation_status == 'booked' %}
+        <span class="act-empty" style="font-size:10px;color:var(--green)">✓ Done</span>
+      {% else %}<span class="act-empty">—</span>{% endif %}
+    </div>
+
+    <div class="more-wrap" onclick="event.stopPropagation()">
+      <button class="more-btn" onclick="toggleMore(event, this)" title="More options">⋯</button>
+      <div class="more-dropdown">
+        <a href="/customer/{{ c.id }}" class="more-item">View Customer</a>
+        {% if c.reactivation_status not in ('never_contacted','unsubscribed') %}
+        <a href="/conversations/{{ c.id }}" class="more-item">View Conversation</a>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+  {% else %}
+  <div class="empty-state">No customers found.</div>
+  {% endfor %}
+</div>
+
+{# Mark as Booked Modal #}
+<div class="modal-overlay" id="bookModal">
+  <div class="modal">
+    <h3>Mark as Booked</h3>
+    <p id="bookModalCustomer" style="color:var(--text-3);font-size:12px;margin-bottom:16px"></p>
+    <label>Job Value ($)</label>
+    <input type="number" id="bookJobValue" placeholder="e.g. 450" min="0" step="1">
+    <label>Notes (optional)</label>
+    <textarea id="bookNotes" placeholder="Service type, notes…"></textarea>
+    <div class="modal-actions">
+      <button class="btn-ghost" onclick="closeBookModal()">Cancel</button>
+      <button class="btn-success" onclick="submitBooked()">Confirm Booking</button>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  let _currentGroup = 'all';
+  let _bookCustomerId = null;
+
+  function setGroup(group, btn) {
+    _currentGroup = group;
+    document.querySelectorAll('.filter-tab').forEach(t => t.classList.remove('active'));
+    btn.classList.add('active');
+    applyFilters();
+  }
+
+  function applyFilters() {
+    const q = document.getElementById('searchInput').value.toLowerCase();
+    const rows = document.querySelectorAll('.pt-row');
+    let visible = 0;
+    rows.forEach(row => {
+      const groupMatch = _currentGroup === 'all' || row.dataset.group === _currentGroup;
+      const searchMatch = !q || row.dataset.name.includes(q) || row.dataset.email.includes(q);
+      const show = groupMatch && searchMatch;
+      row.classList.toggle('hidden', !show);
+      if (show) visible++;
+    });
+    document.getElementById('visibleCount').textContent = visible + ' customers';
+    updateCounts();
+  }
+
+  function updateCounts() {
+    const rows = document.querySelectorAll('.pt-row');
+    const q = document.getElementById('searchInput').value.toLowerCase();
+    const groups = ['all','upcoming','attention','ripe','declined'];
+    groups.forEach(g => {
+      const el = document.getElementById('cnt-' + g);
+      if (!el) return;
+      let count = 0;
+      rows.forEach(row => {
+        const groupMatch = g === 'all' || row.dataset.group === g;
+        const searchMatch = !q || row.dataset.name.includes(q) || row.dataset.email.includes(q);
+        if (groupMatch && searchMatch) count++;
+      });
+      el.textContent = count;
+    });
+  }
+
+  function toggleMore(e, btn) {
+    e.stopPropagation();
+    const dropdown = btn.nextElementSibling;
+    const isOpen = dropdown.classList.contains('open');
+    document.querySelectorAll('.more-dropdown.open').forEach(d => d.classList.remove('open'));
+    if (!isOpen) dropdown.classList.add('open');
+  }
+  document.addEventListener('click', () => {
+    document.querySelectorAll('.more-dropdown.open').forEach(d => d.classList.remove('open'));
+  });
+
+  function openBookModal(customerId, customerName) {
+    _bookCustomerId = customerId;
+    document.getElementById('bookModalCustomer').textContent = customerName;
+    document.getElementById('bookJobValue').value = '';
+    document.getElementById('bookNotes').value = '';
+    document.getElementById('bookModal').classList.add('open');
+    document.getElementById('bookJobValue').focus();
+  }
+  function closeBookModal() {
+    document.getElementById('bookModal').classList.remove('open');
+    _bookCustomerId = null;
+  }
+  document.getElementById('bookModal').addEventListener('click', function(e) {
+    if (e.target === this) closeBookModal();
+  });
+  async function submitBooked() {
+    const jobValue = parseFloat(document.getElementById('bookJobValue').value);
+    const notes = document.getElementById('bookNotes').value.trim();
+    if (!jobValue || jobValue <= 0) { alert('Please enter a valid job value.'); return; }
+    const btn = document.querySelector('#bookModal .btn-success');
+    btn.disabled = true; btn.textContent = 'Saving…';
+    try {
+      const res = await fetch(`/api/customer/${_bookCustomerId}/mark-booked`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({job_value: jobValue, notes: notes}),
+      });
+      if (!res.ok) throw new Error((await res.json()).detail || 'Server error');
+      closeBookModal();
+      window.location.reload();
+    } catch (err) {
+      alert('Error: ' + err.message);
+      btn.disabled = false; btn.textContent = 'Confirm Booking';
+    }
+  }
+
+  // Init
+  applyFilters();
+</script>
+{% endblock %}

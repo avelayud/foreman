@@ -190,6 +190,9 @@
       <a href="/" class="sb-link {% if active == 'dashboard' %}active{% endif %}">
         <span>◼</span> Dashboard
       </a>
+      <a href="/customers" class="sb-link {% if active == 'customers' %}active{% endif %}">
+        <span>👥</span> All Customers
+      </a>
       <a href="/conversations" class="sb-link {% if active == 'conversations' %}active{% endif %}">
         <span>💬</span> Conversations
         {% if conversations_attention_count is defined and conversations_attention_count > 0 %}
