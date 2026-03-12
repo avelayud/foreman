@@ -218,7 +218,7 @@ def generate_response(
         jobs = (
             db.query(Job)
             .filter_by(customer_id=customer_id)
-            .order_by(Job.job_date)
+            .order_by(Job.completed_at)
             .all()
         )
 
@@ -252,7 +252,7 @@ def generate_response(
 
         job_list = [
             {
-                "date": j.job_date,
+                "date": j.completed_at,
                 "service_type": j.service_type,
                 "amount": j.amount or 0.0,
             }
