@@ -3357,13 +3357,12 @@ def api_run_all_agents():
     global _agent_last_run
     from agents.tone_profiler import run as run_tone_profiler
     from agents.reactivation import run as run_reactivation
-    from agents.customer_analyzer import run as run_customer_analyzer
     from agents.reply_detector import run as run_reply_detector
     from agents.follow_up import run as run_follow_up
 
     results = {}
 
-    def _run_agent(key, fn, **kwargs):
+    def _step(key, fn, **kwargs):
         try:
             result = fn(**kwargs)
             _agent_last_run[key] = datetime.utcnow()
@@ -3371,14 +3370,21 @@ def api_run_all_agents():
         except Exception as e:
             results[key] = {"ok": False, "error": str(e)[:200]}
 
-    _run_agent("tone_profiler", run_tone_profiler, operator_id=OPERATOR_ID)
-    _run_agent("reactivation", run_reactivation, operator_id=OPERATOR_ID, limit=20)
-    _run_scoring_job()
-    _agent_last_run["scoring"] = datetime.utcnow()
-    results["scoring"] = {"ok": True, "result": "done"}
-    _run_agent("customer_analyzer", run_customer_analyzer, operator_id=OPERATOR_ID)
-    _run_agent("reply_detector", run_reply_detector, operator_id=OPERATOR_ID)
-    _run_agent("follow_up", run_follow_up, operator_id=OPERATOR_ID)
+    _step("tone_profiler", run_tone_profiler, operator_id=OPERATOR_ID)
+    _step("reactivation", run_reactivation, operator_id=OPERATOR_ID, limit=20)
+    try:
+        _run_scoring_job()
+        _agent_last_run["scoring"] = datetime.utcnow()
+        results["scoring"] = {"ok": True, "result": "done"}
+    except Exception as e:
+        results["scoring"] = {"ok": False, "error": str(e)[:200]}
+    try:
+        _run_customer_analyzer_job()
+        results["customer_analyzer"] = {"ok": True, "result": "done"}
+    except Exception as e:
+        results["customer_analyzer"] = {"ok": False, "error": str(e)[:200]}
+    _step("reply_detector", run_reply_detector, operator_id=OPERATOR_ID)
+    _step("follow_up", run_follow_up, operator_id=OPERATOR_ID)
 
     return {"ok": True, "results": results}
 
