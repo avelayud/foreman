@@ -4,7 +4,7 @@
 
 > Turn your past customers into booked jobs. Automatically.
 
-Foreman identifies dormant customers, scores them by rebooking probability, reaches out in the operator's voice, classifies responses, and tracks the revenue it generates — all without the operator managing a CRM.
+Foreman identifies dormant customers, scores them by rebooking probability, reaches out in the operator's voice, classifies responses, proposes real calendar slots, and tracks the revenue it generates — all without the operator managing a CRM.
 
 **Live:** https://web-production-3df3a.up.railway.app
 **Repo:** https://github.com/avelayud/foreman
@@ -14,15 +14,15 @@ Foreman identifies dormant customers, scores them by rebooking probability, reac
 ## What It Does
 
 1. Learns operator voice from sent Gmail (Tone Profiler)
-2. Scores every past customer 0–100 by rebooking probability (Customer Scoring Engine)
+2. Scores every past customer 0–100 by rebooking probability (Scoring Engine)
 3. Finds dormant customers and drafts personalized outreach in the operator's voice (Reactivation Analyzer)
-4. Builds customer context from Gmail correspondence (Customer Analyzer)
-5. Tracks replies by Gmail thread and feeds context-aware follow-up drafts (Reply Detector + Follow-up Sequencer)
-6. Classifies inbound responses and routes them: booking intent → propose times, callback → flag, not interested → suppress
-7. Tracks booked jobs and revenue attributed to Foreman outreach
-8. Keeps the operator in control: review drafts, approve/schedule/send, manage conversations
+4. Builds customer context from Gmail correspondence (Customer Analyzer — runs daily)
+5. Tracks replies by Gmail thread; feeds context-aware follow-up drafts (Reply Detector + Follow-up Sequencer)
+6. Classifies inbound responses: booking intent → propose calendar slots, not interested → suppress *(Phase 6)*
+7. Reads Google Calendar to propose real available slots and confirm bookings *(Phase 6)*
+8. Tracks booked jobs and revenue attributed to Foreman outreach
 
-**Target customer:** HVAC, plumbing, and electrical contractors. Owner-operated teams of 3–15. Not highly technical. May be using QuickBooks, Jobber, or HousecallPro — or nothing beyond a phone. HVAC is the primary beachhead.
+**Target customer:** HVAC, plumbing, and electrical contractors. Owner-operated teams of 3–15. Not highly technical. HVAC is the primary beachhead.
 
 ---
 
@@ -33,23 +33,28 @@ Foreman identifies dormant customers, scores them by rebooking probability, reac
 | Core models + DB (Operator, Customer, Job, Booking, OutreachLog) | ✅ |
 | Tone Profiler agent | ✅ |
 | Reactivation Analyzer agent | ✅ |
-| Customer Analyzer agent | ✅ |
+| Customer Analyzer agent (scheduled daily) | ✅ |
 | Reply Detector agent (background, 15-min poll) | ✅ |
 | Follow-up Sequencer agent | ✅ |
+| Priority Scorer agent (scheduled daily) | ✅ |
 | Dry Run / Production mode toggle | ✅ |
 | Outreach queue (approve + schedule + send-now) | ✅ |
 | Scheduled sender worker | ✅ |
-| Dashboard with segments, top prospects, browse-all + search | ✅ |
+| Revenue dashboard: 8 metric cards + 4 priority groups | ✅ |
+| All Customers page (search + filter by group) | ✅ |
+| Customer scoring engine (0–100, rules-based, 5 signals) | ✅ |
+| Mark as Booked flow (modal, logs job value, tracks revenue) | ✅ |
 | Active Conversations page (health state, attention badge) | ✅ |
-| Conversation workspace (AI timeline, context-aware draft, expandable messages) | ✅ |
+| Conversation workspace (AI timeline, context-aware draft) | ✅ |
+| Score breakdown on customer detail page | ✅ |
 | Agents page with status + manual run | ✅ |
 | Railway deploy with Postgres | ✅ |
 | UTC timestamp storage + EDT/EST display | ✅ |
-| Customer scoring engine (0–100, rules-based) | ⬜ Phase 5 |
-| Revenue dashboard (booked jobs, revenue generated, potential pipeline) | ⬜ Phase 5 |
-| Response classifier agent | ⬜ Phase 6 |
-| Booking conversion flow (mark as booked, log job value) | ⬜ Phase 6 |
-| Google Calendar integration | ⬜ Phase 7 |
+| Response classifier agent (booking_intent / not_interested / etc.) | 🔵 Phase 6 |
+| Google Calendar OAuth + availability reading | 🔵 Phase 6 |
+| Booking proposal flow (auto-draft slot proposals) | 🔵 Phase 6 |
+| Booking confirmation + job creation | 🔵 Phase 6 |
+| Outreach composer redesign (dedicated page, not customer detail) | ⬜ Phase 7 |
 | SMS channel (Twilio) | ⬜ Phase 8 |
 | Service interval prediction | ⬜ Phase 9 |
 | Jobber / HousecallPro integration | ⬜ Phase 10 |
@@ -64,8 +69,9 @@ Foreman identifies dormant customers, scores them by rebooking probability, reac
 | Language | Python 3.12 |
 | Web | FastAPI + Jinja2 |
 | DB | SQLAlchemy + PostgreSQL (Railway) / SQLite (local) |
-| AI | Anthropic Claude (`claude-sonnet-4-20250514`) |
+| AI | Anthropic Claude (`claude-sonnet-4-6`) |
 | Email | Gmail API (OAuth2) |
+| Calendar | Google Calendar API (OAuth2) — Phase 6 |
 | Deployment | Railway |
 
 ---
@@ -75,34 +81,37 @@ Foreman identifies dormant customers, scores them by rebooking probability, reac
 ```
 foreman/
 ├── api/
-│   ├── app.py                   # FastAPI app (pages + JSON API)
-│   └── run.py                   # Railway-safe launcher (reads PORT)
+│   ├── app.py                    # FastAPI app (pages + JSON API)
+│   └── run.py                    # Railway-safe launcher (reads PORT)
 ├── agents/
 │   ├── tone_profiler.py
 │   ├── reactivation.py
-│   ├── customer_analyzer.py
+│   ├── customer_analyzer.py      # Builds profiles from Gmail history (daily)
 │   ├── reply_detector.py
 │   ├── follow_up.py
-│   └── response_classifier.py  # Phase 6
+│   └── response_classifier.py   # Phase 6 — classify inbound replies
 ├── core/
 │   ├── config.py
-│   ├── database.py
+│   ├── database.py               # SCHEMA_PATCHES, get_db(), init_db()
 │   ├── models.py
-│   └── scoring.py               # Phase 5
+│   └── scoring.py                # Rules-based 0–100 scorer, APScheduler job
 ├── integrations/
-│   └── gmail.py
+│   ├── gmail.py                  # Send, read threads, search correspondence
+│   └── calendar.py               # Phase 6 — Google Calendar read/write
 ├── templates/
 │   ├── base.html
-│   ├── dashboard.html
-│   ├── customer.html
+│   ├── dashboard.html            # Revenue metrics + 4 priority groups
+│   ├── customers.html            # Full searchable customer list
+│   ├── customer.html             # Customer detail + score breakdown
 │   ├── conversations.html
 │   ├── conversation_detail.html
 │   ├── outreach.html
 │   └── agents.html
 ├── data/
-│   ├── seed.py
-│   ├── reseed.py
-│   └── fix_inbound_timestamps.py
+│   ├── seed.py                   # 200 customers, 5yr HVAC history
+│   └── reseed.py                 # Full wipe + reseed (prod-safe)
+├── tools/
+│   └── email_simulator.py        # Planned — standalone Gmail conversation simulator
 ├── Procfile
 └── requirements.txt
 ```
@@ -113,12 +122,26 @@ foreman/
 
 | URL | Description |
 |---|---|
-| `/` | Dashboard: revenue metrics row, priority customer queue, pipeline segments |
+| `/` | Dashboard: revenue metrics, 4 priority groups (Upcoming / Active / Ripe / On Hold) |
+| `/customers` | All customers: search by name/email, filter by group |
 | `/customer/{id}` | Customer detail: account context, score breakdown, full history |
 | `/conversations` | Active conversations with health state and attention indicators |
 | `/conversations/{id}` | Conversation workspace: AI timeline, draft panel, recap |
 | `/outreach` | Outreach queue: review/edit/approve/schedule/send |
-| `/agents` | Agent catalog with status and manual run |
+| `/agents` | Agent catalog: status, last run, manual trigger |
+
+---
+
+## Dashboard Priority Groups
+
+The dashboard organizes customers into four actionable sections, each showing top 5 with expand-to-10:
+
+| Group | Who | Primary Action |
+|---|---|---|
+| 📅 Upcoming Jobs | `booked` | Confirm details, prepare for service |
+| 🔥 Active — Requires Attention | `replied`, `outreach_sent`, in-sequence | Book Call or Draft Follow-up |
+| 🎯 Ripe for Reactivation | `never_contacted`, ranked by score | Draft Outreach |
+| ⏸ On Hold / Declined | `sequence_complete`, `unsubscribed` | Monitor |
 
 ---
 
@@ -134,20 +157,20 @@ Every customer receives a score 0–100 based on weighted signals:
 | Job type | 15 | Any maintenance job = 15, repair-only = 8, single job = 4 |
 | Prior engagement | 10 | Prior positive response = 10, any reply = 5, none = 0 |
 
-Score breakdown stored per customer so operators see exactly why someone is ranked where they are. Rules-based v1 is designed to be replaced by a trained sklearn model once real conversion outcome data accumulates.
+Priority tiers: **high** ≥70 · **medium** 40–69 · **low** <40. Score breakdown stored per customer and visible on their detail page.
 
 ---
 
-## Response Classification
+## Response Classification (Phase 6)
 
 When a reply is detected, a Claude agent classifies it and routes to the next action:
 
-| Classification | Trigger Example | Next Action |
+| Classification | Example | Next Action |
 |---|---|---|
-| `booking_intent` | "Yes, when can you come?" | Propose calendar slots |
-| `callback_request` | "Call me to discuss" | Flag for operator follow-up |
+| `booking_intent` | "Yes, when can you come?" | Propose 3 real calendar slots |
+| `callback_request` | "Call me to discuss" | Flag for operator, surface phone number |
 | `price_inquiry` | "How much would that cost?" | Draft pricing response |
-| `not_interested` | "Please remove me" | Suppress all future outreach, log reason |
+| `not_interested` | "Please remove me" | Unsubscribe, suppress all future outreach |
 | `unclear` | Ambiguous reply | Surface to operator with full context |
 
 ---
