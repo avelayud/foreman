@@ -66,6 +66,8 @@ SCHEMA_PATCHES = {
         "converted_job_value": "FLOAT",
         "converted_at": "TIMESTAMP",
         "rfc_message_id": "VARCHAR",
+        "booking_slot_start": "TIMESTAMP",
+        "booking_slot_end": "TIMESTAMP",
     },
 }
 

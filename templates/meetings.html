@@ -53,6 +53,15 @@
   .notice-production{background:var(--green-pale);border:1px solid #a7f3d0;color:var(--green)}
 
   .booking-badge{display:inline-flex;align-items:center;gap:5px;font-size:10.5px;font-family:'IBM Plex Mono',monospace;padding:3px 10px;border-radius:20px;border:1px solid #bfdbfe;background:var(--blue-pale);color:var(--blue)}
+  .booking-confirmed-badge{display:inline-flex;align-items:center;gap:5px;font-size:10.5px;font-family:'IBM Plex Mono',monospace;padding:3px 10px;border-radius:20px;border:1px solid #a7f3d0;background:var(--green-pale);color:var(--green)}
+  .confirm-panel{background:var(--green-pale);border:1px solid #a7f3d0;border-radius:8px;padding:14px;margin-bottom:12px}
+  .confirm-panel-title{font-size:9.5px;font-family:'IBM Plex Mono',monospace;letter-spacing:1.5px;text-transform:uppercase;color:var(--green);margin-bottom:10px;font-weight:600}
+  .confirm-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .confirm-btn{background:var(--green);color:#fff;border:none;border-radius:8px;padding:10px 16px;font-size:13px;font-weight:600;cursor:pointer;width:100%;transition:opacity 0.15s}
+  .confirm-btn:hover{opacity:0.88}
+  .confirm-btn:disabled{opacity:0.5;cursor:not-allowed}
+  .section-heading{font-size:10.5px;font-family:'IBM Plex Mono',monospace;letter-spacing:1.5px;text-transform:uppercase;color:var(--text-3);margin-bottom:14px;margin-top:8px;display:flex;align-items:center;gap:10px}
+  .section-heading::after{content:'';flex:1;height:1px;background:var(--border)}
 
   .slots-panel{background:var(--blue-pale);border:1px solid #bfdbfe;border-radius:8px;padding:12px 14px;margin-bottom:12px}
   .slots-title{font-size:9.5px;font-family:'IBM Plex Mono',monospace;letter-spacing:1.5px;text-transform:uppercase;color:var(--blue);margin-bottom:8px;font-weight:600}
@@ -91,9 +100,12 @@
 </div>
 {% endif %}
 
+{% set confirmed_items = pending | selectattr("response_classification", "equalto", "booking_confirmed") | list %}
+{% set proposal_items = pending | rejectattr("response_classification", "equalto", "booking_confirmed") | list %}
+
 {% if pending %}
 <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;gap:16px;flex-wrap:wrap">
-  <div style="font-size:12px;color:var(--text-3);font-family:'IBM Plex Mono',monospace">{{ pending|length }} booking proposal{{ 's' if pending|length != 1 }} awaiting review</div>
+  <div style="font-size:12px;color:var(--text-3);font-family:'IBM Plex Mono',monospace">{{ pending|length }} item{{ 's' if pending|length != 1 }} awaiting review</div>
   <div style="position:relative;min-width:220px;max-width:320px;flex:1">
     <span style="position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--text-4);font-size:13px;pointer-events:none">⌕</span>
     <input type="text" id="meetingsSearch" placeholder="Search by name or email…" oninput="filterMeetings()"
@@ -102,7 +114,104 @@
   </div>
 </div>
 
-{% for item in pending %}
+{# ── Section 1: Ready to Confirm ────────────────────────────────────────── #}
+{% if confirmed_items %}
+<div class="section-heading">Ready to Confirm</div>
+{% for item in confirmed_items %}
+<div class="queue-card state-pending" id="card-{{ item.log_id }}" data-name="{{ item.customer_name|lower }}" data-email="{{ item.customer_email|lower }}" style="border-left-color:var(--green)">
+  <div class="queue-header" style="background:var(--green-pale)">
+    <div class="queue-meta">
+      <span style="font-size:16px">✅</span>
+      <a href="/customer/{{ item.customer_id }}" class="queue-name">{{ item.customer_name }}</a>
+      <span class="booking-confirmed-badge">booking confirmed</span>
+    </div>
+    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+      <span class="queue-info">Stage</span>
+      <span class="reach-stage">{{ item.sequence_label }}</span>
+    </div>
+  </div>
+
+  <div class="queue-body">
+    <div class="queue-layout">
+      <div class="queue-left">
+        <div class="confirm-panel">
+          <div class="confirm-panel-title">Appointment Details</div>
+          <div class="confirm-grid">
+            <div class="field-block" style="margin-bottom:0">
+              <label class="field-label">Start Time</label>
+              <input id="slot-start-{{ item.log_id }}" type="datetime-local" class="field-input send-at-compact"
+                     value="{{ item.booking_slot_start_input }}" />
+            </div>
+            <div class="field-block" style="margin-bottom:0">
+              <label class="field-label">End Time</label>
+              <input id="slot-end-{{ item.log_id }}" type="datetime-local" class="field-input send-at-compact"
+                     value="{{ item.booking_slot_end_input }}" />
+            </div>
+          </div>
+          <div class="field-block" style="margin-top:10px;margin-bottom:0">
+            <label class="field-label">Service Type</label>
+            <input id="service-type-{{ item.log_id }}" type="text" class="field-input"
+                   value="{{ item.customer_last_service_type }}" placeholder="e.g. AC tune-up" />
+          </div>
+          <div class="field-block" style="margin-top:10px;margin-bottom:0">
+            <label class="field-label">Notes (optional)</label>
+            <input id="notes-{{ item.log_id }}" type="text" class="field-input" placeholder="e.g. Customer prefers morning" />
+          </div>
+        </div>
+
+        <div class="field-block">
+          <label class="field-label">Customer</label>
+          <input type="text" class="field-input" value="{{ item.customer_name }}{% if item.customer_email %} · {{ item.customer_email }}{% endif %}" readonly />
+        </div>
+        <div class="field-block">
+          <label class="field-label">Confirmation Email Subject</label>
+          <input id="subject-{{ item.log_id }}" type="text" class="field-input" value="{{ item.subject or '' }}" />
+        </div>
+        <div class="field-block">
+          <label class="field-label">Confirmation Email Body</label>
+          <textarea id="body-{{ item.log_id }}" rows="7" class="field-textarea">{{ item.content or '' }}</textarea>
+        </div>
+      </div>
+
+      <div class="queue-right">
+        <div class="action-panel" style="background:var(--green-pale);border-color:#a7f3d0">
+          <div class="right-title" style="margin-bottom:8px;color:var(--green)">Confirm Booking</div>
+          <div class="action-stack">
+            <div style="font-size:11px;color:var(--text-3);line-height:1.5;font-family:'IBM Plex Mono',monospace">
+              Sends confirmation email + creates Google Calendar event. Customer receives an automatic .ics invite from Google Calendar.
+            </div>
+            <button onclick="confirmBooking({{ item.log_id }})" class="confirm-btn" id="confirm-btn-{{ item.log_id }}"
+                    {% if not operator.is_production_mode %}disabled title="Switch to Production mode to send real email"{% endif %}>
+              Confirm Booking + Send Invite
+            </button>
+            {% if not operator.is_production_mode %}
+            <div style="font-size:10.5px;color:var(--amber);font-family:'IBM Plex Mono',monospace">Dry run mode — switch to Production to send</div>
+            {% endif %}
+            <span id="action-label-{{ item.log_id }}" class="inline-status" style="display:none;color:var(--green)"></span>
+            <span id="action-error-{{ item.log_id }}" class="inline-status" style="display:none;color:var(--red)"></span>
+            <button onclick="removeFromQueue({{ item.log_id }})" class="btn-ghost action-btn" style="color:var(--red);border-color:#fecaca;margin-top:4px" id="remove-btn-{{ item.log_id }}">
+              Discard
+            </button>
+          </div>
+        </div>
+
+        <div class="right-title">Quick Links</div>
+        <div class="link-stack">
+          <a href="/customer/{{ item.customer_id }}" class="btn-ghost" style="text-decoration:none;text-align:center;display:flex;justify-content:center">Customer Page</a>
+          <a href="/conversations/{{ item.customer_id }}" class="btn-primary" style="text-decoration:none;display:flex;justify-content:center;padding:8px 14px">Open Conversation</a>
+          <a href="/calendar" class="btn-ghost" style="text-decoration:none;text-align:center;display:flex;justify-content:center">View Calendar</a>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endfor %}
+{% endif %}
+
+{# ── Section 2: Booking Proposals ───────────────────────────────────────── #}
+{% if proposal_items %}
+{% if confirmed_items %}<div class="section-heading" style="margin-top:28px">Booking Proposals</div>{% endif %}
+{% for item in proposal_items %}
 <div class="queue-card state-{{ item.approval_chip_cls }}" id="card-{{ item.log_id }}" data-name="{{ item.customer_name|lower }}" data-email="{{ item.customer_email|lower }}">
   <div class="queue-header">
     <div class="queue-meta">
@@ -191,6 +300,7 @@
   </div>
 </div>
 {% endfor %}
+{% endif %}
 
 {% else %}
 <div class="card" style="padding:72px 40px;text-align:center">
@@ -301,6 +411,59 @@
       btn.disabled = false;
       btn.textContent = 'Remove Draft';
       alert('Failed to remove draft.');
+    }
+  }
+
+  async function confirmBooking(logId) {
+    const btn = document.getElementById('confirm-btn-' + logId);
+    const label = document.getElementById('action-label-' + logId);
+    const errEl = document.getElementById('action-error-' + logId);
+
+    const slotStart = document.getElementById('slot-start-' + logId)?.value;
+    const slotEnd = document.getElementById('slot-end-' + logId)?.value;
+    if (!slotStart || !slotEnd) {
+      errEl.textContent = '⚠ Please set a start and end time before confirming.';
+      errEl.style.display = 'inline';
+      return;
+    }
+
+    if (!window.confirm('Confirm this booking? This will:\n• Create a Google Calendar event\n• Auto-send a .ics invite to the customer\n• Send a confirmation email')) return;
+
+    btn.disabled = true;
+    btn.textContent = 'Confirming…';
+    errEl.style.display = 'none';
+    label.style.display = 'none';
+
+    try {
+      const res = await fetch(`/api/outreach/${logId}/confirm-booking`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          slot_start: slotStart,
+          slot_end: slotEnd,
+          service_type: document.getElementById('service-type-' + logId)?.value || 'Service',
+          notes: document.getElementById('notes-' + logId)?.value || '',
+          email_subject: document.getElementById('subject-' + logId)?.value || '',
+          email_body: document.getElementById('body-' + logId)?.value || '',
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.detail || 'Server error');
+
+      let msg = 'Booking confirmed!';
+      if (data.gcal_event_id) msg += ' Calendar event created.';
+      if (data.email_sent) msg += ' Confirmation email sent.';
+      if (data.gcal_error) msg += ` (Calendar warning: ${data.gcal_error})`;
+      if (data.mode !== 'production') msg = 'Booking confirmed (dry run — switch to Production to send email).';
+
+      label.textContent = msg;
+      label.style.display = 'inline';
+      setTimeout(() => window.location.reload(), 1800);
+    } catch (e) {
+      btn.disabled = false;
+      btn.textContent = 'Confirm Booking + Send Invite';
+      errEl.textContent = '⚠ ' + e.message;
+      errEl.style.display = 'inline';
     }
   }
 

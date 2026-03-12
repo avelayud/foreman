@@ -35,7 +35,7 @@ from googleapiclient.discovery import build
 SCOPES = [
     "https://www.googleapis.com/auth/gmail.send",
     "https://www.googleapis.com/auth/gmail.modify",
-    "https://www.googleapis.com/auth/calendar.readonly",
+    "https://www.googleapis.com/auth/calendar",
 ]
 
 PROJECT_ROOT = Path(__file__).parent.parent

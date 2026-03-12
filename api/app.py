@@ -119,6 +119,9 @@ def _operator_data(op) -> dict:
     }
 
 
+_MEETINGS_CLASSIFICATIONS = ("booking_intent", "booking_confirmed")
+
+
 def _get_queue_count(db) -> int:
     """Count items needing operator approval (pending only) for the sidebar badge."""
     return (
@@ -127,21 +130,21 @@ def _get_queue_count(db) -> int:
             OutreachLog.operator_id == OPERATOR_ID,
             OutreachLog.dry_run == True,
             OutreachLog.approval_status == "pending",
-            (OutreachLog.response_classification != "booking_intent")
-            | (OutreachLog.response_classification.is_(None)),
+            ~OutreachLog.response_classification.in_(_MEETINGS_CLASSIFICATIONS)
+            | OutreachLog.response_classification.is_(None),
         )
         .count()
     )
 
 
 def _get_meetings_queue_count(db) -> int:
-    """Count pending meeting proposals (booking_intent drafts)."""
+    """Count pending meeting proposals and booking confirmations for the Meetings Queue badge."""
     return (
         db.query(OutreachLog)
         .filter(
             OutreachLog.operator_id == OPERATOR_ID,
             OutreachLog.dry_run == True,
-            OutreachLog.response_classification == "booking_intent",
+            OutreachLog.response_classification.in_(_MEETINGS_CLASSIFICATIONS),
         )
         .count()
     )
@@ -1547,6 +1550,11 @@ def _outreach_row(log, customer) -> dict:
         "send_error": log.send_error,
         "conversation_stage_label": conversation_stage["label"],
         "conversation_stage_cls": conversation_stage["status_cls"],
+        "booking_slot_start": getattr(log, "booking_slot_start", None),
+        "booking_slot_end": getattr(log, "booking_slot_end", None),
+        "booking_slot_start_input": _format_datetime_local(getattr(log, "booking_slot_start", None)),
+        "booking_slot_end_input": _format_datetime_local(getattr(log, "booking_slot_end", None)),
+        "customer_last_service_type": getattr(customer, "last_service_type", None) or "Service",
     }
 
 
@@ -1562,7 +1570,8 @@ def outreach_queue(request: Request):
             .filter(
                 OutreachLog.operator_id == OPERATOR_ID,
                 OutreachLog.dry_run == True,
-                (OutreachLog.response_classification != "booking_intent") | (OutreachLog.response_classification.is_(None)),
+                ~OutreachLog.response_classification.in_(_MEETINGS_CLASSIFICATIONS)
+            | OutreachLog.response_classification.is_(None),
             )
             .order_by(OutreachLog.created_at.desc())
             .all()
@@ -1603,7 +1612,7 @@ def meetings_queue(request: Request):
             .filter(
                 OutreachLog.operator_id == OPERATOR_ID,
                 OutreachLog.dry_run == True,
-                OutreachLog.response_classification == "booking_intent",
+                OutreachLog.response_classification.in_(_MEETINGS_CLASSIFICATIONS),
             )
             .order_by(OutreachLog.created_at.desc())
             .all()
@@ -2518,6 +2527,136 @@ def approve_send(log_id: int, req: ApproveSendRequest):
     if thread_id:
         result["gmail_thread_id"] = thread_id
     return result
+
+
+class ConfirmBookingRequest(BaseModel):
+    slot_start: str           # ISO datetime, Eastern time
+    slot_end: str             # ISO datetime, Eastern time
+    service_type: str = "Service"
+    notes: str = ""
+    email_subject: str = ""
+    email_body: str = ""
+
+
+@app.post("/api/outreach/{log_id}/confirm-booking")
+def confirm_booking(log_id: int, req: ConfirmBookingRequest):
+    """
+    Confirm a booking from a booking_confirmed draft:
+    1. Create a Booking record (confirmed, source=ai_outreach)
+    2. Create a Google Calendar event — GCal auto-sends .ics invite to customer
+    3. Send confirmation email via Gmail (production mode) or queue it (dry run)
+    4. Update customer.reactivation_status → booked
+    """
+    try:
+        slot_start = datetime.fromisoformat(req.slot_start)
+        slot_end = datetime.fromisoformat(req.slot_end)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid slot_start or slot_end — expected ISO datetime")
+
+    # Load log + customer
+    with get_db() as db:
+        log = db.query(OutreachLog).filter_by(id=log_id, operator_id=OPERATOR_ID).first()
+        if not log:
+            raise HTTPException(status_code=404, detail="Log entry not found")
+        customer = db.query(Customer).filter_by(id=log.customer_id).first()
+        if not customer:
+            raise HTTPException(status_code=404, detail="Customer not found")
+        operator = db.query(Operator).filter_by(id=OPERATOR_ID).first()
+        mode = (operator.outreach_mode or "dry_run").strip().lower() if operator else "dry_run"
+
+        customer_email = customer.email
+        customer_name = customer.name
+        customer_id = customer.id
+        email_subject = req.email_subject or log.subject or f"Your appointment confirmation"
+        email_body = req.email_body or log.content or ""
+        existing_thread_id = _get_customer_thread_id(log_id)
+
+    # Create Booking record
+    with get_db() as db:
+        booking = Booking(
+            operator_id=OPERATOR_ID,
+            customer_id=customer_id,
+            slot_start=slot_start,
+            slot_end=slot_end,
+            status="confirmed",
+            source="ai_outreach",
+            service_type=req.service_type,
+            notes=req.notes,
+        )
+        db.add(booking)
+        db.flush()
+        booking_id = booking.id
+        c = db.query(Customer).filter_by(id=customer_id).first()
+        if c:
+            c.reactivation_status = "booked"
+
+    # Create Google Calendar event
+    gcal_event_id = None
+    gcal_error = None
+    try:
+        from integrations.calendar import create_calendar_event
+        event = create_calendar_event(
+            summary=f"{req.service_type} — {customer_name}",
+            start_dt=slot_start,
+            end_dt=slot_end,
+            customer_email=customer_email,
+            description=(
+                f"Booked via Foreman reactivation outreach.\n"
+                f"Customer: {customer_name}"
+                + (f"\nNotes: {req.notes}" if req.notes else "")
+            ),
+        )
+        gcal_event_id = event.get("id")
+        if gcal_event_id:
+            with get_db() as db:
+                b = db.query(Booking).filter_by(id=booking_id).first()
+                if b:
+                    b.google_cal_event_id = gcal_event_id
+    except Exception as e:
+        gcal_error = str(e)
+        print(f"[confirm_booking] GCal event creation failed: {e}")
+
+    # Send confirmation email
+    email_sent = False
+    send_error = None
+    if mode == "production" and customer_email:
+        try:
+            inbound_rfc_id = _get_customer_inbound_rfc_id(customer_id)
+            thread_id = _gmail_send_message(
+                to=customer_email,
+                subject=email_subject,
+                body=email_body,
+                thread_id=existing_thread_id,
+                in_reply_to=inbound_rfc_id,
+            )
+            email_sent = bool(thread_id)
+            with get_db() as db:
+                log = db.query(OutreachLog).filter_by(id=log_id).first()
+                if log:
+                    log.dry_run = False
+                    log.approval_status = "sent"
+                    log.sent_at = datetime.utcnow()
+                    if thread_id:
+                        log.gmail_thread_id = thread_id
+        except Exception as e:
+            send_error = str(e)
+    else:
+        # Dry run mode — mark as scheduled (operator can send later)
+        with get_db() as db:
+            log = db.query(OutreachLog).filter_by(id=log_id).first()
+            if log:
+                log.approval_status = "scheduled"
+                log.scheduled_send_at = _next_business_send_time()
+
+    return {
+        "status": "confirmed",
+        "booking_id": booking_id,
+        "gcal_event_id": gcal_event_id,
+        "gcal_error": gcal_error,
+        "email_sent": email_sent,
+        "send_error": send_error,
+        "mode": mode,
+    }
 
 
 class ApproveRequest(BaseModel):

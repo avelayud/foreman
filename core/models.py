@@ -287,6 +287,11 @@ class OutreachLog(Base):
     # email client threads the conversation correctly on their side.
     rfc_message_id = Column(String, nullable=True)
 
+    # For booking_confirmed drafts: extracted appointment slot from customer's reply.
+    # Stored as naive Eastern time (consistent with Booking.slot_start/slot_end).
+    booking_slot_start = Column(DateTime, nullable=True)
+    booking_slot_end = Column(DateTime, nullable=True)
+
     # Phase 5: conversion tracking
     response_classification = Column(String, nullable=True)  # booking_intent | callback_request | price_inquiry | not_interested | unclear
     classified_at = Column(DateTime, nullable=True)

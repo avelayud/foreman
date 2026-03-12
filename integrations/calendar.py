@@ -24,7 +24,7 @@ from googleapiclient.discovery import build
 SCOPES = [
     "https://www.googleapis.com/auth/gmail.send",
     "https://www.googleapis.com/auth/gmail.modify",
-    "https://www.googleapis.com/auth/calendar.readonly",
+    "https://www.googleapis.com/auth/calendar",
 ]
 
 PROJECT_ROOT = Path(__file__).parent.parent
@@ -170,6 +170,64 @@ def get_available_slots(
             break
 
     return slots[:max_slots]
+
+
+def create_calendar_event(
+    summary: str,
+    start_dt: datetime,
+    end_dt: datetime,
+    customer_email: str = None,
+    description: str = "",
+    location: str = "",
+) -> dict:
+    """
+    Create a Google Calendar event on the operator's primary calendar.
+
+    When customer_email is provided they are added as an attendee and Google Calendar
+    automatically sends them an .ics invite email — no manual MIME construction needed.
+
+    Returns the created event dict (contains 'id', 'htmlLink', etc.).
+    """
+    try:
+        import zoneinfo
+        eastern = zoneinfo.ZoneInfo("America/New_York")
+    except ImportError:
+        import pytz
+        eastern = pytz.timezone("America/New_York")
+
+    service = _get_calendar_service()
+
+    # Attach Eastern timezone if datetime is naive
+    if start_dt.tzinfo is None:
+        start_dt = start_dt.replace(tzinfo=eastern)
+    if end_dt.tzinfo is None:
+        end_dt = end_dt.replace(tzinfo=eastern)
+
+    event_body = {
+        "summary": summary,
+        "description": description,
+        "location": location,
+        "start": {
+            "dateTime": start_dt.isoformat(),
+            "timeZone": "America/New_York",
+        },
+        "end": {
+            "dateTime": end_dt.isoformat(),
+            "timeZone": "America/New_York",
+        },
+    }
+
+    if customer_email:
+        event_body["attendees"] = [{"email": customer_email}]
+
+    result = service.events().insert(
+        calendarId="primary",
+        body=event_body,
+        sendUpdates="all",  # GCal sends .ics invite to attendees automatically
+    ).execute()
+
+    print(f"[calendar] Created event '{summary}' — {result.get('htmlLink', '')}")
+    return result
 
 
 def format_slots_for_email(slots: list[dict], max_proposals: int = 3) -> str:

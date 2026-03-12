@@ -35,9 +35,15 @@ CLASSIFIER_SYSTEM = """You are an expert at reading customer replies to service 
 Your job: classify a customer's reply into exactly one category.
 
 Categories:
-  booking_intent    — The customer clearly wants to schedule, book, or set up an appointment.
+  booking_confirmed — The customer has explicitly agreed to a SPECIFIC proposed time slot.
+                      Only use this when a concrete date/time was already proposed and the
+                      customer is accepting it. Signals: "Tuesday works for me", "I'll take
+                      the 10am slot", "that time works", "perfect, see you then",
+                      "confirmed, see you Tuesday"
+  booking_intent    — The customer clearly wants to book but hasn't confirmed a specific slot.
                       Signals: "yes", "when can you come?", "book me in", "let's do it",
-                      asking for specific dates/times, saying "I need this done"
+                      asking for dates/times, saying "I need this done", or a general yes
+                      without referring to a specific proposed slot
   callback_request  — Customer wants a phone call before deciding or to discuss details.
                       Signals: "call me", "give me a ring", "easier to talk", phone number given
   price_inquiry     — Customer is asking about cost, pricing, or value before committing.
@@ -49,7 +55,7 @@ Categories:
 
 Return ONLY a JSON object — no markdown, no explanation:
 {
-  "classification": "<one of the five categories>",
+  "classification": "<one of the six categories>",
   "confidence": "<high|medium|low>",
   "reasoning": "<one sentence explaining why>",
   "key_phrase": "<the exact phrase from their reply that drove the classification>"

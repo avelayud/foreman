@@ -27,7 +27,7 @@ Usage:
 """
 
 import json
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import anthropic
 
@@ -146,6 +146,48 @@ Write a brief, friendly reply that:
 3. Does NOT assume or project -- stay open-ended
 4. Feels natural, not like a form letter"""
 
+BOOKING_CONFIRMATION_PROMPT = """Operator tone:
+{tone}
+
+{voice_section}Customer: {name}
+Service history: {service_summary}
+
+The customer has confirmed their appointment:
+Date/Time: {confirmed_time}
+Service: {service_type}
+
+Full conversation so far:
+{thread_text}
+
+Customer's confirmation message:
+{reply_text}
+
+Write a brief, warm confirmation email that:
+1. Confirms the appointment date and time clearly
+2. Mentions you'll send them a calendar invite
+3. Includes one practical note relevant to the service (e.g. "please make sure the unit is accessible")
+4. Signs off warmly
+
+Keep it 3-4 sentences. They've agreed; just confirm and close warmly."""
+
+DATETIME_EXTRACTOR_SYSTEM = """Extract appointment details from a customer's email reply.
+Today's date: {today}
+
+Return ONLY a JSON object — no markdown:
+{{
+  "slot_start": "YYYY-MM-DDTHH:MM:SS",
+  "slot_end": "YYYY-MM-DDTHH:MM:SS",
+  "service_type": "string or null",
+  "confidence": "high|medium|low"
+}}
+
+Rules:
+- Convert relative references ("Tuesday", "the 18th", "next week") to absolute dates based on today
+- Assume Eastern time / standard business context
+- slot_end = slot_start + 90 minutes if not specified
+- If no specific time mentioned, pick a reasonable morning slot (9:00 AM) for the date mentioned
+- service_type: pull from conversation context (e.g. "AC tune-up", "HVAC maintenance") or null"""
+
 
 # -- Safe prompt formatter -----------------------------------------------------
 
@@ -187,6 +229,188 @@ def _build_thread_text(thread_entries: list[dict]) -> str:
     return "\n\n---\n\n".join(lines)
 
 
+# -- Datetime extractor --------------------------------------------------------
+
+def _extract_confirmed_datetime(reply_text: str, thread_text: str) -> dict:
+    """
+    Use Claude to extract a confirmed appointment datetime from a customer reply.
+    Returns {"slot_start": datetime|None, "slot_end": datetime|None, "service_type": str|None}.
+    """
+    from datetime import date
+    today_str = date.today().isoformat()
+
+    client = anthropic.Anthropic(api_key=config.ANTHROPIC_API_KEY)
+    try:
+        msg = client.messages.create(
+            model=config.CLAUDE_MODEL,
+            max_tokens=200,
+            system=DATETIME_EXTRACTOR_SYSTEM.format(today=today_str),
+            messages=[{
+                "role": "user",
+                "content": (
+                    f"Thread context (for reference):\n{thread_text}\n\n"
+                    f"Customer's confirmation reply:\n{reply_text}"
+                ),
+            }],
+        )
+        result = json.loads(msg.content[0].text.strip())
+        slot_start = None
+        slot_end = None
+        if result.get("slot_start"):
+            slot_start = datetime.fromisoformat(result["slot_start"])
+        if result.get("slot_end"):
+            slot_end = datetime.fromisoformat(result["slot_end"])
+        elif slot_start:
+            slot_end = slot_start + timedelta(minutes=90)
+        return {
+            "slot_start": slot_start,
+            "slot_end": slot_end,
+            "service_type": result.get("service_type"),
+        }
+    except Exception as e:
+        print(f"  [conversation_agent] datetime extraction failed: {e}")
+        return {"slot_start": None, "slot_end": None, "service_type": None}
+
+
+# -- Booking confirmation handler ----------------------------------------------
+
+def _generate_booking_confirmation(
+    operator_id: int,
+    customer_id: int,
+    inbound_log_id: int | None,
+    verbose: bool,
+) -> int | None:
+    """
+    Handle booking_confirmed classification:
+    1. Extract confirmed datetime from the customer's reply using Claude.
+    2. Generate a confirmation email draft.
+    3. Queue it to the Meetings Queue (dry_run=True, response_classification='booking_confirmed').
+    4. Store booking_slot_start/end on the draft so the Meetings Queue can pre-fill the form.
+    """
+    with get_db() as db:
+        operator = db.query(Operator).filter_by(id=operator_id).first()
+        customer = db.query(Customer).filter_by(id=customer_id).first()
+        if not operator or not customer:
+            return None
+
+        prior_logs = (
+            db.query(OutreachLog)
+            .filter(
+                OutreachLog.customer_id == customer_id,
+                OutreachLog.operator_id == operator_id,
+                OutreachLog.dry_run == False,
+            )
+            .order_by(OutreachLog.sent_at)
+            .all()
+        )
+        jobs = (
+            db.query(Job)
+            .filter_by(customer_id=customer_id)
+            .order_by(Job.completed_at)
+            .all()
+        )
+
+        op_tone = json.dumps(operator.tone_profile or {}, indent=2)
+        voice_profiles = operator.voice_profiles or []
+        assigned_voice_id = customer.assigned_voice_id
+        cust_name = customer.name
+        last_service_type = customer.last_service_type or "HVAC service"
+
+        outbound_logs = [l for l in prior_logs if l.direction == "outbound"]
+        gmail_thread_id = outbound_logs[-1].gmail_thread_id if outbound_logs else None
+        last_outbound_subject = outbound_logs[-1].subject if outbound_logs else f"Re: {cust_name}"
+
+        job_list = [{"date": j.completed_at, "service_type": j.service_type, "amount": j.amount or 0.0} for j in jobs]
+        thread_entries = [
+            {"direction": l.direction, "sent_at": l.sent_at, "content": l.content or "", "subject": l.subject or ""}
+            for l in prior_logs
+        ]
+
+        inbound_reply_text = ""
+        if inbound_log_id:
+            inbound_log = db.query(OutreachLog).filter_by(id=inbound_log_id).first()
+            if inbound_log:
+                inbound_reply_text = inbound_log.content or ""
+
+    voice = next((p for p in voice_profiles if p.get("id") == assigned_voice_id),
+                 voice_profiles[0] if voice_profiles else None)
+    voice_section = (
+        f"Write in the voice of {voice['name']} ({voice.get('role', 'team member')}).\n\n"
+        if voice else ""
+    )
+    service_summary = _build_service_summary(job_list)
+    thread_text = _build_thread_text(thread_entries)
+
+    # Extract the confirmed datetime from the customer's reply
+    extracted = _extract_confirmed_datetime(inbound_reply_text, thread_text)
+    slot_start = extracted["slot_start"]
+    slot_end = extracted["slot_end"]
+    service_type = extracted["service_type"] or last_service_type
+
+    confirmed_time = (
+        slot_start.strftime("%A, %B %-d at %-I:%M %p")
+        if slot_start else "a time to be confirmed"
+    )
+
+    if verbose:
+        print(f"  [conversation_agent] booking_confirmed — extracted slot: {confirmed_time}")
+
+    # Generate confirmation email draft
+    client = anthropic.Anthropic(api_key=config.ANTHROPIC_API_KEY)
+    try:
+        user_prompt = _fmt(
+            BOOKING_CONFIRMATION_PROMPT,
+            tone=op_tone,
+            voice_section=voice_section,
+            name=cust_name,
+            service_summary=service_summary,
+            confirmed_time=confirmed_time,
+            service_type=service_type,
+            thread_text=thread_text,
+            reply_text=inbound_reply_text or "(see thread above)",
+        )
+        message = client.messages.create(
+            model=config.CLAUDE_MODEL,
+            max_tokens=500,
+            system=AGENT_SYSTEM,
+            messages=[{"role": "user", "content": user_prompt}],
+        )
+        raw = message.content[0].text.strip()
+        try:
+            draft = json.loads(raw)
+        except json.JSONDecodeError:
+            draft = {"subject": f"Re: {last_outbound_subject}", "body": raw}
+    except Exception as e:
+        if verbose:
+            print(f"  [conversation_agent] Confirmation draft error: {e}")
+        return None
+
+    # Queue the draft with booking slot times stored for Meetings Queue pre-fill
+    with get_db() as db:
+        new_log = OutreachLog(
+            operator_id=operator_id,
+            customer_id=customer_id,
+            channel="email",
+            direction="outbound",
+            subject=draft.get("subject", f"Re: {last_outbound_subject}"),
+            content=draft.get("body", ""),
+            dry_run=True,
+            sequence_step=0,
+            gmail_thread_id=gmail_thread_id,
+            response_classification="booking_confirmed",
+            booking_slot_start=slot_start,
+            booking_slot_end=slot_end,
+        )
+        db.add(new_log)
+        db.flush()
+        draft_id = new_log.id
+
+    if verbose:
+        print(f"  [conversation_agent] Booking confirmation draft queued (log_id={draft_id})")
+
+    return draft_id
+
+
 # -- Main entry point ----------------------------------------------------------
 
 def generate_response(
@@ -205,6 +429,10 @@ def generate_response(
         if verbose:
             print(f"  [conversation_agent] Skipping draft -- customer marked not_interested")
         return None
+
+    if classification == "booking_confirmed":
+        return _generate_booking_confirmation(operator_id, customer_id, inbound_log_id, verbose)
+
 
     # -- Load all context ------------------------------------------------------
     with get_db() as db:
