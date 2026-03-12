@@ -428,8 +428,12 @@
     try {
       const res = await fetch(`/api/action/book-call/${customerId}`, {method: 'POST'});
       if (res.ok) { window.location.href = '/meetings'; }
-      else { btn.disabled = false; btn.textContent = orig; alert('Could not generate booking proposal'); }
-    } catch(e) { btn.disabled = false; btn.textContent = orig; }
+      else {
+        const data = await res.json().catch(() => ({}));
+        btn.disabled = false; btn.textContent = orig;
+        alert('Book Call failed: ' + (data.detail || res.status));
+      }
+    } catch(e) { btn.disabled = false; btn.textContent = orig; alert('Book Call error: ' + e.message); }
   }
 
   async function submitBooked() {

@@ -2600,15 +2600,20 @@ def action_book_call(customer_id: int):
         if existing:
             return {"status": "exists", "draft_id": existing.id}
 
-    from agents.conversation_agent import generate_response
-    draft_id = generate_response(
-        operator_id=OPERATOR_ID,
-        customer_id=customer_id,
-        classification="booking_intent",
-        verbose=True,
-    )
+    try:
+        from agents.conversation_agent import generate_response
+        draft_id = generate_response(
+            operator_id=OPERATOR_ID,
+            customer_id=customer_id,
+            classification="booking_intent",
+            verbose=True,
+        )
+    except Exception as exc:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"generation error: {exc}")
     if not draft_id:
-        raise HTTPException(status_code=500, detail="Failed to generate booking proposal")
+        raise HTTPException(status_code=500, detail="generate_response returned None — check server logs")
     return {"status": "generated", "draft_id": draft_id}
 
 
