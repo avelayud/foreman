@@ -398,6 +398,7 @@ def generate_response(
             dry_run=True,
             sequence_step=0,
             gmail_thread_id=gmail_thread_id,
+            response_classification=classification,
         )
         db.add(new_log)
         db.flush()

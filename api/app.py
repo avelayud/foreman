@@ -35,7 +35,7 @@ from pydantic import BaseModel
 
 from core.config import config
 from core.database import get_db, init_db
-from core.models import Customer, Job, Operator, OutreachLog
+from core.models import Booking, Customer, Job, Operator, OutreachLog
 
 app = FastAPI(title="Foreman", version="0.2.0")
 
@@ -112,6 +112,19 @@ def _get_queue_count(db) -> int:
     return db.query(OutreachLog).filter_by(
         operator_id=OPERATOR_ID, dry_run=True
     ).count()
+
+
+def _get_meetings_queue_count(db) -> int:
+    """Count pending meeting proposals (booking_intent drafts)."""
+    return (
+        db.query(OutreachLog)
+        .filter(
+            OutreachLog.operator_id == OPERATOR_ID,
+            OutreachLog.dry_run == True,
+            OutreachLog.response_classification == "booking_intent",
+        )
+        .count()
+    )
 
 
 def _get_conversations_attention_count(db) -> int:
@@ -1367,7 +1380,11 @@ def outreach_queue(request: Request):
         rows = (
             db.query(OutreachLog, Customer)
             .join(Customer, OutreachLog.customer_id == Customer.id)
-            .filter(OutreachLog.operator_id == OPERATOR_ID, OutreachLog.dry_run == True)
+            .filter(
+                OutreachLog.operator_id == OPERATOR_ID,
+                OutreachLog.dry_run == True,
+                (OutreachLog.response_classification != "booking_intent") | (OutreachLog.response_classification.is_(None)),
+            )
             .order_by(OutreachLog.created_at.desc())
             .all()
         )
@@ -1381,6 +1398,7 @@ def outreach_queue(request: Request):
             )
         )
         queue_count = len(pending)
+        meetings_queue_count = _get_meetings_queue_count(db)
         conversations_attention_count = _get_conversations_attention_count(db)
 
     return templates.TemplateResponse("outreach.html", {
@@ -1388,8 +1406,87 @@ def outreach_queue(request: Request):
         "active": "outreach",
         "operator": operator_data,
         "queue_count": queue_count,
+        "meetings_queue_count": meetings_queue_count,
         "conversations_attention_count": conversations_attention_count,
         "pending": pending,
+    })
+
+
+@app.get("/meetings", response_class=HTMLResponse)
+def meetings_queue(request: Request):
+    if (guard := _db_starting_response()):
+        return guard
+    with get_db() as db:
+        operator = db.query(Operator).filter_by(id=OPERATOR_ID).first()
+        rows = (
+            db.query(OutreachLog, Customer)
+            .join(Customer, OutreachLog.customer_id == Customer.id)
+            .filter(
+                OutreachLog.operator_id == OPERATOR_ID,
+                OutreachLog.dry_run == True,
+                OutreachLog.response_classification == "booking_intent",
+            )
+            .order_by(OutreachLog.created_at.desc())
+            .all()
+        )
+        operator_data = _operator_data(operator)
+        pending = [_outreach_row(l, c) for l, c in rows]
+        queue_count = _get_queue_count(db)
+        meetings_queue_count = len(pending)
+        conversations_attention_count = _get_conversations_attention_count(db)
+
+    return templates.TemplateResponse("meetings.html", {
+        "request": request,
+        "active": "meetings",
+        "operator": operator_data,
+        "queue_count": queue_count,
+        "meetings_queue_count": meetings_queue_count,
+        "conversations_attention_count": conversations_attention_count,
+        "pending": pending,
+    })
+
+
+@app.get("/calendar", response_class=HTMLResponse)
+def calendar_view(request: Request):
+    if (guard := _db_starting_response()):
+        return guard
+    with get_db() as db:
+        operator = db.query(Operator).filter_by(id=OPERATOR_ID).first()
+        operator_data = _operator_data(operator)
+        queue_count = _get_queue_count(db)
+        meetings_queue_count = _get_meetings_queue_count(db)
+        conversations_attention_count = _get_conversations_attention_count(db)
+
+        bookings = (
+            db.query(Booking, Customer)
+            .join(Customer, Booking.customer_id == Customer.id)
+            .filter(Booking.operator_id == OPERATOR_ID)
+            .order_by(Booking.slot_start)
+            .all()
+        )
+        bookings_data = []
+        for b, c in bookings:
+            bookings_data.append({
+                "id": b.id,
+                "customer_name": c.name,
+                "customer_email": c.email,
+                "customer_id": c.id,
+                "slot_start": b.slot_start,
+                "slot_end": b.slot_end,
+                "status": b.status,
+                "service_type": b.service_type or "Service",
+                "notes": b.notes or "",
+                "source": b.source,
+            })
+
+    return templates.TemplateResponse("calendar.html", {
+        "request": request,
+        "active": "calendar",
+        "operator": operator_data,
+        "queue_count": queue_count,
+        "meetings_queue_count": meetings_queue_count,
+        "conversations_attention_count": conversations_attention_count,
+        "bookings": bookings_data,
     })
 
 
