@@ -88,6 +88,14 @@
 {% set send_pending = pending | rejectattr("approval_status", "equalto", "pending") | list %}
 
 {% if pending %}
+<div style="margin-bottom:18px">
+  <div style="position:relative;max-width:320px">
+    <span style="position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--text-4);font-size:13px;pointer-events:none">⌕</span>
+    <input type="text" id="queueSearch" placeholder="Search by name or email…" oninput="filterQueue()"
+           style="width:100%;padding:8px 12px 8px 32px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:'IBM Plex Sans',sans-serif;color:var(--text);background:var(--surface);outline:none;transition:border-color 0.15s"
+           onfocus="this.style.borderColor='var(--navy)'" onblur="this.style.borderColor='var(--border)'" autocomplete="off">
+  </div>
+</div>
 
 {% if needs_approval %}
 <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;margin-top:4px">
@@ -96,7 +104,7 @@
   <div style="font-size:11px;font-family:'IBM Plex Mono',monospace;color:var(--text-3)">{{ needs_approval|length }} item{{ 's' if needs_approval|length != 1 }}</div>
 </div>
 {% for item in needs_approval %}
-<div class="queue-card state-{{ item.approval_chip_cls }}" id="card-{{ item.log_id }}">
+<div class="queue-card state-{{ item.approval_chip_cls }}" id="card-{{ item.log_id }}" data-name="{{ item.customer_name|lower }}" data-email="{{ item.customer_email|lower }}">
   <div class="queue-header">
     <div class="queue-meta">
       <a href="/customer/{{ item.customer_id }}" class="queue-name">{{ item.customer_name }}</a>
@@ -178,7 +186,7 @@
   <div style="font-size:11px;font-family:'IBM Plex Mono',monospace;color:var(--text-3)">{{ send_pending|length }} item{{ 's' if send_pending|length != 1 }} — approved, awaiting send</div>
 </div>
 {% for item in send_pending %}
-<div class="queue-card state-{{ item.approval_chip_cls }}" id="card-{{ item.log_id }}">
+<div class="queue-card state-{{ item.approval_chip_cls }}" id="card-{{ item.log_id }}" data-name="{{ item.customer_name|lower }}" data-email="{{ item.customer_email|lower }}">
   <div class="queue-header">
     <div class="queue-meta">
       <a href="/customer/{{ item.customer_id }}" class="queue-name">{{ item.customer_name }}</a>
@@ -242,11 +250,24 @@
   <a href="/" class="btn-primary" style="text-decoration:none">Dashboard</a>
 </div>
 {% endif %}
+<div id="queue-no-results" style="display:none;padding:40px 20px;text-align:center;font-size:13px;color:var(--text-3)">No queue items match your search.</div>
 
 {% endblock %}
 
 {% block scripts %}
 <script>
+  function filterQueue() {
+    const q = document.getElementById('queueSearch').value.toLowerCase();
+    const cards = document.querySelectorAll('.queue-card');
+    let shown = 0;
+    cards.forEach(c => {
+      const match = !q || c.dataset.name.includes(q) || (c.dataset.email||'').includes(q);
+      c.style.display = match ? '' : 'none';
+      if (match) shown++;
+    });
+    document.getElementById('queue-no-results').style.display = (shown === 0 && q) ? '' : 'none';
+  }
+
   async function submitQueueAction(logId, sendNowAction) {
     const approveBtn = document.getElementById('approve-btn-' + logId);
     const sendBtn = document.getElementById('send-btn-' + logId);

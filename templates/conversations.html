@@ -62,6 +62,15 @@
 </div>
 
 {% if conversations %}
+<div style="margin-bottom:18px">
+  <div style="position:relative;max-width:320px">
+    <span style="position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--text-4);font-size:13px;pointer-events:none">⌕</span>
+    <input type="text" id="convSearch" placeholder="Search by name or email…" oninput="filterConversations()"
+           style="width:100%;padding:8px 12px 8px 32px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:'IBM Plex Sans',sans-serif;color:var(--text);background:var(--surface);outline:none;transition:border-color 0.15s"
+           onfocus="this.style.borderColor='var(--navy)'" onblur="this.style.borderColor='var(--border)'" autocomplete="off">
+  </div>
+</div>
+
 <div class="kpi-row">
   <div class="kpi">
     <div class="kpi-label">Active Threads</div>
@@ -82,7 +91,7 @@
 </div>
 
 {% for item in conversations %}
-<div class="conv-card {{ item.health_chip_cls }}">
+<div class="conv-card {{ item.health_chip_cls }}" data-name="{{ item.customer_name|lower }}" data-email="{{ item.customer_email|lower if item.customer_email else '' }}">
   <div class="conv-layout">
     <div class="conv-left">
       <div class="conv-top">
@@ -132,6 +141,7 @@
   </div>
 </div>
 {% endfor %}
+<div id="conv-no-results" style="display:none;padding:40px 20px;text-align:center;font-size:13px;color:var(--text-3)">No conversations match your search.</div>
 
 {% else %}
 <div class="card" style="padding:72px 40px;text-align:center">
@@ -144,4 +154,20 @@
 </div>
 {% endif %}
 
+{% endblock %}
+
+{% block scripts %}
+<script>
+function filterConversations() {
+  const q = document.getElementById('convSearch').value.toLowerCase();
+  const cards = document.querySelectorAll('.conv-card');
+  let shown = 0;
+  cards.forEach(c => {
+    const match = !q || c.dataset.name.includes(q) || (c.dataset.email||'').includes(q);
+    c.style.display = match ? '' : 'none';
+    if (match) shown++;
+  });
+  document.getElementById('conv-no-results').style.display = (shown === 0 && q) ? '' : 'none';
+}
+</script>
 {% endblock %}
