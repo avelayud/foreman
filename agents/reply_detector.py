@@ -121,6 +121,10 @@ def run(operator_id: int) -> int:
                 dry_run=False,
                 sequence_step=0,
                 gmail_thread_id=thread_id,
+                # Store the RFC 2822 Message-ID so future replies can set
+                # In-Reply-To to THIS message — ensuring the recipient's email
+                # client threads our response under their sent reply.
+                rfc_message_id=reply.get("rfc_message_id") or "",
             )
             db.add(log)
             customer = db.query(Customer).filter_by(id=customer_id).first()

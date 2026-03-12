@@ -18,15 +18,21 @@ Foreman identifies dormant customers, scores them by rebooking probability, reac
 3. Finds dormant customers and drafts personalized outreach in the operator's voice (Reactivation Analyzer)
 4. Builds customer context from Gmail correspondence (Customer Analyzer — runs daily)
 5. Tracks replies by Gmail thread; feeds context-aware follow-up drafts (Reply Detector + Follow-up Sequencer)
-6. Classifies inbound responses: booking intent → propose calendar slots, not interested → suppress *(Phase 6)*
-7. Reads Google Calendar to propose real available slots and confirm bookings *(Phase 6)*
+6. Classifies inbound responses: booking intent → propose calendar slots, not interested → suppress
+7. Reads Google Calendar to propose real available slots; detects confirmation replies and creates bookings automatically *(Phase 6b)*
 8. Tracks booked jobs and revenue attributed to Foreman outreach
+9. Analytics page: customer base composition, outreach funnel, revenue ROI *(Phase 7)*
+10. Product analytics: internal event tracking, draft quality metrics, operator behavior *(Phase 7)*
 
 **Target customer:** HVAC, plumbing, and electrical contractors. Owner-operated teams of 3–15. Not highly technical. HVAC is the primary beachhead.
 
 ---
 
-## Product State (2026-03-11)
+## Product State (2026-03-12) — Open Bugs
+
+> **Active bugs:** email threading (recipient sees new thread), reply detection lag, email body line break formatting, stale customer profiles after reseed. See `PROJECT_PLAN.md` backlog for full details + fix plans.
+
+## Feature Status
 
 | Area | Status |
 |---|---|
@@ -37,27 +43,39 @@ Foreman identifies dormant customers, scores them by rebooking probability, reac
 | Reply Detector agent (background, 15-min poll) | ✅ |
 | Follow-up Sequencer agent | ✅ |
 | Priority Scorer agent (scheduled daily) | ✅ |
+| Response Classifier agent (booking_intent / not_interested / etc.) | ✅ |
 | Dry Run / Production mode toggle | ✅ |
-| Outreach queue (approve + schedule + send-now) | ✅ |
-| Scheduled sender worker | ✅ |
+| Outreach queue: Needs Approval + Send Pending sections | ✅ |
+| Meetings Queue (booking proposals, separate from outreach) | ✅ |
+| One-click dashboard actions (Draft Outreach / Book Call / Draft Follow-up) | ✅ |
+| Scheduled sender worker + smart queue refresh (background, every 15 min) | ✅ |
 | Revenue dashboard: 8 metric cards + 4 priority groups | ✅ |
-| All Customers page (search + filter by group) | ✅ |
+| All Customers page (search by name/email, filter by group) | ✅ |
 | Customer scoring engine (0–100, rules-based, 5 signals) | ✅ |
 | Mark as Booked flow (modal, logs job value, tracks revenue) | ✅ |
-| Active Conversations page (health state, attention badge) | ✅ |
+| Active Conversations page (health state, attention badge, search) | ✅ |
 | Conversation workspace (AI timeline, context-aware draft) | ✅ |
 | Score breakdown on customer detail page | ✅ |
-| Agents page with status + manual run | ✅ |
+| Agents page with status + Run Now buttons for all agents | ✅ |
+| Google Calendar OAuth + availability reading | ✅ |
+| Booking proposal flow (booking_intent → auto-draft → Meetings Queue) | ✅ |
+| Calendar view (agenda-style, color-coded by service type) | ✅ |
+| Email thread continuity (In-Reply-To + References RFC headers) | 🔴 Partial — still broken on recipient side |
+| Internal dev tools page (reseed DB, run all agents) | ✅ |
 | Railway deploy with Postgres | ✅ |
 | UTC timestamp storage + EDT/EST display | ✅ |
-| Response classifier agent (booking_intent / not_interested / etc.) | 🔵 Phase 6 |
-| Google Calendar OAuth + availability reading | 🔵 Phase 6 |
-| Booking proposal flow (auto-draft slot proposals) | 🔵 Phase 6 |
-| Booking confirmation + job creation | 🔵 Phase 6 |
-| Outreach composer redesign (dedicated page, not customer detail) | ⬜ Phase 7 |
-| SMS channel (Twilio) | ⬜ Phase 8 |
-| Service interval prediction | ⬜ Phase 9 |
-| Jobber / HousecallPro integration | ⬜ Phase 10 |
+| **BUG: Reply detection lag + Run Now no page refresh** | 🔴 Open |
+| **BUG: Email body line breaks on recipient side** | 🔴 Open |
+| **BUG: Stale customer profiles after reseed** | 🔴 Open |
+| **BUG: Agent run-order / scheduling not documented** | 🔴 Open |
+| Booking confirmation detection + job record creation | ⬜ Phase 6b (Job 02) |
+| Calendar write-back (create Google Calendar event on booking) | ⬜ Phase 6b (Job 02) |
+| Customer Analytics page (`/analytics`) — funnel, ROI, composition | ⬜ Phase 7 (Job 03) |
+| Product Analytics instrumentation + internal dashboard | ⬜ Phase 7 (Job 04) |
+| Outreach composer redesign (dedicated page, not customer detail) | ⬜ Phase 8 |
+| SMS channel (Twilio) | ⬜ Phase 9 |
+| Service interval prediction | ⬜ Phase 10 |
+| Jobber / HousecallPro integration | ⬜ Phase 11 |
 | ML-trained scoring model (sklearn) | ⬜ Phase 12 |
 
 ---
@@ -73,6 +91,23 @@ Foreman identifies dormant customers, scores them by rebooking probability, reac
 | Email | Gmail API (OAuth2) |
 | Calendar | Google Calendar API (OAuth2) — Phase 6 |
 | Deployment | Railway |
+
+---
+
+## Plans System
+
+Feature work is tracked in `plans/` — one folder per job, each containing a `plan.md` and `tasks/` with individual task files. Plans are authored in Claude app and executed in Claude Code.
+
+```
+plans/
+├── README.md                     # How to use the system
+├── job_01_customer_analyzer/     # 🔵 Active
+├── job_02_booking_confirmation/  # ⬜ Backlog (Phase 6b)
+├── job_03_customer_analytics/    # ⬜ Backlog (Phase 7)
+└── job_04_product_analytics/     # ⬜ Backlog (Phase 7, run before Job 03)
+```
+
+**Execution order:** Job 01 → Job 04 → Job 03 (Job 02 is independent).
 
 ---
 
@@ -100,18 +135,29 @@ foreman/
 │   └── calendar.py               # Phase 6 — Google Calendar read/write
 ├── templates/
 │   ├── base.html
-│   ├── dashboard.html            # Revenue metrics + 4 priority groups
+│   ├── dashboard.html            # Revenue metrics + 4 priority groups + one-click actions
 │   ├── customers.html            # Full searchable customer list
 │   ├── customer.html             # Customer detail + score breakdown
-│   ├── conversations.html
+│   ├── conversations.html        # Active threads with search
 │   ├── conversation_detail.html
-│   ├── outreach.html
-│   └── agents.html
+│   ├── outreach.html             # Needs Approval + Send Pending sections
+│   ├── meetings.html             # Booking proposals queue
+│   ├── calendar.html             # Agenda view, color-coded by service type
+│   └── agents.html               # All agents with Run Now buttons
 ├── data/
-│   ├── seed.py                   # 200 customers, 5yr HVAC history
-│   └── reseed.py                 # Full wipe + reseed (prod-safe)
+│   ├── README.md                 # Reseed docs: how to run, add emails, add scenarios
+│   ├── reseed.py                 # Full wipe + reseed: 200 customers, rich conversations
+│   ├── fix_inbound_timestamps.py # One-time UTC migration (2026-03-11)
+│   └── archive/
+│       └── seed_v1_legacy.py     # Original 40-customer seed (superseded)
 ├── tools/
 │   └── email_simulator.py        # Planned — standalone Gmail conversation simulator
+├── plans/                        # Feature work: plan.md + tasks/ per job
+│   ├── README.md
+│   ├── job_01_customer_analyzer/
+│   ├── job_02_booking_confirmation/
+│   ├── job_03_customer_analytics/
+│   └── job_04_product_analytics/
 ├── Procfile
 └── requirements.txt
 ```
@@ -122,13 +168,15 @@ foreman/
 
 | URL | Description |
 |---|---|
-| `/` | Dashboard: revenue metrics, 4 priority groups (Upcoming / Active / Ripe / On Hold) |
+| `/` | Dashboard: revenue metrics, 4 priority groups, one-click Draft/Book/Follow-up actions |
 | `/customers` | All customers: search by name/email, filter by group |
 | `/customer/{id}` | Customer detail: account context, score breakdown, full history |
-| `/conversations` | Active conversations with health state and attention indicators |
+| `/conversations` | Active conversations: search, health state, attention indicators |
 | `/conversations/{id}` | Conversation workspace: AI timeline, draft panel, recap |
-| `/outreach` | Outreach queue: review/edit/approve/schedule/send |
-| `/agents` | Agent catalog: status, last run, manual trigger |
+| `/outreach` | Outreach queue: Needs Approval + Send Pending, search, regenerate |
+| `/meetings` | Meetings queue: booking proposals, proposed slots panel, search |
+| `/calendar` | Calendar view: agenda by month, color-coded by service type |
+| `/agents` | Agent catalog: status, last run, Run Now buttons for all agents |
 
 ---
 
@@ -187,13 +235,15 @@ venv/bin/pip install -r requirements.txt
 cp .env.example .env
 # Fill in: ANTHROPIC_API_KEY, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, DATABASE_URL
 
-# Seed realistic HVAC data (200 customers, 5yr history)
-venv/bin/python -m data.reseed
+# Seed: 200 customers, rich HVAC histories + simulated conversations
+DATABASE_URL=sqlite:///./foreman.db venv/bin/python -m data.reseed
 
 # Run
 DATABASE_URL=sqlite:///./foreman.db venv/bin/python -m api.run
 # → http://localhost:8000
 ```
+
+See **[data/README.md](data/README.md)** for full reseed documentation: Railway connection, adding live email addresses, adding scenario types, and augmenting bulk profiles.
 
 ---
 

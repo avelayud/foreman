@@ -26,12 +26,14 @@
   .vtl-dot{position:absolute;left:-15px;top:12px;width:8px;height:8px;border-radius:50%;border:2px solid #fff;box-shadow:0 0 0 1px var(--border)}
   .vtl-dot.inbound{background:var(--green)}
   .vtl-dot.outbound{background:var(--amber)}
+  .vtl-dot.queued{background:var(--blue)}
   .vtl-card{border:1px solid var(--border);background:var(--bg);border-radius:7px;padding:8px 10px;cursor:pointer;transition:border-color 0.12s,background 0.12s;user-select:none}
   .vtl-card:hover{border-color:var(--navy);background:var(--surface)}
   .vtl-event.active .vtl-card{border-color:var(--navy);background:var(--surface)}
   .vtl-dir{font-size:9px;font-family:'IBM Plex Mono',monospace;font-weight:700;letter-spacing:0.6px;text-transform:uppercase;margin-bottom:3px}
   .vtl-dir.inbound{color:var(--green)}
   .vtl-dir.outbound{color:var(--amber)}
+  .vtl-dir.queued{color:var(--blue)}
   .vtl-summary{font-size:11.5px;color:var(--text-2);line-height:1.45;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
   .vtl-date{font-size:9.5px;color:var(--text-3);font-family:'IBM Plex Mono',monospace;margin-top:4px}
 
@@ -130,10 +132,14 @@
         {% for event in timeline_events %}
         <div class="vtl-event" data-index="{{ loop.index0 }}" onclick="toggleTimelineEvent({{ loop.index0 }})">
           <span class="vtl-dot {{ event.type }}"></span>
-          <div class="vtl-card">
-            <div class="vtl-dir {{ event.type }}">{% if event.type == 'inbound' %}↙ Customer{% else %}↗ You{% endif %}</div>
+          <div class="vtl-card {% if event.type == 'queued' %}" style="border-style:dashed;border-color:var(--blue);background:var(--blue-pale){% endif %}">
+            <div class="vtl-dir {{ event.type }}">
+              {% if event.type == 'inbound' %}↙ Customer
+              {% elif event.type == 'queued' %}⏳ Queued Draft
+              {% else %}↗ You{% endif %}
+            </div>
             <div class="vtl-summary">{{ event.summary }}</div>
-            <div class="vtl-date">{{ event.at | est }}</div>
+            <div class="vtl-date">{{ event.at | est }}{% if event.type == 'queued' %} · <a href="/{{ event.queued_to }}" style="color:var(--blue)">View in Queue →</a>{% endif %}</div>
             {% if event.type == 'inbound' and event.response_classification %}
             <div>
               {% if event.response_classification == 'booking_intent' %}
@@ -187,18 +193,37 @@
       <div class="panel-head">
         <div style="display:flex;align-items:baseline;gap:8px;flex-wrap:wrap">
           <span class="panel-title">
-            {% if health.needs_response %}Reply to Customer{% elif health.needs_follow_up %}Follow-up Due{% else %}Draft Follow-up{% endif %}
-          </span>
-          <span style="font-size:11px;color:var(--text-3)">
-            {% if health.needs_response %}Customer replied — agent drafted a response.
-            {% elif health.needs_follow_up %}Follow-up overdue — agent drafted a message.
-            {% else %}No reply yet — agent drafted a follow-up.{% endif %}
+            {% if health.needs_response %}Reply to Customer{% elif health.needs_follow_up %}Follow-up Due{% else %}Draft Message{% endif %}
           </span>
         </div>
-        <button class="btn-ghost" onclick="regenerateDraft()" id="regen-btn" style="font-size:11px;padding:5px 11px">↺ Regenerate</button>
+        <button class="btn-ghost" onclick="regenerateDraft()" id="regen-btn" style="font-size:11px;padding:5px 11px;display:none">↺ Regenerate</button>
       </div>
       <div class="panel-body">
-        <div id="draft-loading" class="draft-spinner">
+
+        {# ── State A: draft already in queue ── #}
+        {% if has_pending_draft %}
+        <div id="pending-notice" style="border:1px solid var(--blue);background:var(--blue-pale);border-radius:8px;padding:12px 14px;margin-bottom:10px">
+          <div style="font-size:12px;font-weight:700;color:var(--blue);margin-bottom:4px">Draft already in queue</div>
+          <div style="font-size:12px;color:var(--text-2);margin-bottom:8px">{{ pending_draft_summary }}</div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+            <a href="/{{ pending_draft_queue }}" class="btn-primary" style="font-size:12px;padding:6px 14px;text-decoration:none">View in {{ 'Meetings' if pending_draft_queue == 'meetings' else 'Outreach' }} Queue →</a>
+            <button class="btn-ghost" onclick="showGeneratePanel()" style="font-size:12px;padding:6px 12px">Generate different draft</button>
+          </div>
+        </div>
+        {% endif %}
+
+        {# ── State B: no draft — show generate button ── #}
+        <div id="generate-prompt" {% if has_pending_draft %}style="display:none"{% endif %}>
+          <div style="font-size:13px;color:var(--text-3);margin-bottom:12px">
+            {% if health.needs_response %}Customer replied — generate a response draft to review before queuing.
+            {% elif health.needs_follow_up %}Follow-up is overdue. Generate a draft to review before queuing.
+            {% else %}No reply yet. Generate a follow-up draft if you want to reach out before the agent's next scheduled run.{% endif %}
+          </div>
+          <button class="btn-primary" onclick="showGeneratePanel()" style="font-size:13px;padding:8px 20px">Generate Draft</button>
+        </div>
+
+        {# ── State C: draft loading / form ── #}
+        <div id="draft-loading" class="draft-spinner" style="display:none">
           <div class="spinner"></div>
           <span>Agent is drafting…</span>
         </div>
@@ -212,6 +237,7 @@
           </div>
         </div>
         <div id="draft-error" style="display:none;font-size:12.5px;color:var(--red);padding:6px 0"></div>
+
       </div>
     </div>
 
@@ -356,14 +382,26 @@
     document.getElementById('msg-panel').style.display = 'none';
   }
 
+  function showGeneratePanel() {
+    const pending = document.getElementById('pending-notice');
+    const prompt = document.getElementById('generate-prompt');
+    const regenBtn = document.getElementById('regen-btn');
+    if (pending) pending.style.display = 'none';
+    if (prompt) prompt.style.display = 'none';
+    if (regenBtn) regenBtn.style.display = 'inline-flex';
+    loadDraft();
+  }
+
   async function loadDraft() {
     const loading = document.getElementById('draft-loading');
     const form = document.getElementById('draft-form');
     const errorEl = document.getElementById('draft-error');
     const regenBtn = document.getElementById('regen-btn');
+    const genPrompt = document.getElementById('generate-prompt');
     loading.style.display = 'flex';
     form.style.display = 'none';
     errorEl.style.display = 'none';
+    if (genPrompt) genPrompt.style.display = 'none';
     if (regenBtn) regenBtn.disabled = true;
     document.getElementById('draft-status').textContent = '';
     try {
@@ -419,6 +457,5 @@
     }
   }
 
-  loadDraft();
 </script>
 {% endblock %}

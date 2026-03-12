@@ -142,57 +142,55 @@
     if (el) setTimeout(() => el.scrollIntoView({behavior: 'smooth', block: 'center'}), 100);
   }
 
-  async function runAgent(key, url) {
+  // Run Now — synchronous. Endpoint blocks until complete, then page reloads.
+  // Shows running indicator; auto-reloads on success so Last Run updates immediately.
+  // AbortController gives a 120s safety valve for slow agents (reply_detector, follow_up).
+  async function runAgent(key, url, body) {
     const btn = document.getElementById('runBtn-' + key);
+    const originalText = btn.textContent;
+    const originalOnclick = btn.onclick;
     btn.disabled = true;
     btn.textContent = 'Running…';
+    btn.style.background = '';
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 120000);
+
     try {
-      const res = await fetch(url, {method: 'POST', headers: {'Content-Type': 'application/json'}});
+      const fetchOpts = {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        signal: controller.signal,
+      };
+      if (body) fetchOpts.body = JSON.stringify(body);
+
+      const res = await fetch(url, fetchOpts);
+      clearTimeout(timeout);
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
         throw new Error(err.detail || 'Server error');
       }
-      btn.textContent = 'Started ✓';
+      btn.textContent = 'Done ✓ — reloading';
       btn.style.background = 'var(--green)';
-      setTimeout(() => {
-        btn.textContent = 'Refresh to see results';
-        btn.onclick = () => window.location.reload();
-        btn.disabled = false;
-      }, 1500);
+      setTimeout(() => window.location.reload(), 900);
     } catch (e) {
-      btn.textContent = 'Error — ' + e.message;
-      btn.style.background = 'var(--red)';
-      btn.disabled = false;
+      clearTimeout(timeout);
+      if (e.name === 'AbortError') {
+        btn.textContent = 'Still running — reload when ready';
+        btn.style.background = 'var(--amber)';
+        btn.disabled = false;
+        btn.onclick = () => window.location.reload();
+      } else {
+        btn.textContent = 'Error — ' + e.message;
+        btn.style.background = 'var(--red)';
+        btn.disabled = false;
+        btn.onclick = originalOnclick;
+      }
     }
   }
 
-  async function runReactivation() {
-    const btn = document.getElementById('runBtn-reactivation');
-    btn.disabled = true;
-    btn.textContent = 'Running…';
-
-    try {
-      const res = await fetch('/api/agent/run', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({limit: 10}),
-      });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.detail || 'Server error');
-      }
-      btn.textContent = 'Started ✓';
-      btn.style.background = 'var(--green)';
-      setTimeout(() => {
-        btn.textContent = 'Refresh to see results';
-        btn.onclick = () => window.location.reload();
-        btn.disabled = false;
-      }, 1500);
-    } catch (e) {
-      btn.textContent = 'Error — ' + e.message;
-      btn.style.background = 'var(--red)';
-      btn.disabled = false;
-    }
+  function runReactivation() {
+    runAgent('reactivation', '/api/agent/run', {limit: 10});
   }
 </script>
 {% endblock %}

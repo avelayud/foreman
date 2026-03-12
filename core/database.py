@@ -65,6 +65,7 @@ SCHEMA_PATCHES = {
         "converted_to_job": "BOOLEAN",
         "converted_job_value": "FLOAT",
         "converted_at": "TIMESTAMP",
+        "rfc_message_id": "VARCHAR",
     },
 }
 

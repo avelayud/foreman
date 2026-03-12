@@ -282,6 +282,11 @@ class OutreachLog(Base):
     # Enables exact reply detection by thread rather than fuzzy address matching
     gmail_thread_id = Column(String, nullable=True)
 
+    # RFC 2822 Message-ID from the customer's reply — stored at detection time
+    # Used as explicit In-Reply-To when sending the next message so the recipient's
+    # email client threads the conversation correctly on their side.
+    rfc_message_id = Column(String, nullable=True)
+
     # Phase 5: conversion tracking
     response_classification = Column(String, nullable=True)  # booking_intent | callback_request | price_inquiry | not_interested | unclear
     classified_at = Column(DateTime, nullable=True)

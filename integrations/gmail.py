@@ -261,17 +261,23 @@ def send_email(
     subject: str,
     body: str,
     thread_id: str = None,
+    in_reply_to: str = None,
 ) -> tuple[str, str]:
     """
     Send an email from the operator's Gmail account.
 
     Args:
-        to:        Recipient email address
-        subject:   Email subject line
-        body:      Plain-text body
-        thread_id: If replying in a thread, pass the existing gmail thread_id.
-                   The function will fetch the thread to set In-Reply-To /
-                   References headers so the recipient sees it in the same thread.
+        to:           Recipient email address
+        subject:      Email subject line
+        body:         Plain-text body
+        thread_id:    If replying in a thread, pass the existing gmail thread_id.
+                      The function will fetch the thread to set In-Reply-To /
+                      References headers so the recipient sees it in the same thread.
+        in_reply_to:  Explicit RFC 2822 Message-ID to set as In-Reply-To.
+                      Should be the rfc_message_id of the customer's most recent
+                      inbound reply. When provided, this overrides the thread-
+                      derived last-message-ID so the recipient's client correctly
+                      threads the message under their sent reply.
 
     Returns:
         (message_id, thread_id) — store thread_id on OutreachLog for reply tracking
@@ -284,28 +290,68 @@ def send_email(
 
     # When replying, set RFC 2822 threading headers so the recipient's mail
     # client groups this message in the same thread.
+    #
+    # Strategy: fetch each message individually with format="metadata" +
+    # metadataHeaders=["Message-ID"] — more reliable than threads().get(format="full")
+    # which doesn't guarantee Message-ID appears in payload.headers.
     if thread_id:
         try:
+            # Step 1: get ordered list of message IDs in the thread
             thread_result = service.users().threads().get(
-                userId="me", id=thread_id, format="full"
+                userId="me", id=thread_id, format="minimal"
             ).execute()
-            messages = thread_result.get("messages", [])
-            if messages:
-                last_msg = messages[-1]
-                last_headers = last_msg.get("payload", {}).get("headers", [])
-                last_rfc_id = _get_header(last_headers, "Message-ID")
-                # Collect all Message-IDs in thread for References header
-                all_rfc_ids = [
-                    _get_header(m.get("payload", {}).get("headers", []), "Message-ID")
-                    for m in messages
-                ]
-                all_rfc_ids = [mid for mid in all_rfc_ids if mid]
-                if last_rfc_id:
-                    msg["In-Reply-To"] = last_rfc_id
-                if all_rfc_ids:
-                    msg["References"] = " ".join(all_rfc_ids)
+            thread_messages = thread_result.get("messages", [])
+
+            # Step 2: fetch each message's Message-ID header individually
+            all_rfc_ids = []
+            for m in thread_messages:
+                m_data = service.users().messages().get(
+                    userId="me",
+                    id=m["id"],
+                    format="metadata",
+                    metadataHeaders=["Message-ID"],
+                ).execute()
+                rfc_id = _get_header(
+                    m_data.get("payload", {}).get("headers", []), "Message-ID"
+                )
+                if rfc_id:
+                    all_rfc_ids.append(rfc_id)
+
+            print(
+                f"[gmail] Thread {thread_id}: {len(thread_messages)} msgs, "
+                f"rfc_ids={all_rfc_ids}"
+            )
+
+            if all_rfc_ids:
+                # If caller supplied an explicit in_reply_to (the customer's reply
+                # RFC Message-ID stored at detection time), use it directly.
+                # This ensures the recipient's client threads our next message
+                # under their sent reply rather than our outbound.
+                effective_in_reply_to = in_reply_to or all_rfc_ids[-1]
+
+                # Ensure in_reply_to is present in the References chain
+                if in_reply_to and in_reply_to not in all_rfc_ids:
+                    all_rfc_ids.append(in_reply_to)
+
+                msg["In-Reply-To"] = effective_in_reply_to
+                msg["References"] = " ".join(all_rfc_ids)
+                print(f"[gmail] In-Reply-To={effective_in_reply_to!r} (explicit={bool(in_reply_to)})")
+            else:
+                # No RFC IDs from thread — fall back to explicit in_reply_to if we have it
+                if in_reply_to:
+                    msg["In-Reply-To"] = in_reply_to
+                    msg["References"] = in_reply_to
+                    print(f"[gmail] No thread RFC IDs; using explicit In-Reply-To={in_reply_to!r}")
+                else:
+                    print(
+                        f"[gmail] WARNING: no RFC Message-IDs found in thread {thread_id} "
+                        f"— email will send without threading headers"
+                    )
+
         except Exception as e:
+            import traceback
             print(f"[gmail] Could not fetch thread headers for threading: {e}")
+            traceback.print_exc()
 
     raw = base64.urlsafe_b64encode(msg.as_bytes()).decode()
     request_body = {"raw": raw}

@@ -72,6 +72,18 @@ REPLY_POLL_SECONDS = 900  # 15 minutes
 _scoring_scheduler: BackgroundScheduler | None = None
 _last_analyzer_run: datetime | None = None
 
+# In-memory last-run tracker — updated after every agent run (manual or scheduled).
+# Reset on process restart, but Run Now endpoints are now synchronous so the page
+# reloads immediately after and the value is fresh.
+_agent_last_run: dict[str, datetime | None] = {
+    "tone_profiler": None,
+    "reactivation": None,
+    "scoring": None,
+    "customer_analyzer": None,
+    "reply_detector": None,
+    "follow_up": None,
+}
+
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -233,12 +245,34 @@ def _next_business_send_time(now: datetime | None = None) -> datetime:
     return candidate
 
 
-def _gmail_send_message(to: str, subject: str, body: str, thread_id: str = None) -> str:
+def _gmail_send_message(to: str, subject: str, body: str, thread_id: str = None, in_reply_to: str = None) -> str:
     """Send a message through Gmail and return thread ID."""
     from integrations.gmail import send_email as gmail_send
 
-    _, returned_thread_id = gmail_send(to=to, subject=subject, body=body, thread_id=thread_id)
+    _, returned_thread_id = gmail_send(
+        to=to, subject=subject, body=body, thread_id=thread_id, in_reply_to=in_reply_to
+    )
     return returned_thread_id
+
+
+def _get_customer_inbound_rfc_id(customer_id: int) -> str | None:
+    """Return the RFC 2822 Message-ID of the customer's most recent inbound reply.
+    Used to set In-Reply-To so the recipient's email client threads our response
+    correctly under their sent message."""
+    with get_db() as db:
+        row = (
+            db.query(OutreachLog.rfc_message_id)
+            .filter(
+                OutreachLog.customer_id == customer_id,
+                OutreachLog.operator_id == OPERATOR_ID,
+                OutreachLog.direction == "inbound",
+                OutreachLog.rfc_message_id != None,
+                OutreachLog.rfc_message_id != "",
+            )
+            .order_by(OutreachLog.sent_at.desc(), OutreachLog.created_at.desc())
+            .first()
+        )
+        return row[0] if row and row[0] else None
 
 
 def _get_customer_thread_id(log_id: int) -> str | None:
@@ -280,11 +314,19 @@ def _deliver_outreach_log(
     if customer_email:
         try:
             existing_thread_id = _get_customer_thread_id(log_id)
+            # Look up customer_id from the log so we can fetch the inbound RFC ID
+            with get_db() as _db:
+                _log_row = _db.query(OutreachLog.customer_id).filter_by(
+                    id=log_id, operator_id=OPERATOR_ID
+                ).first()
+                _cid = _log_row[0] if _log_row else None
+            inbound_rfc_id = _get_customer_inbound_rfc_id(_cid) if _cid else None
             thread_id = _gmail_send_message(
                 to=customer_email,
                 subject=subject,
                 body=body,
                 thread_id=existing_thread_id,
+                in_reply_to=inbound_rfc_id,
             )
         except Exception as exc:
             send_error = str(exc)
@@ -383,12 +425,14 @@ def _start_scheduled_sender():
 
 def _reply_detector_loop():
     """Poll Gmail for customer replies every REPLY_POLL_SECONDS."""
+    global _agent_last_run
     # Delay first run by 30s to let the app fully settle
     time.sleep(30)
     while True:
         try:
             from agents.reply_detector import run as run_reply_detector
             count = run_reply_detector(operator_id=OPERATOR_ID)
+            _agent_last_run["reply_detector"] = datetime.utcnow()
             if count:
                 print(f"[reply_detector] {count} new reply(s) detected", flush=True)
         except Exception as exc:
@@ -413,10 +457,12 @@ def _start_reply_detector():
 
 def _run_scoring_job():
     """Score all customers — called at startup and daily by APScheduler."""
+    global _agent_last_run
     try:
         from core.scoring import score_all_customers
         with get_db() as db:
             count = score_all_customers(db, operator_id=OPERATOR_ID)
+        _agent_last_run["scoring"] = datetime.utcnow()
         print(f"[scoring] Scored {count} customers.", flush=True)
     except Exception as exc:
         print(f"[scoring] error: {exc}", flush=True)
@@ -461,11 +507,24 @@ def _run_customer_analyzer_job():
             except Exception as exc:
                 print(f"[customer_analyzer] error on customer {cid}: {exc}", flush=True)
         _last_analyzer_run = _dt.now(_tz.utc).replace(tzinfo=None)
+        _agent_last_run["customer_analyzer"] = _last_analyzer_run
         print(f"[customer_analyzer] Analyzed {len(to_analyze)} customers.", flush=True)
         return len(to_analyze)
     except Exception as exc:
         print(f"[customer_analyzer] job error: {exc}", flush=True)
         return 0
+
+
+def _run_follow_up_job():
+    """Run follow-up sequencer — called daily by APScheduler and on manual Run Now."""
+    global _agent_last_run
+    try:
+        from agents.follow_up import run as run_follow_up
+        run_follow_up(operator_id=OPERATOR_ID)
+        _agent_last_run["follow_up"] = datetime.utcnow()
+        print("[follow_up] Daily run complete.", flush=True)
+    except Exception as exc:
+        print(f"[follow_up] error: {exc}", flush=True)
 
 
 def _refresh_queued_drafts():
@@ -539,6 +598,7 @@ def _start_scoring_scheduler():
     scheduler = BackgroundScheduler(daemon=True)
     scheduler.add_job(_run_scoring_job, "interval", hours=24, id="daily_scoring")
     scheduler.add_job(_run_customer_analyzer_job, "interval", hours=24, id="daily_analyzer")
+    scheduler.add_job(_run_follow_up_job, "interval", hours=24, id="daily_follow_up")
     scheduler.add_job(_refresh_queued_drafts, "interval", minutes=15, id="queue_refresh")
     scheduler.start()
     _scoring_scheduler = scheduler
@@ -1704,6 +1764,27 @@ def conversation_detail(request: Request, customer_id: int):
             .order_by(OutreachLog.sent_at.desc(), OutreachLog.created_at.desc())
             .all()
         )
+        # Check for any pending draft in the queue for this customer
+        pending_draft_log = (
+            db.query(OutreachLog)
+            .filter(
+                OutreachLog.customer_id == customer_id,
+                OutreachLog.operator_id == OPERATOR_ID,
+                OutreachLog.dry_run == True,
+                OutreachLog.approval_status == "pending",
+                OutreachLog.direction == "outbound",
+            )
+            .order_by(OutreachLog.created_at.desc())
+            .first()
+        )
+        has_pending_draft = pending_draft_log is not None
+        pending_draft_queue = (
+            "meetings"
+            if pending_draft_log and pending_draft_log.response_classification == "booking_intent"
+            else "outreach"
+        )
+        pending_draft_summary = _compact_summary(pending_draft_log.content or "", 120) if pending_draft_log else ""
+        pending_draft_created_at = _log_timestamp(pending_draft_log) if pending_draft_log else None
         operator_data = _operator_data(operator)
         queue_count = _get_queue_count(db)
         conversations_attention_count = _get_conversations_attention_count(db)
@@ -1759,6 +1840,24 @@ def conversation_detail(request: Request, customer_id: int):
                 "at": entry["at"],
                 "response_classification": entry.get("response_classification"),
             })
+
+    # Add pending draft as a "queued" timeline entry (visually distinct from sent messages)
+    if has_pending_draft and pending_draft_log:
+        timeline_events.append({
+            "id": pending_draft_log.id,
+            "type": "queued",
+            "title": "Draft in Queue",
+            "detail": f"Awaiting approval · {'Meetings Queue' if pending_draft_queue == 'meetings' else 'Outreach Queue'}",
+            "subject": pending_draft_log.subject or "(draft)",
+            "summary": pending_draft_summary,
+            "content": pending_draft_log.content or "",
+            "sender_label": "Queued Draft",
+            "sequence_step": (pending_draft_log.sequence_step or 0) + 1,
+            "gmail_thread_id": None,
+            "at": pending_draft_created_at,
+            "response_classification": None,
+            "queued_to": pending_draft_queue,
+        })
 
     timeline_events.sort(key=_timeline_date_key, reverse=True)
 
@@ -1824,6 +1923,10 @@ def conversation_detail(request: Request, customer_id: int):
         "opportunity_signals": opportunity_signals,
         "conversation_recap": recap,
         "latest_classification": latest_classification,
+        "has_pending_draft": has_pending_draft,
+        "pending_draft_queue": pending_draft_queue,
+        "pending_draft_summary": pending_draft_summary,
+        "pending_draft_created_at": pending_draft_created_at,
     })
 
 
@@ -2465,69 +2568,58 @@ class AgentRunRequest(BaseModel):
 
 @app.post("/api/agent/run")
 def run_agent(req: AgentRunRequest = None):
+    """Run reactivation agent synchronously — blocks until complete."""
+    global _agent_last_run
     req = req or AgentRunRequest()
     from agents.reactivation import run as run_reactivation
-    import threading
-
-    def _run():
-        run_reactivation(
-            operator_id=OPERATOR_ID,
-            limit=req.limit,
-            threshold_days=req.threshold_days,
-        )
-
-    t = threading.Thread(target=_run, daemon=True)
-    t.start()
-    return {"status": "started", "limit": req.limit}
+    count = run_reactivation(
+        operator_id=OPERATOR_ID,
+        limit=req.limit,
+        threshold_days=req.threshold_days,
+    )
+    _agent_last_run["reactivation"] = datetime.utcnow()
+    return {"status": "ok", "drafts_queued": count or 0}
 
 
 @app.post("/api/agent/run-customer-analyzer")
 def run_agent_customer_analyzer():
-    import threading
-    t = threading.Thread(target=_run_customer_analyzer_job, daemon=True)
-    t.start()
-    return {"status": "started"}
+    """Run customer analyzer synchronously — blocks until complete."""
+    count = _run_customer_analyzer_job()
+    return {"status": "ok", "analyzed": count or 0}
 
 
 @app.post("/api/agent/run-scoring")
 def run_agent_scoring():
-    import threading
-    t = threading.Thread(target=_run_scoring_job, daemon=True)
-    t.start()
-    return {"status": "started"}
+    """Run priority scorer synchronously — blocks until complete."""
+    _run_scoring_job()
+    return {"status": "ok"}
 
 
 @app.post("/api/agent/run-tone-profiler")
 def run_agent_tone_profiler():
-    import threading
-    def _run():
-        from agents.tone_profiler import run as run_tone_profiler
-        run_tone_profiler(operator_id=OPERATOR_ID)
-    t = threading.Thread(target=_run, daemon=True)
-    t.start()
-    return {"status": "started"}
+    """Run tone profiler synchronously — blocks until complete."""
+    global _agent_last_run
+    from agents.tone_profiler import run as run_tone_profiler
+    run_tone_profiler(operator_id=OPERATOR_ID)
+    _agent_last_run["tone_profiler"] = datetime.utcnow()
+    return {"status": "ok"}
 
 
 @app.post("/api/agent/run-reply-detector")
 def run_agent_reply_detector():
-    import threading
-    def _run():
-        from agents.reply_detector import run as run_reply_detector
-        run_reply_detector(operator_id=OPERATOR_ID)
-    t = threading.Thread(target=_run, daemon=True)
-    t.start()
-    return {"status": "started"}
+    """Run reply detector synchronously — blocks until complete (may take 30–60s)."""
+    global _agent_last_run
+    from agents.reply_detector import run as run_reply_detector
+    count = run_reply_detector(operator_id=OPERATOR_ID)
+    _agent_last_run["reply_detector"] = datetime.utcnow()
+    return {"status": "ok", "replies_detected": count or 0}
 
 
 @app.post("/api/agent/run-follow-up")
 def run_agent_follow_up():
-    import threading
-    def _run():
-        from agents.follow_up import run as run_follow_up
-        run_follow_up(operator_id=OPERATOR_ID)
-    t = threading.Thread(target=_run, daemon=True)
-    t.start()
-    return {"status": "started"}
+    """Run follow-up sequencer synchronously — blocks until complete."""
+    _run_follow_up_job()
+    return {"status": "ok"}
 
 
 @app.post("/api/classify/{log_id}")
@@ -2957,7 +3049,7 @@ def agents_page(request: Request):
                 "description": "Reads your sent Gmail to extract writing style, tone, and characteristic phrases. Stores a voice profile used by all outreach drafts.",
                 "status": "active" if tone_profile_set else "needs_setup",
                 "status_label": "Active" if tone_profile_set else "Not configured",
-                "last_run_at": None,
+                "last_run_at": _agent_last_run.get("tone_profiler"),
                 "stat_label": "Voice profiles" if tone_profile_set else "Setup required",
                 "stat_value": str(len(operator_data.get("voice_profiles") or [])) if tone_profile_set else "—",
                 "cli": "python -m agents.tone_profiler --operator-id 1",
@@ -2970,7 +3062,7 @@ def agents_page(request: Request):
                 "description": "Identifies customers dormant 365+ days, ranks by priority score (days dormant × spend), generates personalized email drafts, and queues them for your review.",
                 "status": "active",
                 "status_label": "Active",
-                "last_run_at": last_reactivation_run,
+                "last_run_at": _agent_last_run.get("reactivation") or last_reactivation_run,
                 "stat_label": "Drafts queued",
                 "stat_value": str(total_reactivation_drafts),
                 "cli": "python -m agents.reactivation --operator-id 1 --limit 10",
@@ -2983,7 +3075,7 @@ def agents_page(request: Request):
                 "description": "Scores every customer on 5 signals (Recency, Lifetime Value, Frequency, Job Type, Engagement) to produce a 0–100 priority score and tier. Runs at startup and every 24 hours.",
                 "status": "active",
                 "status_label": "Active (scheduled daily)",
-                "last_run_at": None,
+                "last_run_at": _agent_last_run.get("scoring"),
                 "stat_label": "Customers scored",
                 "stat_value": str(scored_count),
                 "stat_meta": f"{high_priority_count} high priority",
@@ -3010,8 +3102,8 @@ def agents_page(request: Request):
                 "icon": "📬",
                 "description": "Checks Gmail inbox by thread ID, logs inbound replies, marks customers as replied, and refreshes customer profiles from new context.",
                 "status": "active" if tracked_threads > 0 else "needs_setup",
-                "status_label": "Active (manual run)" if tracked_threads > 0 else "Waiting for sent Gmail threads",
-                "last_run_at": latest_reply_at,
+                "status_label": "Active (15-min poll)" if tracked_threads > 0 else "Waiting for sent Gmail threads",
+                "last_run_at": _agent_last_run.get("reply_detector") or latest_reply_at,
                 "stat_label": "Replies detected",
                 "stat_value": str(replies_detected),
                 "stat_meta": f"{tracked_threads} tracked Gmail thread(s)",
@@ -3024,8 +3116,8 @@ def agents_page(request: Request):
                 "icon": "🔁",
                 "description": "Queues follow-up drafts at Day 3, Day 7, and Day 14 using customer profile + thread context. Stops when a reply is detected.",
                 "status": "active",
-                "status_label": "Active (manual run)",
-                "last_run_at": latest_follow_up_at,
+                "status_label": "Active (scheduled daily)",
+                "last_run_at": _agent_last_run.get("follow_up") or latest_follow_up_at,
                 "stat_label": "Follow-ups queued",
                 "stat_value": str(follow_up_drafts),
                 "stat_meta": f"{active_sequences} customers in active sequence",
@@ -3075,3 +3167,77 @@ def agents_page(request: Request):
             },
         ],
     })
+
+
+# ── Internal tools ────────────────────────────────────────────────────────────
+
+@app.get("/internal", response_class=HTMLResponse)
+def internal_page(request: Request):
+    if (guard := _db_starting_response()):
+        return guard
+    with get_db() as db:
+        op = db.query(Operator).filter_by(id=OPERATOR_ID).first()
+        operator_data = _operator_data(op)
+        customer_count = db.query(Customer).filter_by(operator_id=OPERATOR_ID).count()
+        outreach_count = db.query(OutreachLog).filter_by(operator_id=OPERATOR_ID).count()
+        booking_count = db.query(Booking).count()
+        conversations_attention_count = _get_conversations_attention_count(db)
+
+    return templates.TemplateResponse("internal.html", {
+        "request": request,
+        "active": "internal",
+        "operator": operator_data,
+        "conversations_attention_count": conversations_attention_count,
+        "db_stats": {
+            "customers": customer_count,
+            "outreach_logs": outreach_count,
+            "bookings": booking_count,
+        },
+    })
+
+
+@app.post("/api/internal/run-all-agents")
+def api_run_all_agents():
+    """Kick off all agents in background threads (same as individual Run Now buttons)."""
+    import threading
+
+    def _run():
+        from agents.tone_profiler import run as run_tone_profiler
+        from agents.reactivation import run as run_reactivation
+        from agents.customer_analyzer import run as run_customer_analyzer
+        from agents.reply_detector import run as run_reply_detector
+        from agents.follow_up import run as run_follow_up
+
+        run_tone_profiler(operator_id=OPERATOR_ID)
+        run_reactivation(operator_id=OPERATOR_ID, limit=20)
+        _run_scoring_job()
+        run_customer_analyzer(operator_id=OPERATOR_ID)
+        run_reply_detector(operator_id=OPERATOR_ID)
+        run_follow_up(operator_id=OPERATOR_ID)
+
+    threading.Thread(target=_run, daemon=True).start()
+    return {"ok": True, "status": "started"}
+
+
+@app.post("/api/internal/reseed")
+def api_reseed():
+    """Wipe and reseed the database with the full 200-customer dataset."""
+    import subprocess
+    import sys
+    try:
+        result = subprocess.run(
+            [sys.executable, "-m", "data.reseed"],
+            capture_output=True,
+            text=True,
+            timeout=120,
+        )
+        if result.returncode != 0:
+            return JSONResponse(
+                status_code=500,
+                content={"ok": False, "error": result.stderr[-2000:] or "reseed failed"},
+            )
+        return JSONResponse({"ok": True, "output": result.stdout[-2000:]})
+    except subprocess.TimeoutExpired:
+        return JSONResponse(status_code=500, content={"ok": False, "error": "Reseed timed out after 120s"})
+    except Exception as exc:
+        return JSONResponse(status_code=500, content={"ok": False, "error": str(exc)})
