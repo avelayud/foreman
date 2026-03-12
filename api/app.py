@@ -108,10 +108,18 @@ def _operator_data(op) -> dict:
 
 
 def _get_queue_count(db) -> int:
-    """Count unsent outreach items (dry_run=True) for the sidebar badge."""
-    return db.query(OutreachLog).filter_by(
-        operator_id=OPERATOR_ID, dry_run=True
-    ).count()
+    """Count items needing operator approval (pending only) for the sidebar badge."""
+    return (
+        db.query(OutreachLog)
+        .filter(
+            OutreachLog.operator_id == OPERATOR_ID,
+            OutreachLog.dry_run == True,
+            OutreachLog.approval_status == "pending",
+            (OutreachLog.response_classification != "booking_intent")
+            | (OutreachLog.response_classification.is_(None)),
+        )
+        .count()
+    )
 
 
 def _get_meetings_queue_count(db) -> int:
@@ -674,7 +682,15 @@ def _outreach_status(log: OutreachLog) -> str:
     return "pending" if log.dry_run else "sent"
 
 
-def _outreach_sequence_label(sequence_step: int | None) -> str:
+def _outreach_sequence_label(sequence_step: int | None, response_classification: str | None = None) -> str:
+    if response_classification == "booking_intent":
+        return "Booking proposal"
+    if response_classification == "price_inquiry":
+        return "Price response"
+    if response_classification == "callback_request":
+        return "Callback acknowledgement"
+    if response_classification == "unclear":
+        return "Clarifying reply"
     step = int(sequence_step or 0)
     if step <= 0:
         return "Initial outreach"
@@ -1420,7 +1436,8 @@ def _outreach_row(log, customer) -> dict:
         "sent_at": log.sent_at,
         "dry_run": log.dry_run,
         "sequence_step": log.sequence_step,
-        "sequence_label": _outreach_sequence_label(log.sequence_step),
+        "sequence_label": _outreach_sequence_label(log.sequence_step, log.response_classification),
+        "response_classification": log.response_classification or "",
         "approval_status": queue_status,
         "approval_status_label": status_meta["label"],
         "approval_chip_cls": status_meta["chip_cls"],

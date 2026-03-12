@@ -37,10 +37,18 @@ CALENDAR_AVAILABLE = True
 def _get_calendar_service():
     creds = None
 
+    import base64
     token_env = os.getenv("GMAIL_TOKEN_JSON", "").strip()
     if token_env:
         try:
-            creds = Credentials.from_authorized_user_info(json.loads(token_env), SCOPES)
+            token_data = json.loads(token_env)
+        except (json.JSONDecodeError, ValueError):
+            try:
+                token_data = json.loads(base64.b64decode(token_env).decode("utf-8"))
+            except Exception as exc:
+                raise RuntimeError(f"GMAIL_TOKEN_JSON parse error: {exc}") from exc
+        try:
+            creds = Credentials.from_authorized_user_info(token_data, SCOPES)
         except Exception as exc:
             raise RuntimeError(f"GMAIL_TOKEN_JSON parse error: {exc}") from exc
 

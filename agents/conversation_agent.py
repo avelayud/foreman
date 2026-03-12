@@ -147,6 +147,15 @@ Write a brief, friendly reply that:
 4. Feels natural, not like a form letter"""
 
 
+# -- Safe prompt formatter -----------------------------------------------------
+
+def _fmt(template: str, **kwargs) -> str:
+    """str.format() that pre-escapes curly braces in values so email content
+    (which may contain {name}, CSS, etc.) never clashes with template slots."""
+    safe = {k: str(v).replace("{", "{{").replace("}", "}}") for k, v in kwargs.items()}
+    return template.format(**safe)
+
+
 # -- Job history formatter -----------------------------------------------------
 
 def _build_service_summary(jobs: list[dict]) -> str:
@@ -322,7 +331,8 @@ def generate_response(
         slot_text = format_slots_for_email(slots) if slots else (
             "I don't have my calendar handy -- please ask for their preferred times."
         )
-        user_prompt = BOOKING_PROPOSAL_PROMPT.format(
+        user_prompt = _fmt(
+            BOOKING_PROPOSAL_PROMPT,
             tone=op_tone,
             voice_section=voice_section,
             profile_section=profile_section,
@@ -333,7 +343,8 @@ def generate_response(
             reply_text=inbound_reply_text or "(see thread above)",
         )
     elif classification == "price_inquiry":
-        user_prompt = PRICE_RESPONSE_PROMPT.format(
+        user_prompt = _fmt(
+            PRICE_RESPONSE_PROMPT,
             tone=op_tone,
             voice_section=voice_section,
             profile_section=profile_section,
@@ -344,7 +355,8 @@ def generate_response(
             reply_text=inbound_reply_text or "(see thread above)",
         )
     elif classification == "callback_request":
-        user_prompt = CALLBACK_PROMPT.format(
+        user_prompt = _fmt(
+            CALLBACK_PROMPT,
             tone=op_tone,
             voice_section=voice_section,
             profile_section=profile_section,
@@ -354,7 +366,8 @@ def generate_response(
             operator_phone=op_phone,
         )
     else:  # unclear
-        user_prompt = CLARIFYING_PROMPT.format(
+        user_prompt = _fmt(
+            CLARIFYING_PROMPT,
             tone=op_tone,
             voice_section=voice_section,
             profile_section=profile_section,
