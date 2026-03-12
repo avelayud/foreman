@@ -170,6 +170,7 @@
             <button onclick="removeFromQueue({{ item.log_id }})" class="btn-ghost action-btn" style="color:var(--red);border-color:#fecaca" id="remove-btn-{{ item.log_id }}">
               Remove Draft
             </button>
+            <button class="btn-ghost action-btn" style="color:var(--text-3);font-size:11px" onclick="regenerateMeeting({{ item.log_id }}, this)">&#8635; Regenerate</button>
           </div>
         </div>
 
@@ -282,6 +283,17 @@
       btn.textContent = 'Remove Draft';
       alert('Failed to remove draft.');
     }
+  }
+
+  async function regenerateMeeting(logId, btn) {
+    if (!confirm('Regenerate this booking proposal? Calendar slots will be refreshed.')) return;
+    btn.disabled = true;
+    btn.textContent = 'Regenerating…';
+    try {
+      const res = await fetch(`/api/meetings/${logId}/regenerate`, {method: 'POST'});
+      if (res.ok) { window.location.reload(); }
+      else { btn.disabled = false; btn.textContent = '↺ Regenerate'; alert('Could not regenerate'); }
+    } catch(e) { btn.disabled = false; btn.textContent = '↺ Regenerate'; }
   }
 </script>
 {% endblock %}

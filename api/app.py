@@ -437,6 +437,68 @@ def _run_customer_analyzer_job():
         return 0
 
 
+def _refresh_queued_drafts():
+    """
+    Scans pending queue drafts. If a customer replied after a draft was created,
+    regenerates the draft with updated context so it reflects the latest message.
+    Runs every 15 minutes alongside reply_detector.
+    """
+    print("[queue_refresh] Scanning pending drafts for stale context...", flush=True)
+    try:
+        with get_db() as db:
+            pending = (
+                db.query(OutreachLog)
+                .filter(
+                    OutreachLog.operator_id == OPERATOR_ID,
+                    OutreachLog.dry_run == True,
+                    OutreachLog.direction == "outbound",
+                )
+                .all()
+            )
+            to_refresh = []
+            for draft in pending:
+                newer_inbound = (
+                    db.query(OutreachLog)
+                    .filter(
+                        OutreachLog.customer_id == draft.customer_id,
+                        OutreachLog.operator_id == OPERATOR_ID,
+                        OutreachLog.direction == "inbound",
+                        OutreachLog.dry_run == False,
+                        OutreachLog.created_at > draft.created_at,
+                    )
+                    .first()
+                )
+                if newer_inbound:
+                    to_refresh.append({
+                        "draft_id": draft.id,
+                        "customer_id": draft.customer_id,
+                        "classification": draft.response_classification or "unclear",
+                        "inbound_log_id": newer_inbound.id,
+                    })
+
+        for item in to_refresh:
+            print(f"  [queue_refresh] Refreshing draft {item['draft_id']} for customer {item['customer_id']}", flush=True)
+            try:
+                with get_db() as db:
+                    old = db.query(OutreachLog).filter_by(id=item["draft_id"]).first()
+                    if old:
+                        db.delete(old)
+                from agents.conversation_agent import generate_response
+                generate_response(
+                    operator_id=OPERATOR_ID,
+                    customer_id=item["customer_id"],
+                    classification=item["classification"],
+                    inbound_log_id=item["inbound_log_id"],
+                    verbose=False,
+                )
+            except Exception as e:
+                print(f"  [queue_refresh] Error refreshing draft {item['draft_id']}: {e}", flush=True)
+
+        print(f"[queue_refresh] Done. {len(to_refresh)} draft(s) refreshed.", flush=True)
+    except Exception as e:
+        print(f"[queue_refresh] Error: {e}", flush=True)
+
+
 def _start_scoring_scheduler():
     global _scoring_scheduler
     if _scoring_scheduler is not None:
@@ -446,6 +508,7 @@ def _start_scoring_scheduler():
     scheduler = BackgroundScheduler(daemon=True)
     scheduler.add_job(_run_scoring_job, "interval", hours=24, id="daily_scoring")
     scheduler.add_job(_run_customer_analyzer_job, "interval", hours=24, id="daily_analyzer")
+    scheduler.add_job(_refresh_queued_drafts, "interval", minutes=15, id="queue_refresh")
     scheduler.start()
     _scoring_scheduler = scheduler
     print("✅ Scoring scheduler started (daily).", flush=True)
@@ -2127,9 +2190,8 @@ def queue_conversation_draft(customer_id: int, req: QueueDraftRequest):
     return {"status": "queued", "customer_id": customer_id}
 
 
-@app.post("/api/draft/{customer_id}")
-def generate_draft(customer_id: int, req: DraftRequest = None):
-    req = req or DraftRequest()
+def _generate_reactivation_draft(customer_id: int, voice_id: str = None) -> dict:
+    """Core reactivation draft logic. Returns a dict with 'subject' and 'body'."""
     with get_db() as db:
         customer = db.query(Customer).filter_by(id=customer_id, operator_id=OPERATOR_ID).first()
         if not customer:
@@ -2137,9 +2199,9 @@ def generate_draft(customer_id: int, req: DraftRequest = None):
         operator = db.query(Operator).filter_by(id=OPERATOR_ID).first()
 
         # Resolve voice profile: use requested voice_id, fall back to customer's assigned, then first profile
-        voice_id = req.voice_id or customer.assigned_voice_id
+        resolved_voice_id = voice_id or customer.assigned_voice_id
         profiles = operator.voice_profiles
-        voice = next((p for p in profiles if p["id"] == voice_id), profiles[0] if profiles else None)
+        voice = next((p for p in profiles if p["id"] == resolved_voice_id), profiles[0] if profiles else None)
 
         # Serialize everything we need before session closes
         cust_name = customer.name
@@ -2195,6 +2257,12 @@ def generate_draft(customer_id: int, req: DraftRequest = None):
     if voice:
         draft["voice_name"] = voice["name"]
     return draft
+
+
+@app.post("/api/draft/{customer_id}")
+def generate_draft(customer_id: int, req: DraftRequest = None):
+    req = req or DraftRequest()
+    return _generate_reactivation_draft(customer_id, voice_id=req.voice_id)
 
 
 class ApproveSendRequest(BaseModel):
@@ -2421,6 +2489,162 @@ def draft_response(customer_id: int, req: dict = Body({})):
     t.start()
     t.join(timeout=30)
     return {"status": "queued", "draft_id": result.get("draft_id")}
+
+
+@app.post("/api/action/draft-outreach/{customer_id}")
+def action_draft_outreach(customer_id: int):
+    """One-click: generate reactivation draft and queue it. Returns draft_id."""
+    with get_db() as db:
+        # Idempotent: return existing pending draft if already queued
+        existing = (
+            db.query(OutreachLog)
+            .filter(
+                OutreachLog.customer_id == customer_id,
+                OutreachLog.operator_id == OPERATOR_ID,
+                OutreachLog.dry_run == True,
+                OutreachLog.direction == "outbound",
+                OutreachLog.response_classification.is_(None),
+            )
+            .first()
+        )
+        if existing:
+            return {"status": "exists", "draft_id": existing.id}
+
+    # Generate a fresh reactivation draft for this customer synchronously
+    draft = _generate_reactivation_draft(customer_id)
+
+    # Persist to queue
+    with get_db() as db:
+        customer = db.query(Customer).filter_by(id=customer_id, operator_id=OPERATOR_ID).first()
+        if not customer:
+            raise HTTPException(status_code=404, detail="Customer not found")
+        new_log = OutreachLog(
+            operator_id=OPERATOR_ID,
+            customer_id=customer_id,
+            channel="email",
+            direction="outbound",
+            subject=draft.get("subject", "Checking in"),
+            content=draft.get("body", ""),
+            dry_run=True,
+            sequence_step=0,
+            approval_status="pending",
+        )
+        db.add(new_log)
+        db.flush()
+        draft_id = new_log.id
+    return {"status": "generated", "draft_id": draft_id}
+
+
+@app.post("/api/action/draft-followup/{customer_id}")
+def action_draft_followup(customer_id: int):
+    """One-click: generate follow-up draft for a customer mid-sequence."""
+    with get_db() as db:
+        # Idempotent check
+        existing = (
+            db.query(OutreachLog)
+            .filter(
+                OutreachLog.customer_id == customer_id,
+                OutreachLog.operator_id == OPERATOR_ID,
+                OutreachLog.dry_run == True,
+                OutreachLog.direction == "outbound",
+            )
+            .first()
+        )
+        if existing:
+            return {"status": "exists", "draft_id": existing.id}
+
+    from agents.conversation_agent import generate_response
+    draft_id = generate_response(
+        operator_id=OPERATOR_ID,
+        customer_id=customer_id,
+        classification="unclear",
+        verbose=True,
+    )
+    if not draft_id:
+        raise HTTPException(status_code=500, detail="Failed to generate follow-up draft")
+    return {"status": "generated", "draft_id": draft_id}
+
+
+@app.post("/api/action/book-call/{customer_id}")
+def action_book_call(customer_id: int):
+    """One-click: generate booking proposal with calendar slots, queue to Meetings Queue."""
+    with get_db() as db:
+        existing = (
+            db.query(OutreachLog)
+            .filter(
+                OutreachLog.customer_id == customer_id,
+                OutreachLog.operator_id == OPERATOR_ID,
+                OutreachLog.dry_run == True,
+                OutreachLog.direction == "outbound",
+                OutreachLog.response_classification == "booking_intent",
+            )
+            .first()
+        )
+        if existing:
+            return {"status": "exists", "draft_id": existing.id}
+
+    from agents.conversation_agent import generate_response
+    draft_id = generate_response(
+        operator_id=OPERATOR_ID,
+        customer_id=customer_id,
+        classification="booking_intent",
+        verbose=True,
+    )
+    if not draft_id:
+        raise HTTPException(status_code=500, detail="Failed to generate booking proposal")
+    return {"status": "generated", "draft_id": draft_id}
+
+
+@app.post("/api/outreach/{log_id}/regenerate")
+def regenerate_outreach(log_id: int):
+    """Delete the existing draft and regenerate a fresh one for the same customer."""
+    with get_db() as db:
+        log = db.query(OutreachLog).filter_by(id=log_id, operator_id=OPERATOR_ID, dry_run=True).first()
+        if not log:
+            raise HTTPException(status_code=404, detail="Draft not found")
+        customer_id = log.customer_id
+        db.delete(log)
+
+    # Regenerate
+    draft = _generate_reactivation_draft(customer_id)
+    with get_db() as db:
+        new_log = OutreachLog(
+            operator_id=OPERATOR_ID,
+            customer_id=customer_id,
+            channel="email",
+            direction="outbound",
+            subject=draft.get("subject", "Checking in"),
+            content=draft.get("body", ""),
+            dry_run=True,
+            sequence_step=0,
+            approval_status="pending",
+        )
+        db.add(new_log)
+        db.flush()
+        new_id = new_log.id
+    return {"status": "regenerated", "draft_id": new_id}
+
+
+@app.post("/api/meetings/{log_id}/regenerate")
+def regenerate_meeting(log_id: int):
+    """Delete the existing meeting draft and regenerate a booking proposal."""
+    with get_db() as db:
+        log = db.query(OutreachLog).filter_by(id=log_id, operator_id=OPERATOR_ID, dry_run=True).first()
+        if not log:
+            raise HTTPException(status_code=404, detail="Draft not found")
+        customer_id = log.customer_id
+        db.delete(log)
+
+    from agents.conversation_agent import generate_response
+    draft_id = generate_response(
+        operator_id=OPERATOR_ID,
+        customer_id=customer_id,
+        classification="booking_intent",
+        verbose=True,
+    )
+    if not draft_id:
+        raise HTTPException(status_code=500, detail="Failed to regenerate booking proposal")
+    return {"status": "regenerated", "draft_id": draft_id}
 
 
 @app.get("/api/agent/status")

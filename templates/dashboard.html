@@ -273,11 +273,11 @@
 
       <div onclick="event.stopPropagation()">
         {% if c.reactivation_status == 'never_contacted' %}
-          <a href="/customer/{{ c.id }}" class="act-btn act-draft">Draft Outreach</a>
+          <button onclick="draftOutreach({{ c.id }}, this)" class="act-btn act-draft">Draft Outreach</button>
         {% elif c.reactivation_status in ('outreach_sent', 'sequence_step_2', 'sequence_step_3') %}
-          <a href="/conversations/{{ c.id }}" class="act-btn act-followup">Draft Follow-up</a>
+          <button onclick="draftFollowup({{ c.id }}, this)" class="act-btn act-followup">Draft Follow-up</button>
         {% elif c.reactivation_status == 'replied' %}
-          <a href="/conversations/{{ c.id }}" class="act-btn act-call">Book Call</a>
+          <button onclick="bookCall({{ c.id }}, this)" class="act-btn act-call">Book Call</button>
         {% elif c.reactivation_status == 'booked' %}
           <span class="act-badge act-badge-booked">Booked</span>
         {% elif c.reactivation_status == 'sequence_complete' %}
@@ -398,6 +398,39 @@
   document.getElementById('bookModal').addEventListener('click', function(e) {
     if (e.target === this) closeBookModal();
   });
+
+  async function draftOutreach(customerId, btn) {
+    btn.disabled = true;
+    const orig = btn.textContent;
+    btn.textContent = 'Generating…';
+    try {
+      const res = await fetch(`/api/action/draft-outreach/${customerId}`, {method: 'POST'});
+      if (res.ok) { window.location.href = '/outreach'; }
+      else { btn.disabled = false; btn.textContent = orig; alert('Could not generate draft'); }
+    } catch(e) { btn.disabled = false; btn.textContent = orig; }
+  }
+
+  async function draftFollowup(customerId, btn) {
+    btn.disabled = true;
+    const orig = btn.textContent;
+    btn.textContent = 'Generating…';
+    try {
+      const res = await fetch(`/api/action/draft-followup/${customerId}`, {method: 'POST'});
+      if (res.ok) { window.location.href = '/outreach'; }
+      else { btn.disabled = false; btn.textContent = orig; alert('Could not generate follow-up'); }
+    } catch(e) { btn.disabled = false; btn.textContent = orig; }
+  }
+
+  async function bookCall(customerId, btn) {
+    btn.disabled = true;
+    const orig = btn.textContent;
+    btn.textContent = 'Generating…';
+    try {
+      const res = await fetch(`/api/action/book-call/${customerId}`, {method: 'POST'});
+      if (res.ok) { window.location.href = '/meetings'; }
+      else { btn.disabled = false; btn.textContent = orig; alert('Could not generate booking proposal'); }
+    } catch(e) { btn.disabled = false; btn.textContent = orig; }
+  }
 
   async function submitBooked() {
     const jobValue = parseFloat(document.getElementById('bookJobValue').value);
