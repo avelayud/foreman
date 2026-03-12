@@ -35,6 +35,24 @@
   .vtl-summary{font-size:11.5px;color:var(--text-2);line-height:1.45;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
   .vtl-date{font-size:9.5px;color:var(--text-3);font-family:'IBM Plex Mono',monospace;margin-top:4px}
 
+  /* Classification badge */
+  .cls-badge{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:10px;font-size:9.5px;font-weight:700;font-family:'IBM Plex Mono',monospace;letter-spacing:0.3px;margin-top:4px}
+  .cls-booking{background:#d1fae5;color:#065f46;border:1px solid #6ee7b7}
+  .cls-price{background:#fef3c7;color:#92400e;border:1px solid #fcd34d}
+  .cls-callback{background:var(--blue-pale);color:var(--blue);border:1px solid #93c5fd}
+  .cls-unclear{background:#f1f5f9;color:var(--text-3);border:1px solid var(--border)}
+  .cls-declined{background:#fee2e2;color:#991b1b;border:1px solid #fca5a5}
+
+  /* Recommended action banner */
+  .action-banner{border-radius:8px;padding:12px 14px;margin-bottom:10px;display:flex;align-items:flex-start;gap:12px}
+  .action-banner.ab-booking{background:#d1fae5;border:1px solid #6ee7b7}
+  .action-banner.ab-price{background:#fef3c7;border:1px solid #fcd34d}
+  .action-banner.ab-callback{background:var(--blue-pale);border:1px solid #93c5fd}
+  .action-banner.ab-unclear{background:#f8fafc;border:1px solid var(--border)}
+  .ab-icon{font-size:18px;line-height:1;flex-shrink:0;margin-top:1px}
+  .ab-title{font-size:12px;font-weight:700;color:var(--navy);margin-bottom:2px}
+  .ab-desc{font-size:11.5px;color:var(--text-2);line-height:1.4}
+
   /* Full-width collapsible sections */
   .collapsible{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow-sm);overflow:hidden;margin-bottom:10px}
   .collapsible-head{padding:11px 14px;display:flex;align-items:center;justify-content:space-between;cursor:pointer;user-select:none;background:var(--bg)}
@@ -116,6 +134,21 @@
             <div class="vtl-dir {{ event.type }}">{% if event.type == 'inbound' %}↙ Customer{% else %}↗ You{% endif %}</div>
             <div class="vtl-summary">{{ event.summary }}</div>
             <div class="vtl-date">{{ event.at | est }}</div>
+            {% if event.type == 'inbound' and event.response_classification %}
+            <div>
+              {% if event.response_classification == 'booking_intent' %}
+                <span class="cls-badge cls-booking">📅 Booking Intent</span>
+              {% elif event.response_classification == 'price_inquiry' %}
+                <span class="cls-badge cls-price">💰 Price Inquiry</span>
+              {% elif event.response_classification == 'callback_request' %}
+                <span class="cls-badge cls-callback">📞 Callback</span>
+              {% elif event.response_classification == 'not_interested' %}
+                <span class="cls-badge cls-declined">✗ Declined</span>
+              {% elif event.response_classification == 'unclear' %}
+                <span class="cls-badge cls-unclear">? Unclear</span>
+              {% endif %}
+            </div>
+            {% endif %}
           </div>
         </div>
         {% endfor %}
@@ -128,6 +161,26 @@
 
   {# ═══ RIGHT: Draft + Expanded message ═══ #}
   <div class="right-col">
+
+    {# ── Recommended Action Banner ── #}
+    {% if latest_classification and latest_classification != 'none' %}
+    {% set ab_map = {
+      'booking_intent': ('ab-booking', '📅', 'Booking Intent Detected', 'This customer wants to schedule. A slot proposal draft has been queued — review and send it from the Outreach Queue.'),
+      'price_inquiry':  ('ab-price',   '💰', 'Price Inquiry', 'Customer is asking about cost. A pricing response draft has been queued in the Outreach Queue.'),
+      'callback_request': ('ab-callback', '📞', 'Callback Requested', 'Customer prefers to talk. A response draft has been queued — or call them directly.'),
+      'unclear':        ('ab-unclear',  '❓', 'Intent Unclear', 'Reply is ambiguous. A clarifying draft has been queued for your review.'),
+    } %}
+    {% set ab = ab_map.get(latest_classification, None) %}
+    {% if ab %}
+    <div class="action-banner {{ ab[0] }}" style="margin-bottom:14px">
+      <span class="ab-icon">{{ ab[1] }}</span>
+      <div>
+        <div class="ab-title">{{ ab[2] }}</div>
+        <div class="ab-desc">{{ ab[3] }}</div>
+      </div>
+    </div>
+    {% endif %}
+    {% endif %}
 
     {# Draft / Reply panel #}
     <div class="panel" id="draft-panel">

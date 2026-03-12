@@ -28,7 +28,7 @@ from pathlib import Path
 from apscheduler.schedulers.background import BackgroundScheduler
 
 import anthropic
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import Body, FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
@@ -1526,6 +1526,7 @@ def conversation_detail(request: Request, customer_id: int):
                 "sequence_step": (log.sequence_step or 0) + 1,
                 "at": logged_at,
                 "gmail_thread_id": log.gmail_thread_id,
+                "response_classification": log.response_classification,
             })
 
         latest_outbound = next((log for log in logs if log.direction == "outbound"), None)
@@ -1556,6 +1557,7 @@ def conversation_detail(request: Request, customer_id: int):
                 "sequence_step": entry["sequence_step"],
                 "gmail_thread_id": entry["gmail_thread_id"],
                 "at": entry["at"],
+                "response_classification": entry.get("response_classification"),
             })
 
     timeline_events.sort(key=_timeline_date_key, reverse=True)
@@ -1576,6 +1578,14 @@ def conversation_detail(request: Request, customer_id: int):
 
     outbound_count = sum(1 for entry in log_entries if entry["direction"] == "outbound")
     inbound_count = sum(1 for entry in log_entries if entry["direction"] == "inbound")
+    latest_classification = next(
+        (
+            entry["response_classification"]
+            for entry in log_entries
+            if entry["direction"] == "inbound" and entry.get("response_classification")
+        ),
+        "none",
+    )
     opportunity_signals = []
     if customer_data["days_dormant"] >= 365:
         opportunity_signals.append(f"Dormant for {customer_data['days_dormant']} days")
@@ -1613,6 +1623,7 @@ def conversation_detail(request: Request, customer_id: int):
         "inbound_count": inbound_count,
         "opportunity_signals": opportunity_signals,
         "conversation_recap": recap,
+        "latest_classification": latest_classification,
     })
 
 
@@ -2281,6 +2292,40 @@ def run_agent_scoring():
     return {"status": "started"}
 
 
+@app.post("/api/classify/{log_id}")
+def classify_log(log_id: int):
+    """Manually trigger classification on an inbound OutreachLog."""
+    try:
+        from agents.response_classifier import classify_reply
+        result = classify_reply(operator_id=OPERATOR_ID, inbound_log_id=log_id, verbose=True)
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/api/draft-response/{customer_id}")
+def draft_response(customer_id: int, req: dict = Body({})):
+    """Manually trigger conversation agent for a customer."""
+    classification = req.get("classification", "unclear")
+    inbound_log_id = req.get("inbound_log_id")
+    import threading
+    result = {}
+    def _run():
+        from agents.conversation_agent import generate_response
+        draft_id = generate_response(
+            operator_id=OPERATOR_ID,
+            customer_id=customer_id,
+            classification=classification,
+            inbound_log_id=inbound_log_id,
+            verbose=True,
+        )
+        result["draft_id"] = draft_id
+    t = threading.Thread(target=_run, daemon=True)
+    t.start()
+    t.join(timeout=30)
+    return {"status": "queued", "draft_id": result.get("draft_id")}
+
+
 @app.get("/api/agent/status")
 def agent_status():
     with get_db() as db:
@@ -2485,6 +2530,19 @@ def agents_page(request: Request):
             .filter(Customer.operator_id == OPERATOR_ID, Customer.priority_tier == "high")
             .count()
         )
+        classified_replies = (
+            db.query(OutreachLog)
+            .filter(
+                OutreachLog.operator_id == OPERATOR_ID,
+                OutreachLog.response_classification != None,
+            )
+            .count()
+        )
+        booking_intents = (
+            db.query(OutreachLog)
+            .filter_by(operator_id=OPERATOR_ID, response_classification="booking_intent")
+            .count()
+        )
 
     return templates.TemplateResponse("agents.html", {
         "request": request,
@@ -2574,6 +2632,34 @@ def agents_page(request: Request):
                 "stat_meta": f"{active_sequences} customers in active sequence",
                 "cli": "python -m agents.follow_up --operator-id 1 --limit 20",
                 "phase": "Phase 4",
+            },
+            {
+                "key": "response_classifier",
+                "name": "Response Classifier",
+                "icon": "🔍",
+                "description": "Reads every inbound customer reply and classifies it: booking intent, callback request, price inquiry, not interested, or unclear. Runs automatically after each reply is detected. Drives what happens next.",
+                "status": "active",
+                "status_label": "Active (auto on reply)",
+                "last_run_at": None,
+                "stat_label": "Replies classified",
+                "stat_value": str(classified_replies),
+                "stat_meta": f"{booking_intents} booking intent(s)",
+                "cli": "python -m agents.response_classifier",
+                "phase": "Phase 6",
+            },
+            {
+                "key": "conversation_agent",
+                "name": "Conversation Agent",
+                "icon": "✍️",
+                "description": "Generates bespoke reply drafts matched to the conversation phase. Booking proposals pull real Google Calendar slots. Price responses use actual job history. All drafts land in the Outreach Queue for your review.",
+                "status": "active",
+                "status_label": "Active (auto on reply)",
+                "last_run_at": None,
+                "stat_label": "Drafts generated",
+                "stat_value": str(classified_replies),
+                "stat_meta": "One draft per classified reply",
+                "cli": None,
+                "phase": "Phase 6",
             },
             {
                 "key": "sms_outreach",

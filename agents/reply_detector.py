@@ -134,6 +134,35 @@ def run(operator_id: int) -> int:
         except Exception as e:
             print(f"  [reply_detector] Profile update failed: {e}")
 
+        # Classify the reply
+        classification = "unclear"
+        try:
+            from agents.response_classifier import classify_reply
+            with get_db() as _db:
+                inbound_log = _db.query(OutreachLog).filter_by(
+                    customer_id=customer_id, direction="inbound"
+                ).order_by(OutreachLog.created_at.desc()).first()
+                inbound_log_id = inbound_log.id if inbound_log else None
+            if inbound_log_id:
+                result = classify_reply(operator_id, inbound_log_id, verbose=True)
+                classification = result.get("classification", "unclear")
+        except Exception as e:
+            print(f"  [reply_detector] Classification failed: {e}")
+
+        # Generate bespoke response draft (skip if not_interested)
+        if classification != "not_interested":
+            try:
+                from agents.conversation_agent import generate_response
+                generate_response(
+                    operator_id=operator_id,
+                    customer_id=customer_id,
+                    classification=classification,
+                    inbound_log_id=inbound_log_id,
+                    verbose=True,
+                )
+            except Exception as e:
+                print(f"  [reply_detector] Response generation failed: {e}")
+
         new_replies += 1
 
     print(f"[reply_detector] Done — {new_replies} new replies detected")
