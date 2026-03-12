@@ -27,7 +27,7 @@
       <div>
         <div style="font-size:15px;font-weight:600;color:var(--text);margin-bottom:4px">Run All Agents</div>
         <div style="font-size:13px;color:var(--text-2);line-height:1.55">
-          Fires all agents in sequence in the background: Tone Profiler → Reactivation Analyzer → Priority Scorer → Customer Analyzer → Reply Detector → Follow-up Sequencer. Returns immediately — check the Agents page to see results populate.
+          Runs all agents in sequence: Tone Profiler → Reactivation Analyzer → Priority Scorer → Customer Analyzer → Reply Detector → Follow-up Sequencer. Waits for completion — takes 30–90 seconds. Last-run timestamps on the Agents page will update.
         </div>
       </div>
     </div>
@@ -36,13 +36,26 @@
       Run All Agents
     </button>
 
-    <div id="agentsStatus" style="display:none;margin-top:16px">
-      <div style="padding:12px 16px;background:var(--green-pale);border:1px solid #a7f3d0;border-radius:8px;font-size:13px;color:var(--green);font-weight:500">
-        All agents started in the background. <a href="/agents" style="color:var(--green);text-decoration:underline">View Agents page</a> to monitor progress.
+    <!-- Running state -->
+    <div id="agentsRunning" style="display:none;margin-top:16px;padding:14px 16px;background:var(--navy-soft);border:1px solid var(--border);border-radius:8px;display:none;align-items:center;gap:12px">
+      <div class="spinner"></div>
+      <div>
+        <div style="font-size:13px;font-weight:500;color:var(--text)">Running all agents…</div>
+        <div style="font-size:11.5px;color:var(--text-3);font-family:'IBM Plex Mono',monospace;margin-top:3px">Tone Profiler → Reactivation → Scoring → Customer Analyzer → Reply Detector → Follow-up</div>
       </div>
     </div>
-    <div id="agentsError" style="display:none;margin-top:16px">
-      <div style="padding:12px 16px;background:var(--red-pale);border:1px solid #fecaca;border-radius:8px;font-size:13px;color:var(--red)" id="agentsErrorMsg"></div>
+
+    <!-- Success state -->
+    <div id="agentsSuccess" style="display:none;margin-top:16px;padding:14px 16px;background:var(--green-pale);border:1px solid #a7f3d0;border-radius:8px">
+      <div style="font-size:13px;font-weight:600;color:var(--green);margin-bottom:8px">All agents completed.</div>
+      <div id="agentsResults" style="font-size:11.5px;font-family:'IBM Plex Mono',monospace;color:var(--text-2);line-height:1.7"></div>
+      <div style="margin-top:10px;font-size:12px;color:var(--green)">Redirecting to Agents page… <a href="/agents" style="color:var(--green);font-weight:600">Go now →</a></div>
+    </div>
+
+    <!-- Error state -->
+    <div id="agentsError" style="display:none;margin-top:16px;padding:14px 16px;background:var(--red-pale);border:1px solid #fecaca;border-radius:8px">
+      <div style="font-size:13px;font-weight:600;color:var(--red);margin-bottom:4px">Run failed</div>
+      <div id="agentsErrorMsg" style="font-size:12px;font-family:'IBM Plex Mono',monospace;color:var(--text-2)"></div>
     </div>
   </div>
 
@@ -93,27 +106,59 @@
 <script>
 async function runAllAgents() {
   const btn = document.getElementById('runAgentsBtn');
-  const success = document.getElementById('agentsStatus');
+  const running = document.getElementById('agentsRunning');
+  const success = document.getElementById('agentsSuccess');
   const error = document.getElementById('agentsError');
 
   btn.disabled = true;
-  btn.textContent = 'Starting…';
+  btn.textContent = 'Running…';
+  running.style.display = 'flex';
   success.style.display = 'none';
   error.style.display = 'none';
 
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 300000); // 5 min max
+
   try {
-    const res = await fetch('/api/internal/run-all-agents', { method: 'POST' });
+    const res = await fetch('/api/internal/run-all-agents', {
+      method: 'POST',
+      signal: controller.signal,
+    });
+    clearTimeout(timeout);
     const data = await res.json().catch(() => ({}));
+    running.style.display = 'none';
+
     if (data.ok) {
+      // Build per-agent result lines
+      const LABELS = {
+        tone_profiler: 'Tone Profiler',
+        reactivation: 'Reactivation Analyzer',
+        scoring: 'Priority Scorer',
+        customer_analyzer: 'Customer Analyzer',
+        reply_detector: 'Reply Detector',
+        follow_up: 'Follow-up Sequencer',
+      };
+      const results = data.results || {};
+      const lines = Object.entries(LABELS).map(([key, label]) => {
+        const r = results[key];
+        if (!r) return `${label}: skipped`;
+        return r.ok ? `✓ ${label}` : `✗ ${label}: ${r.error}`;
+      });
+      document.getElementById('agentsResults').textContent = lines.join('\n');
       success.style.display = 'block';
+      setTimeout(() => { window.location.href = '/agents'; }, 2500);
     } else {
       document.getElementById('agentsErrorMsg').textContent = data.error || 'Unknown error';
       error.style.display = 'block';
+      btn.disabled = false;
+      btn.textContent = 'Run All Agents';
     }
   } catch (err) {
-    document.getElementById('agentsErrorMsg').textContent = err.message || 'Network error';
+    clearTimeout(timeout);
+    running.style.display = 'none';
+    document.getElementById('agentsErrorMsg').textContent =
+      err.name === 'AbortError' ? 'Timed out after 5 minutes.' : (err.message || 'Network error');
     error.style.display = 'block';
-  } finally {
     btn.disabled = false;
     btn.textContent = 'Run All Agents';
   }

@@ -3353,25 +3353,34 @@ def internal_page(request: Request):
 
 @app.post("/api/internal/run-all-agents")
 def api_run_all_agents():
-    """Kick off all agents in background threads (same as individual Run Now buttons)."""
-    import threading
+    """Run all agents synchronously in sequence. Updates _agent_last_run for each."""
+    global _agent_last_run
+    from agents.tone_profiler import run as run_tone_profiler
+    from agents.reactivation import run as run_reactivation
+    from agents.customer_analyzer import run as run_customer_analyzer
+    from agents.reply_detector import run as run_reply_detector
+    from agents.follow_up import run as run_follow_up
 
-    def _run():
-        from agents.tone_profiler import run as run_tone_profiler
-        from agents.reactivation import run as run_reactivation
-        from agents.customer_analyzer import run as run_customer_analyzer
-        from agents.reply_detector import run as run_reply_detector
-        from agents.follow_up import run as run_follow_up
+    results = {}
 
-        run_tone_profiler(operator_id=OPERATOR_ID)
-        run_reactivation(operator_id=OPERATOR_ID, limit=20)
-        _run_scoring_job()
-        run_customer_analyzer(operator_id=OPERATOR_ID)
-        run_reply_detector(operator_id=OPERATOR_ID)
-        run_follow_up(operator_id=OPERATOR_ID)
+    def _run_agent(key, fn, **kwargs):
+        try:
+            result = fn(**kwargs)
+            _agent_last_run[key] = datetime.utcnow()
+            results[key] = {"ok": True, "result": str(result) if result is not None else "done"}
+        except Exception as e:
+            results[key] = {"ok": False, "error": str(e)[:200]}
 
-    threading.Thread(target=_run, daemon=True).start()
-    return {"ok": True, "status": "started"}
+    _run_agent("tone_profiler", run_tone_profiler, operator_id=OPERATOR_ID)
+    _run_agent("reactivation", run_reactivation, operator_id=OPERATOR_ID, limit=20)
+    _run_scoring_job()
+    _agent_last_run["scoring"] = datetime.utcnow()
+    results["scoring"] = {"ok": True, "result": "done"}
+    _run_agent("customer_analyzer", run_customer_analyzer, operator_id=OPERATOR_ID)
+    _run_agent("reply_detector", run_reply_detector, operator_id=OPERATOR_ID)
+    _run_agent("follow_up", run_follow_up, operator_id=OPERATOR_ID)
+
+    return {"ok": True, "results": results}
 
 
 @app.post("/api/internal/reseed")
