@@ -2497,6 +2497,39 @@ def run_agent_scoring():
     return {"status": "started"}
 
 
+@app.post("/api/agent/run-tone-profiler")
+def run_agent_tone_profiler():
+    import threading
+    def _run():
+        from agents.tone_profiler import run as run_tone_profiler
+        run_tone_profiler(operator_id=OPERATOR_ID)
+    t = threading.Thread(target=_run, daemon=True)
+    t.start()
+    return {"status": "started"}
+
+
+@app.post("/api/agent/run-reply-detector")
+def run_agent_reply_detector():
+    import threading
+    def _run():
+        from agents.reply_detector import run as run_reply_detector
+        run_reply_detector(operator_id=OPERATOR_ID)
+    t = threading.Thread(target=_run, daemon=True)
+    t.start()
+    return {"status": "started"}
+
+
+@app.post("/api/agent/run-follow-up")
+def run_agent_follow_up():
+    import threading
+    def _run():
+        from agents.follow_up import run as run_follow_up
+        run_follow_up(operator_id=OPERATOR_ID)
+    t = threading.Thread(target=_run, daemon=True)
+    t.start()
+    return {"status": "started"}
+
+
 @app.post("/api/classify/{log_id}")
 def classify_log(log_id: int):
     """Manually trigger classification on an inbound OutreachLog."""
