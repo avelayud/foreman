@@ -21,6 +21,7 @@ import os
 import sys
 import threading
 import time
+import re
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -248,12 +249,56 @@ def _next_business_send_time(now: datetime | None = None) -> datetime:
     return candidate
 
 
+def _normalize_email_body(body: str) -> str:
+    """
+    Remove hard line-wraps inserted by Claude within paragraphs.
+
+    Claude sometimes emits text with newlines at column ~80 inside a sentence.
+    In text/plain these appear as mid-sentence line breaks in the recipient's
+    inbox even though Gmail's web UI reflows them for the sender.
+
+    Strategy: split on blank lines (paragraph breaks), then within each
+    paragraph join lines that don't end with punctuation that signals an
+    intentional break (colon, em-dash, bullet, numbered list).
+    """
+    paragraphs = re.split(r'\n{2,}', body.strip())
+    cleaned = []
+    for para in paragraphs:
+        lines = para.splitlines()
+        buf = []
+        for line in lines:
+            stripped = line.rstrip()
+            # Intentional line break: blank, bullet, numbered list, or ends with colon/dash
+            is_structural = (
+                not stripped
+                or re.match(r'^[\-\*•]\s', stripped)
+                or re.match(r'^\d+\.\s', stripped)
+                or stripped.endswith(':')
+                or stripped.endswith('—')
+            )
+            if is_structural:
+                if buf:
+                    cleaned_para = ' '.join(buf)
+                    buf = []
+                    cleaned.append(cleaned_para)
+                cleaned.append(stripped)
+            else:
+                buf.append(stripped)
+        if buf:
+            cleaned.append(' '.join(buf))
+        cleaned.append('')  # blank line between paragraphs
+    # Strip trailing blank lines, rejoin
+    result = '\n'.join(cleaned).strip()
+    return result
+
+
 def _gmail_send_message(to: str, subject: str, body: str, thread_id: str = None, in_reply_to: str = None) -> str:
     """Send a message through Gmail and return thread ID."""
     from integrations.gmail import send_email as gmail_send
 
     _, returned_thread_id = gmail_send(
-        to=to, subject=subject, body=body, thread_id=thread_id, in_reply_to=in_reply_to
+        to=to, subject=subject, body=_normalize_email_body(body),
+        thread_id=thread_id, in_reply_to=in_reply_to
     )
     return returned_thread_id
 
