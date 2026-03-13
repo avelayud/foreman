@@ -190,6 +190,10 @@
       <a href="/" class="sb-link {% if active == 'dashboard' %}active{% endif %}">
         <span>◼</span> Dashboard
       </a>
+      <span class="sb-link" style="opacity:0.38;cursor:default;pointer-events:none">
+        <span>📊</span> Analytics Dashboard
+        <span style="margin-left:auto;font-size:8.5px;font-family:'IBM Plex Mono',monospace;color:rgba(255,255,255,0.3);letter-spacing:0.5px">SOON</span>
+      </span>
       <a href="/customers" class="sb-link {% if active == 'customers' %}active{% endif %}">
         <span>👥</span> All Customers
       </a>
@@ -199,6 +203,11 @@
         <span style="margin-left:auto;background:var(--red);color:#fff;font-size:9.5px;font-weight:600;font-family:'IBM Plex Mono',monospace;padding:1px 7px;border-radius:20px">{{ conversations_attention_count }}</span>
         {% endif %}
       </a>
+      <a href="/calendar" class="sb-link {% if active == 'calendar' %}active{% endif %}">
+        <span>🗓</span> Calendar
+      </a>
+
+      <div class="sb-section">Queues</div>
       <a href="/outreach" class="sb-link {% if active == 'outreach' %}active{% endif %}">
         <span>✉</span> Outreach Queue
         {% if queue_count is defined and queue_count > 0 %}
@@ -211,55 +220,20 @@
         <span style="margin-left:auto;background:var(--blue);color:#fff;font-size:9.5px;font-weight:600;font-family:'IBM Plex Mono',monospace;padding:1px 7px;border-radius:20px">{{ meetings_queue_count }}</span>
         {% endif %}
       </a>
-      <a href="/calendar" class="sb-link {% if active == 'calendar' %}active{% endif %}">
-        <span>🗓</span> Calendar
-      </a>
 
       <div class="sb-section">Agents</div>
       <a href="/agents" class="sb-link {% if active == 'agents' %}active{% endif %}">
         <span style="font-size:11px">⚙</span> All Agents
-      </a>
-      <a href="/agents#tone_profiler" class="sb-link">
-        <span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:{% if operator and operator.tone_profile_set %}#4ade80{% else %}rgba(255,255,255,0.2){% endif %};flex-shrink:0"></span>
-        Tone Profiler
-      </a>
-      <a href="/agents#reactivation" class="sb-link">
-        <span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#4ade80;flex-shrink:0"></span>
-        Reactivation Analyzer
-      </a>
-      <a href="/agents#scoring" class="sb-link">
-        <span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#4ade80;flex-shrink:0"></span>
-        Priority Scorer
-      </a>
-      <a href="/agents#customer_analyzer" class="sb-link">
-        <span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#4ade80;flex-shrink:0"></span>
-        Customer Analyzer
-      </a>
-      <a href="/agents#reply_detector" class="sb-link">
-        <span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#4ade80;flex-shrink:0"></span>
-        Reply Detector
-      </a>
-      <a href="/agents#follow_up" class="sb-link">
-        <span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#4ade80;flex-shrink:0"></span>
-        Follow-up
-      </a>
-      <a href="/agents#response_classifier" class="sb-link">
-        <span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#4ade80;flex-shrink:0"></span>
-        Response Classifier
-      </a>
-      <a href="/agents#conversation_agent" class="sb-link">
-        <span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#4ade80;flex-shrink:0"></span>
-        Conversation Agent
-      </a>
-      <a href="/agents#sms_outreach" class="sb-link" style="opacity:0.45">
-        <span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:rgba(255,255,255,0.15);flex-shrink:0"></span>
-        SMS Outreach
       </a>
 
       <div class="sb-section">Internal</div>
       <a href="/internal" class="sb-link {% if active == 'internal' %}active{% endif %}">
         <span style="font-size:11px">🛠</span> Dev Tools
       </a>
+      <span class="sb-link" style="opacity:0.38;cursor:default;pointer-events:none">
+        <span>📈</span> Internal Metrics
+        <span style="margin-left:auto;font-size:8.5px;font-family:'IBM Plex Mono',monospace;color:rgba(255,255,255,0.3);letter-spacing:0.5px">SOON</span>
+      </span>
     </nav>
 
     <!-- Active voice block -->
