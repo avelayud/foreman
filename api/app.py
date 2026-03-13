@@ -2574,6 +2574,41 @@ class ConfirmBookingRequest(BaseModel):
     email_body: str = ""
 
 
+class BookingNotesRequest(BaseModel):
+    notes: str = ""
+    estimated_value: float | None = None
+
+
+@app.post("/api/booking/{booking_id}/notes")
+def save_booking_notes(booking_id: int, req: BookingNotesRequest):
+    """Save post-booking notes and estimated job value."""
+    with get_db() as db:
+        booking = db.query(Booking).filter_by(id=booking_id, operator_id=OPERATOR_ID).first()
+        if not booking:
+            raise HTTPException(status_code=404, detail="Booking not found")
+        if req.notes.strip():
+            booking.notes = req.notes.strip()
+        if req.estimated_value is not None:
+            booking.estimated_value = req.estimated_value
+            # Also store on the OutreachLog as converted_job_value for pipeline tracking
+            outreach_log = (
+                db.query(OutreachLog)
+                .filter(
+                    OutreachLog.customer_id == booking.customer_id,
+                    OutreachLog.operator_id == OPERATOR_ID,
+                    OutreachLog.response_classification == "booking_confirmed",
+                    OutreachLog.direction == "outbound",
+                )
+                .order_by(OutreachLog.created_at.desc())
+                .first()
+            )
+            if outreach_log:
+                outreach_log.converted_job_value = req.estimated_value
+                outreach_log.converted_to_job = True
+                outreach_log.converted_at = datetime.utcnow()
+    return {"status": "saved"}
+
+
 @app.post("/api/outreach/{log_id}/confirm-booking")
 def confirm_booking(log_id: int, req: ConfirmBookingRequest):
     """

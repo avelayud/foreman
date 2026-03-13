@@ -226,6 +226,7 @@ class Booking(Base):
 
     service_type = Column(String)
     notes = Column(Text)
+    estimated_value = Column(Float, nullable=True)  # Operator's estimate of job value ($)
     google_cal_event_id = Column(String)  # Populated if synced to Google Cal
     created_at = Column(DateTime, default=datetime.utcnow)
 

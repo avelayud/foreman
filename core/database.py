@@ -54,6 +54,9 @@ SCHEMA_PATCHES = {
         "service_interval_days": "INTEGER",
         "predicted_next_service": "TIMESTAMP",
     },
+    "bookings": {
+        "estimated_value": "FLOAT",
+    },
     "outreach_logs": {
         "gmail_thread_id": "VARCHAR",
         "approval_status": "VARCHAR",
