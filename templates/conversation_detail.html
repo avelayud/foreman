@@ -40,6 +40,9 @@
   /* Classification badge */
   .cls-badge{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:10px;font-size:9.5px;font-weight:700;font-family:'IBM Plex Mono',monospace;letter-spacing:0.3px;margin-top:4px}
   .cls-booking{background:#d1fae5;color:#065f46;border:1px solid #6ee7b7}
+  .cls-booking-confirmed{background:#d1fae5;color:#065f46;border:1px solid #6ee7b7}
+  .cls-inquiry{background:#fef3c7;color:#92400e;border:1px solid #fcd34d}
+  .cls-calendar{background:#d1fae5;color:#065f46;border:1px solid #6ee7b7}
   .cls-price{background:#fef3c7;color:#92400e;border:1px solid #fcd34d}
   .cls-callback{background:var(--blue-pale);color:var(--blue);border:1px solid #93c5fd}
   .cls-unclear{background:#f1f5f9;color:var(--text-3);border:1px solid var(--border)}
@@ -48,6 +51,7 @@
   /* Recommended action banner */
   .action-banner{border-radius:8px;padding:12px 14px;margin-bottom:10px;display:flex;align-items:flex-start;gap:12px}
   .action-banner.ab-booking{background:#d1fae5;border:1px solid #6ee7b7}
+  .action-banner.ab-confirmed{background:#d1fae5;border:1px solid #6ee7b7}
   .action-banner.ab-price{background:#fef3c7;border:1px solid #fcd34d}
   .action-banner.ab-callback{background:var(--blue-pale);border:1px solid #93c5fd}
   .action-banner.ab-unclear{background:#f8fafc;border:1px solid var(--border)}
@@ -96,14 +100,14 @@
   .recap-summary{font-size:13px;color:var(--text-2);line-height:1.65;border:1px solid var(--border);background:var(--bg);border-radius:7px;padding:10px 11px;margin-bottom:8px}
   .talking-item{font-size:12.5px;color:var(--text);line-height:1.5;border:1px solid var(--border);background:var(--bg);border-radius:7px;padding:8px 10px;margin-bottom:6px}
 
-  /* Booking panel */
-  .booking-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px}
+  /* Booking panel fields */
+  .booking-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px}
   @media(max-width:600px){.booking-grid{grid-template-columns:1fr}}
-  .booking-field label{display:block;font-size:10px;font-family:'IBM Plex Mono',monospace;letter-spacing:1px;text-transform:uppercase;color:var(--text-3);margin-bottom:5px}
-  .booking-field input,.booking-field textarea,.booking-field select{width:100%;border:1px solid var(--border);border-radius:7px;padding:8px 10px;font-size:13px;font-family:'IBM Plex Sans',sans-serif;color:var(--text);background:var(--bg);outline:none;box-sizing:border-box;transition:border-color 0.15s}
-  .booking-field input:focus,.booking-field textarea:focus,.booking-field select:focus{border-color:var(--navy);background:var(--surface)}
-  .booking-field textarea{min-height:100px;resize:vertical;line-height:1.6}
-  .book-send-btn{background:var(--green);color:#fff;border:none;border-radius:8px;padding:10px 22px;font-size:13px;font-weight:600;cursor:pointer;transition:opacity 0.15s}
+  .booking-field label{display:block;font-size:10px;font-family:'IBM Plex Mono',monospace;letter-spacing:1px;text-transform:uppercase;color:var(--text-3);margin-bottom:4px}
+  .booking-field input,.booking-field textarea{width:100%;border:1px solid var(--border);border-radius:7px;padding:8px 10px;font-size:13px;font-family:'IBM Plex Sans',sans-serif;color:var(--text);background:var(--bg);outline:none;box-sizing:border-box;transition:border-color 0.15s}
+  .booking-field input:focus,.booking-field textarea:focus{border-color:var(--navy);background:var(--surface)}
+  .booking-field textarea{min-height:90px;resize:vertical;line-height:1.6}
+  .book-send-btn{background:var(--green);color:#fff;border:none;border-radius:8px;padding:9px 20px;font-size:13px;font-weight:600;cursor:pointer;transition:opacity 0.15s}
   .book-send-btn:hover{opacity:0.88}
   .book-send-btn:disabled{opacity:0.5;cursor:default}
 
@@ -125,7 +129,6 @@
     <span class="stage-chip stage-{{ health.chip_cls }}">{{ health.label }}</span>
     <a href="/customer/{{ customer.id }}" class="btn-ghost" style="text-decoration:none;font-size:12px;margin-left:4px">Customer Page</a>
     <a href="/conversations" class="btn-ghost" style="text-decoration:none;font-size:12px">All Conversations</a>
-    <button onclick="document.getElementById('booking-section').classList.add('open');document.getElementById('booking-section').scrollIntoView({behavior:'smooth',block:'start'})" class="btn-primary" style="font-size:12px;padding:6px 14px;background:var(--green)">📅 Schedule Appointment</button>
   </div>
 </div>
 
@@ -152,21 +155,36 @@
             </div>
             <div class="vtl-summary">{{ event.summary }}</div>
             <div class="vtl-date">{{ event.at | est }}{% if event.type == 'queued' %} · <a href="/{{ event.queued_to }}" style="color:var(--blue)">View in Queue →</a>{% endif %}</div>
-            {% if event.type == 'inbound' and event.response_classification %}
+
+            {# ── Timeline classification badges ── #}
+            {% if event.response_classification %}
             <div>
-              {% if event.response_classification == 'booking_intent' %}
-                <span class="cls-badge cls-booking">📅 Booking Intent</span>
-              {% elif event.response_classification == 'price_inquiry' %}
-                <span class="cls-badge cls-price">💰 Price Inquiry</span>
-              {% elif event.response_classification == 'callback_request' %}
-                <span class="cls-badge cls-callback">📞 Callback</span>
-              {% elif event.response_classification == 'not_interested' %}
-                <span class="cls-badge cls-declined">✗ Declined</span>
-              {% elif event.response_classification == 'unclear' %}
-                <span class="cls-badge cls-unclear">? Unclear</span>
+              {% if event.type == 'inbound' %}
+                {# Customer reply tags #}
+                {% if event.response_classification == 'booking_confirmed' %}
+                  <span class="cls-badge cls-booking-confirmed">✓ Booking Confirmed</span>
+                {% elif event.response_classification == 'booking_intent' %}
+                  <span class="cls-badge cls-booking">📅 Booking Intent</span>
+                {% elif event.response_classification == 'price_inquiry' %}
+                  <span class="cls-badge cls-price">💰 Price Inquiry</span>
+                {% elif event.response_classification == 'callback_request' %}
+                  <span class="cls-badge cls-callback">📞 Callback</span>
+                {% elif event.response_classification == 'not_interested' %}
+                  <span class="cls-badge cls-declined">✗ Declined</span>
+                {% elif event.response_classification == 'unclear' %}
+                  <span class="cls-badge cls-unclear">? Unclear</span>
+                {% endif %}
+              {% elif event.type == 'outbound' %}
+                {# Our outbound email tags #}
+                {% if event.response_classification == 'booking_confirmed' %}
+                  <span class="cls-badge cls-calendar">📅 Calendar Invite</span>
+                {% elif event.response_classification == 'booking_intent' %}
+                  <span class="cls-badge cls-inquiry">📋 Booking Inquiry</span>
+                {% endif %}
               {% endif %}
             </div>
             {% endif %}
+
           </div>
         </div>
         {% endfor %}
@@ -177,20 +195,35 @@
     </div>
   </div>
 
-  {# ═══ RIGHT: Draft + Expanded message ═══ #}
+  {# ═══ RIGHT: Message viewer → Action banner → Draft → Schedule ═══ #}
   <div class="right-col">
+
+    {# ── Expanded message — appears at top when a timeline item is clicked ── #}
+    <div class="panel" id="msg-panel" style="display:none">
+      <div class="panel-head">
+        <div style="min-width:0;flex:1">
+          <div style="font-size:9px;font-family:'IBM Plex Mono',monospace;font-weight:700;letter-spacing:0.6px;text-transform:uppercase;margin-bottom:3px" id="msg-dir-label"></div>
+          <div style="font-size:12px;color:var(--text-3);font-family:'IBM Plex Mono',monospace" id="msg-meta"></div>
+        </div>
+        <button onclick="closeMessage()" style="all:unset;cursor:pointer;font-size:20px;color:var(--text-3);padding:2px 6px;line-height:1" title="Close">×</button>
+      </div>
+      <div class="panel-body">
+        <div class="msg-box" id="msg-content"></div>
+      </div>
+    </div>
 
     {# ── Recommended Action Banner ── #}
     {% if latest_classification and latest_classification != 'none' %}
     {% set ab_map = {
-      'booking_intent': ('ab-booking', '📅', 'Booking Intent Detected', 'This customer wants to schedule. A slot proposal draft has been queued — review and send it from the Outreach Queue.'),
+      'booking_confirmed': ('ab-confirmed', '✓', 'Customer Confirmed a Time', 'Use the Schedule Appointment panel below to send the calendar invite and confirmation email.'),
+      'booking_intent': ('ab-booking', '📅', 'Booking Intent Detected', 'This customer wants to schedule. A slot proposal draft has been queued — review and send it from the Meetings Queue.'),
       'price_inquiry':  ('ab-price',   '💰', 'Price Inquiry', 'Customer is asking about cost. A pricing response draft has been queued in the Outreach Queue.'),
       'callback_request': ('ab-callback', '📞', 'Callback Requested', 'Customer prefers to talk. A response draft has been queued — or call them directly.'),
       'unclear':        ('ab-unclear',  '❓', 'Intent Unclear', 'Reply is ambiguous. A clarifying draft has been queued for your review.'),
     } %}
     {% set ab = ab_map.get(latest_classification, None) %}
     {% if ab %}
-    <div class="action-banner {{ ab[0] }}" style="margin-bottom:14px">
+    <div class="action-banner {{ ab[0] }}">
       <span class="ab-icon">{{ ab[1] }}</span>
       <div>
         <div class="ab-title">{{ ab[2] }}</div>
@@ -200,7 +233,7 @@
     {% endif %}
     {% endif %}
 
-    {# Draft / Reply panel #}
+    {# ── Draft / Reply panel ── #}
     <div class="panel" id="draft-panel">
       <div class="panel-head">
         <div style="display:flex;align-items:baseline;gap:8px;flex-wrap:wrap">
@@ -212,7 +245,7 @@
       </div>
       <div class="panel-body">
 
-        {# ── State A: draft already in queue ── #}
+        {# State A: draft already in queue #}
         {% if has_pending_draft %}
         <div id="pending-notice" style="border:1px solid var(--blue);background:var(--blue-pale);border-radius:8px;padding:12px 14px;margin-bottom:10px">
           <div style="font-size:12px;font-weight:700;color:var(--blue);margin-bottom:4px">Draft already in queue</div>
@@ -224,7 +257,7 @@
         </div>
         {% endif %}
 
-        {# ── State B: no draft — show generate button ── #}
+        {# State B: no draft — show generate button #}
         <div id="generate-prompt" {% if has_pending_draft %}style="display:none"{% endif %}>
           <div style="font-size:13px;color:var(--text-3);margin-bottom:12px">
             {% if health.needs_response %}Customer replied — generate a response draft to review before queuing.
@@ -234,7 +267,7 @@
           <button class="btn-primary" onclick="showGeneratePanel()" style="font-size:13px;padding:8px 20px">Generate Draft</button>
         </div>
 
-        {# ── State C: draft loading / form ── #}
+        {# State C: loading / form #}
         <div id="draft-loading" class="draft-spinner" style="display:none">
           <div class="spinner"></div>
           <span>Agent is drafting…</span>
@@ -253,24 +286,64 @@
       </div>
     </div>
 
-    {# Expanded message — hidden until timeline item clicked #}
-    <div class="panel" id="msg-panel" style="display:none">
+    {# ── Schedule Appointment panel ── #}
+    <div class="panel" id="schedule-panel">
       <div class="panel-head">
-        <div style="min-width:0;flex:1">
-          <div style="font-size:9px;font-family:'IBM Plex Mono',monospace;font-weight:700;letter-spacing:0.6px;text-transform:uppercase;margin-bottom:3px" id="msg-dir-label"></div>
-          <div style="font-size:12px;color:var(--text-3);font-family:'IBM Plex Mono',monospace" id="msg-meta"></div>
-        </div>
-        <button onclick="closeMessage()" style="all:unset;cursor:pointer;font-size:20px;color:var(--text-3);padding:2px 6px;line-height:1" title="Close">×</button>
+        <span class="panel-title" style="display:flex;align-items:center;gap:6px"><span style="color:var(--green)">📅</span> Schedule Appointment</span>
+        <button class="btn-ghost" onclick="resetSchedulePanel()" id="schedule-reset-btn" style="font-size:11px;padding:5px 11px;display:none">↺ Reset</button>
       </div>
       <div class="panel-body">
-        <div class="msg-box" id="msg-content"></div>
+
+        {# Idle state #}
+        <div id="schedule-prompt">
+          <div style="font-size:13px;color:var(--text-3);margin-bottom:12px">Book a time, create a Google Calendar event, and send a confirmation email — all in one click.</div>
+          <button class="btn-primary" onclick="showScheduleForm()" style="font-size:13px;padding:8px 20px;background:var(--green)">Set Up Appointment</button>
+        </div>
+
+        {# Form state #}
+        <div id="schedule-form" style="display:none">
+          <div class="booking-grid">
+            <div class="booking-field">
+              <label>Start time</label>
+              <input type="datetime-local" id="book-slot-start">
+            </div>
+            <div class="booking-field">
+              <label>End time</label>
+              <input type="datetime-local" id="book-slot-end">
+            </div>
+            <div class="booking-field">
+              <label>Service type</label>
+              <input type="text" id="book-service-type" value="{{ customer.last_service_type or 'Service' }}">
+            </div>
+            <div class="booking-field">
+              <label>Internal notes (optional)</label>
+              <input type="text" id="book-notes" placeholder="e.g. bring extra filters">
+            </div>
+          </div>
+          <div class="booking-field" style="margin-bottom:10px">
+            <label>Email subject</label>
+            <input type="text" id="book-subject" placeholder="Your appointment is confirmed">
+          </div>
+          <div class="booking-field" style="margin-bottom:14px">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+              <label style="margin-bottom:0">Confirmation email body</label>
+              <button onclick="generateBookingEmail()" id="gen-email-btn" style="all:unset;cursor:pointer;font-size:11px;color:var(--blue);font-family:'IBM Plex Mono',monospace;letter-spacing:0.3px">↺ Generate</button>
+            </div>
+            <textarea id="book-body" placeholder="Confirmation message…"></textarea>
+          </div>
+          <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+            <button class="book-send-btn" id="book-send-btn" onclick="sendBookingInvite()">Send Invite + Confirmation Email</button>
+            <span id="book-status" style="font-size:12.5px"></span>
+          </div>
+        </div>
+
       </div>
     </div>
 
   </div>{# end right column #}
 </div>{# end conv-grid #}
 
-{# ── OPPORTUNITY SNAPSHOT — full-width, horizontal, collapsed ── #}
+{# ── OPPORTUNITY SNAPSHOT — full-width, collapsed ── #}
 <div class="collapsible" id="opp-section">
   <div class="collapsible-head" onclick="toggleSection('opp-section')">
     <div class="panel-title">Opportunity Snapshot</div>
@@ -320,7 +393,7 @@
   </div>
 </div>
 
-{# ── CONVERSATION RECAP — full-width, horizontal, collapsed ── #}
+{# ── CONVERSATION RECAP — full-width, collapsed ── #}
 <div class="collapsible" id="recap-section">
   <div class="collapsible-head" onclick="toggleSection('recap-section')">
     <div class="panel-title">Conversation Recap &amp; Talking Points</div>
@@ -348,60 +421,6 @@
   </div>
 </div>
 
-{# ── SCHEDULE APPOINTMENT — full-width, collapsible ── #}
-<div class="collapsible" id="booking-section">
-  <div class="collapsible-head" onclick="toggleSection('booking-section')">
-    <div class="panel-title" style="display:flex;align-items:center;gap:8px">
-      <span style="color:var(--green)">📅</span> Schedule Appointment
-    </div>
-    <span class="collapsible-chevron">▾</span>
-  </div>
-  <div class="collapsible-body">
-    <div style="font-size:12.5px;color:var(--text-3);margin-bottom:16px;line-height:1.5">
-      Use this to book a time, create a Google Calendar event, and send a confirmation email — all in one click. The customer receives a calendar invite automatically via GCal.
-    </div>
-
-    <div class="booking-grid">
-      <div class="booking-field">
-        <label>Start time</label>
-        <input type="datetime-local" id="book-slot-start">
-      </div>
-      <div class="booking-field">
-        <label>End time</label>
-        <input type="datetime-local" id="book-slot-end">
-      </div>
-      <div class="booking-field">
-        <label>Service type</label>
-        <input type="text" id="book-service-type" value="{{ customer.last_service_type or 'Service' }}">
-      </div>
-      <div class="booking-field">
-        <label>Internal notes (optional)</label>
-        <input type="text" id="book-notes" placeholder="e.g. bring extra filters">
-      </div>
-    </div>
-
-    <div class="booking-field" style="margin-bottom:10px">
-      <label>Email subject</label>
-      <input type="text" id="book-subject" placeholder="Your appointment is confirmed">
-    </div>
-
-    <div class="booking-field" style="margin-bottom:16px">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:5px">
-        <label style="margin-bottom:0">Confirmation email body</label>
-        <button onclick="generateBookingEmail()" id="gen-email-btn" style="all:unset;cursor:pointer;font-size:11px;color:var(--blue);font-family:'IBM Plex Mono',monospace;letter-spacing:0.3px">↺ Generate</button>
-      </div>
-      <textarea id="book-body" placeholder="Confirmation message…"></textarea>
-    </div>
-
-    <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">
-      <button class="book-send-btn" id="book-send-btn" onclick="sendBookingInvite()">
-        Send Invite + Confirmation Email
-      </button>
-      <span id="book-status" style="font-size:12.5px"></span>
-    </div>
-  </div>
-</div>
-
 {% endblock %}
 
 {% block scripts %}
@@ -417,15 +436,14 @@
       if (!res.ok) return;
       const data = await res.json();
       const summaries = data.summaries || {};
-      // Update timeline event data and visible text
-      TIMELINE_EVENTS.forEach(ev => {
+      TIMELINE_EVENTS.forEach((ev, i) => {
         if (summaries[ev.id]) {
           ev.summary = summaries[ev.id];
-          const card = document.querySelector(`.vtl-event[data-index="${TIMELINE_EVENTS.indexOf(ev)}"] .vtl-summary`);
-          if (card) card.textContent = ev.summary;
+          const el = document.querySelector(`.vtl-event[data-index="${i}"] .vtl-summary`);
+          if (el) el.textContent = ev.summary;
         }
       });
-    } catch (e) { /* silent — summaries are purely cosmetic */ }
+    } catch (e) { /* silent */ }
   })();
 
   function toggleSection(id) {
@@ -454,10 +472,8 @@
     metaEl.textContent = `${event.subject} · ${dateText}`;
     contentEl.textContent = event.content || 'No message content.';
     panel.style.display = 'block';
-
-    if (window.innerWidth < 860) {
-      panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }
+    // Always scroll the message panel into view at the top of the right column
+    panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   }
 
   function closeMessage() {
@@ -465,6 +481,8 @@
     document.querySelectorAll('.vtl-event').forEach(el => el.classList.remove('active'));
     document.getElementById('msg-panel').style.display = 'none';
   }
+
+  // ── Draft panel ────────────────────────────────────────────────────────────
 
   function showGeneratePanel() {
     const pending = document.getElementById('pending-notice');
@@ -541,7 +559,22 @@
     }
   }
 
-  // ── Booking panel ──────────────────────────────────────────────────────────
+  // ── Schedule Appointment panel ─────────────────────────────────────────────
+
+  function showScheduleForm() {
+    document.getElementById('schedule-prompt').style.display = 'none';
+    document.getElementById('schedule-form').style.display = 'block';
+    document.getElementById('schedule-reset-btn').style.display = 'inline-flex';
+  }
+
+  function resetSchedulePanel() {
+    document.getElementById('schedule-form').style.display = 'none';
+    document.getElementById('schedule-prompt').style.display = 'block';
+    document.getElementById('schedule-reset-btn').style.display = 'none';
+    document.getElementById('book-status').textContent = '';
+    document.getElementById('book-send-btn').disabled = false;
+    document.getElementById('book-send-btn').textContent = 'Send Invite + Confirmation Email';
+  }
 
   async function generateBookingEmail() {
     const btn = document.getElementById('gen-email-btn');
