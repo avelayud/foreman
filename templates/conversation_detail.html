@@ -289,13 +289,16 @@
     {# ── Schedule Appointment panel ── #}
     <div class="panel" id="schedule-panel">
       <div class="panel-head">
-        <span class="panel-title" style="display:flex;align-items:center;gap:6px"><span style="color:var(--green)">📅</span> Schedule Appointment</span>
-        <button class="btn-ghost" onclick="resetSchedulePanel()" id="schedule-reset-btn" style="font-size:11px;padding:5px 11px;display:none">↺ Reset</button>
+        <span class="panel-title" style="display:flex;align-items:center;gap:6px">
+          <span style="color:var(--green)">📅</span>
+          {% if active_booking %}Appointment Booked{% else %}Schedule Appointment{% endif %}
+        </span>
+        <button class="btn-ghost" onclick="resetSchedulePanel()" id="schedule-reset-btn" style="font-size:11px;padding:5px 11px;{% if active_booking %}display:none{% else %}display:none{% endif %}">↺ New Booking</button>
       </div>
       <div class="panel-body">
 
-        {# Idle state #}
-        <div id="schedule-prompt">
+        {# Idle state — only shown when no booking exists yet #}
+        <div id="schedule-prompt" {% if active_booking %}style="display:none"{% endif %}>
           <div style="font-size:13px;color:var(--text-3);margin-bottom:12px">Book a time, create a Google Calendar event, and send a confirmation email — all in one click.</div>
           <button class="btn-primary" onclick="showScheduleForm()" style="font-size:13px;padding:8px 20px;background:var(--green)">Set Up Appointment</button>
         </div>
@@ -337,26 +340,54 @@
           </div>
         </div>
 
-        {# Post-booking notes state — shown after invite is sent #}
-        <div id="schedule-notes" style="display:none">
-          <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px;padding:10px 12px;background:var(--green-pale);border:1px solid #a7f3d0;border-radius:8px">
+        {# Booked state — shown on page load if booking exists, or after sending invite #}
+        <div id="schedule-notes" {% if not active_booking %}style="display:none"{% endif %}>
+
+          {% if active_booking %}
+          {# Pre-existing booking header #}
+          <div style="display:flex;align-items:flex-start;gap:10px;margin-bottom:14px;padding:11px 13px;background:var(--green-pale);border:1px solid #a7f3d0;border-radius:8px">
+            <span style="font-size:16px;line-height:1.2;flex-shrink:0">📅</span>
+            <div>
+              <div style="font-size:12.5px;font-weight:700;color:var(--green);margin-bottom:2px">
+                {{ active_booking.slot_start.strftime('%a %b %-d, %Y · %-I:%M %p') if active_booking.slot_start else 'Time TBD' }}
+                {% if active_booking.slot_end %} – {{ active_booking.slot_end.strftime('%-I:%M %p') }}{% endif %}
+              </div>
+              <div style="font-size:11.5px;color:var(--text-2)">
+                {{ active_booking.service_type or 'Service' }} ·
+                <span style="text-transform:capitalize">{{ active_booking.status }}</span>
+                {% if active_booking.estimated_value %} · <strong style="color:var(--green)">${{ "{:,.0f}".format(active_booking.estimated_value) }}</strong>{% endif %}
+              </div>
+            </div>
+          </div>
+          {% else %}
+          {# Post-send confirmation (JS sets this) #}
+          <div id="booking-confirm-banner" style="display:flex;align-items:center;gap:8px;margin-bottom:14px;padding:10px 12px;background:var(--green-pale);border:1px solid #a7f3d0;border-radius:8px">
             <span style="font-size:15px">✓</span>
             <span id="booking-confirm-msg" style="font-size:12.5px;font-weight:600;color:var(--green)"></span>
           </div>
-          <div style="font-size:12.5px;color:var(--text-2);margin-bottom:14px;line-height:1.5">Tie this booking to real value — add scope notes and an estimated job value before you go.</div>
+          {% endif %}
+
+          <div style="font-size:12.5px;color:var(--text-2);margin-bottom:14px;line-height:1.5">Capture the opportunity value and any scope notes to track revenue from this outreach.</div>
           <div class="booking-field" style="margin-bottom:12px">
             <label>Job notes</label>
-            <textarea id="post-notes" placeholder="Scope of work, what was discussed, access info…" style="min-height:80px"></textarea>
+            <textarea id="post-notes" placeholder="Scope of work, what was discussed, access info…" style="min-height:80px">{{ active_booking.notes if active_booking else '' }}</textarea>
           </div>
           <div class="booking-field" style="margin-bottom:16px">
-            <label>Estimated job value ($)</label>
-            <input type="number" id="post-value" placeholder="e.g. 850" min="0" step="50" style="max-width:180px">
+            <label>Opportunity value ($)</label>
+            <input type="number" id="post-value" placeholder="e.g. 850" min="0" step="50" style="max-width:180px" value="{{ active_booking.estimated_value if active_booking and active_booking.estimated_value else '' }}">
           </div>
           <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
-            <button class="book-send-btn" id="save-notes-btn" onclick="saveBookingNotes()">Save Notes</button>
+            <button class="book-send-btn" id="save-notes-btn" onclick="saveBookingNotes()">{% if active_booking %}Update Value{% else %}Save Notes{% endif %}</button>
+            {% if not active_booking %}
             <button onclick="window.location.reload()" style="all:unset;cursor:pointer;font-size:12px;color:var(--text-3);font-family:'IBM Plex Mono',monospace">skip →</button>
+            {% endif %}
             <span id="notes-status" style="font-size:12px"></span>
           </div>
+          {% if not active_booking %}
+          <div style="margin-top:10px">
+            <button onclick="showNewBookingForm()" style="all:unset;cursor:pointer;font-size:11.5px;color:var(--text-3);font-family:'IBM Plex Mono',monospace;text-decoration:underline">Book a different time →</button>
+          </div>
+          {% endif %}
         </div>
 
       </div>
@@ -583,22 +614,30 @@
 
   // ── Schedule Appointment panel ─────────────────────────────────────────────
 
+  // Pre-seed booking id if one already exists on page load
+  let _bookingId = {{ active_booking.id if active_booking else 'null' }};
+
   function showScheduleForm() {
     document.getElementById('schedule-prompt').style.display = 'none';
     document.getElementById('schedule-form').style.display = 'block';
     document.getElementById('schedule-reset-btn').style.display = 'inline-flex';
   }
 
-  let _bookingId = null;
+  function showNewBookingForm() {
+    document.getElementById('schedule-notes').style.display = 'none';
+    document.getElementById('schedule-form').style.display = 'block';
+    document.getElementById('schedule-reset-btn').style.display = 'inline-flex';
+  }
 
   function resetSchedulePanel() {
     document.getElementById('schedule-form').style.display = 'none';
     document.getElementById('schedule-notes').style.display = 'none';
     document.getElementById('schedule-prompt').style.display = 'block';
     document.getElementById('schedule-reset-btn').style.display = 'none';
-    document.getElementById('book-status').textContent = '';
-    document.getElementById('book-send-btn').disabled = false;
-    document.getElementById('book-send-btn').textContent = 'Send Invite + Confirmation Email';
+    const statusEl = document.getElementById('book-status');
+    if (statusEl) statusEl.textContent = '';
+    const sendBtn = document.getElementById('book-send-btn');
+    if (sendBtn) { sendBtn.disabled = false; sendBtn.textContent = 'Send Invite + Confirmation Email'; }
     _bookingId = null;
   }
 
@@ -671,7 +710,12 @@
       // Transition to notes capture state
       _bookingId = data.booking_id;
       document.getElementById('schedule-form').style.display = 'none';
-      document.getElementById('booking-confirm-msg').textContent = msg;
+      const confirmBanner = document.getElementById('booking-confirm-banner');
+      const confirmMsg = document.getElementById('booking-confirm-msg');
+      if (confirmBanner) confirmBanner.style.display = 'flex';
+      if (confirmMsg) confirmMsg.textContent = msg;
+      const saveBtn = document.getElementById('save-notes-btn');
+      if (saveBtn) saveBtn.textContent = 'Save Notes';
       document.getElementById('schedule-notes').style.display = 'block';
       document.getElementById('schedule-panel').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     } catch (e) {

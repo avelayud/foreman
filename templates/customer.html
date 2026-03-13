@@ -268,6 +268,44 @@
   </div>
 </div>
 
+{# ── UPCOMING APPOINTMENT CARD ── #}
+{% if customer_booking %}
+<div style="background:var(--green-pale);border:1.5px solid #6ee7b7;border-radius:var(--radius);padding:16px 20px;margin-bottom:20px;display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap">
+  <div style="display:flex;align-items:flex-start;gap:14px">
+    <span style="font-size:22px;line-height:1.1;flex-shrink:0">📅</span>
+    <div>
+      <div style="font-size:11px;font-family:'IBM Plex Mono',monospace;letter-spacing:1.2px;text-transform:uppercase;color:var(--green);margin-bottom:4px">Upcoming Appointment</div>
+      <div style="font-size:15px;font-weight:700;color:var(--navy);margin-bottom:3px">
+        {% if customer_booking.slot_start %}
+          {{ customer_booking.slot_start.strftime('%A, %B %-d, %Y · %-I:%M %p') }}
+          {% if customer_booking.slot_end %} – {{ customer_booking.slot_end.strftime('%-I:%M %p') }}{% endif %}
+        {% else %}
+          Time TBD
+        {% endif %}
+      </div>
+      <div style="font-size:12.5px;color:var(--text-2);display:flex;flex-wrap:wrap;gap:10px;align-items:center">
+        <span>{{ customer_booking.service_type or 'Service' }}</span>
+        <span style="color:var(--text-4)">·</span>
+        <span style="text-transform:capitalize">{{ customer_booking.status }}</span>
+        {% if customer_booking.estimated_value %}
+        <span style="color:var(--text-4)">·</span>
+        <span style="font-weight:700;color:var(--green)">${{ "{:,.0f}".format(customer_booking.estimated_value) }} est. value</span>
+        {% else %}
+        <span style="color:var(--text-4)">·</span>
+        <span style="color:var(--text-3);font-style:italic">No value entered yet</span>
+        {% endif %}
+      </div>
+      {% if customer_booking.notes %}
+      <div style="font-size:12px;color:var(--text-3);margin-top:5px;font-style:italic">{{ customer_booking.notes }}</div>
+      {% endif %}
+    </div>
+  </div>
+  <a href="/conversations/{{ customer.id }}" class="btn-primary" style="text-decoration:none;font-size:12px;padding:7px 16px;white-space:nowrap;background:var(--green)">
+    {% if not customer_booking.estimated_value %}Enter Value →{% else %}Edit in Workspace →{% endif %}
+  </a>
+</div>
+{% endif %}
+
 {# ── ACTIVE CONVERSATION BANNER ── #}
 {% if has_active_conversation %}
 <div style="background:var(--blue-pale);border:1px solid #bfdbfe;border-radius:var(--radius);padding:14px 18px;margin-bottom:20px;display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap">

@@ -1621,6 +1621,33 @@ def customer_detail(request: Request, customer_id: int):
                 "at": event_at,
             })
 
+        # Most recent non-cancelled booking (serialized inside with block)
+        cust_booking_raw = (
+            db.query(Booking)
+            .filter(
+                Booking.customer_id == customer_id,
+                Booking.operator_id == OPERATOR_ID,
+                Booking.status.in_(["tentative", "confirmed", "complete"]),
+            )
+            .order_by(Booking.created_at.desc())
+            .first()
+        )
+        customer_booking = (
+            {
+                "id": cust_booking_raw.id,
+                "slot_start": cust_booking_raw.slot_start,
+                "slot_end": cust_booking_raw.slot_end,
+                "status": cust_booking_raw.status,
+                "service_type": cust_booking_raw.service_type or "",
+                "notes": cust_booking_raw.notes or "",
+                "estimated_value": cust_booking_raw.estimated_value,
+                "source": cust_booking_raw.source or "manual",
+                "created_at": cust_booking_raw.created_at,
+            }
+            if cust_booking_raw
+            else None
+        )
+
     account_events.sort(key=lambda item: item["at"] or datetime.min, reverse=True)
 
     return templates.TemplateResponse("customer.html", {
@@ -1638,6 +1665,7 @@ def customer_detail(request: Request, customer_id: int):
         "active_conv_last_direction": active_conv_last_direction,
         "active_conv_reply_count": active_conv_reply_count,
         "unique_threads": unique_threads,
+        "customer_booking": customer_booking,
     })
 
 
@@ -1942,6 +1970,33 @@ def conversation_detail(request: Request, customer_id: int):
         customer_data["customer_profile"] = _normalize_customer_profile(customer.customer_profile)
         log_page_view(db, request, f"conversations/{customer_id}", operator_id=OPERATOR_ID, properties={"customer_id": customer_id})
 
+        # Most recent non-cancelled booking for this customer (serialized inside with block)
+        active_booking_raw = (
+            db.query(Booking)
+            .filter(
+                Booking.customer_id == customer_id,
+                Booking.operator_id == OPERATOR_ID,
+                Booking.status.in_(["tentative", "confirmed", "complete"]),
+            )
+            .order_by(Booking.created_at.desc())
+            .first()
+        )
+        active_booking = (
+            {
+                "id": active_booking_raw.id,
+                "slot_start": active_booking_raw.slot_start,
+                "slot_end": active_booking_raw.slot_end,
+                "status": active_booking_raw.status,
+                "service_type": active_booking_raw.service_type or "",
+                "notes": active_booking_raw.notes or "",
+                "estimated_value": active_booking_raw.estimated_value,
+                "source": active_booking_raw.source or "manual",
+                "created_at": active_booking_raw.created_at,
+            }
+            if active_booking_raw
+            else None
+        )
+
         log_entries = []
         for log in logs:
             logged_at = _log_timestamp(log)
@@ -2075,6 +2130,7 @@ def conversation_detail(request: Request, customer_id: int):
         "pending_draft_queue": pending_draft_queue,
         "pending_draft_summary": pending_draft_summary,
         "pending_draft_created_at": pending_draft_created_at,
+        "active_booking": active_booking,
     })
 
 
