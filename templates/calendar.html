@@ -1,147 +1,124 @@
 {% extends "base.html" %}
-{% block page_title %}Calendar{% endblock %}
+{% block page_title %}Calendar · {{ month_label }}{% endblock %}
 
 {% block extra_styles %}
 <style>
-  .cal-month-header{font-family:'Playfair Display',serif;font-size:18px;font-weight:700;color:var(--navy);margin-bottom:10px;padding-bottom:8px;border-bottom:1px solid var(--border)}
-  .cal-month-section{margin-bottom:32px}
+  /* Month nav */
+  .month-nav { display:flex; align-items:center; justify-content:space-between; margin-bottom:20px; }
+  .month-nav-btn { display:inline-flex; align-items:center; gap:6px; padding:7px 14px; border:1px solid var(--border); border-radius:8px; font-size:12.5px; font-family:'IBM Plex Mono',monospace; color:var(--text-2); background:var(--surface); text-decoration:none; transition:all 0.15s; }
+  .month-nav-btn:hover { border-color:var(--navy); color:var(--navy); }
+  .month-nav-title { font-family:'Playfair Display',serif; font-size:22px; font-weight:700; color:var(--navy); }
 
-  .booking-row{background:var(--surface);border:1px solid var(--border);border-left-width:4px;border-radius:var(--radius);padding:14px 18px;margin-bottom:8px;display:flex;align-items:flex-start;gap:16px;box-shadow:var(--shadow-sm);transition:box-shadow 0.15s}
-  .booking-row:hover{box-shadow:var(--shadow-md)}
+  /* Calendar grid */
+  .cal-grid-wrap { border:1px solid var(--border); border-radius:var(--radius); overflow:hidden; box-shadow:var(--shadow-sm); }
+  .cal-grid { display:grid; grid-template-columns:repeat(7,1fr); }
+  .cal-doh { /* day-of-week header */ background:var(--bg); padding:8px 10px; text-align:center; font-size:9.5px; font-family:'IBM Plex Mono',monospace; letter-spacing:1.2px; text-transform:uppercase; color:var(--text-3); border-bottom:1px solid var(--border); }
+  .cal-doh:not(:last-child) { border-right:1px solid var(--border); }
 
-  .booking-row.svc-maintenance{border-left-color:var(--blue)}
-  .booking-row.svc-install{border-left-color:var(--green)}
-  .booking-row.svc-repair{border-left-color:var(--amber)}
-  .booking-row.svc-other{border-left-color:var(--border-2)}
+  .cal-cell { min-height:92px; padding:6px 7px; background:var(--surface); border-bottom:1px solid var(--border); border-right:1px solid var(--border); vertical-align:top; position:relative; }
+  .cal-cell:nth-child(7n) { border-right:none; }
+  /* Last row — remove bottom border */
+  .cal-grid .cal-cell:nth-last-child(-n+7) { border-bottom:none; }
+  .cal-cell.empty { background:var(--bg); }
+  .cal-cell.today { background:var(--navy-soft); }
 
-  .booking-date-block{min-width:52px;text-align:center;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 6px;flex-shrink:0}
-  .booking-date-month{font-size:9px;font-family:'IBM Plex Mono',monospace;letter-spacing:1.5px;text-transform:uppercase;color:var(--text-3)}
-  .booking-date-day{font-size:22px;font-weight:700;color:var(--navy);line-height:1.1;font-family:'Playfair Display',serif}
-  .booking-date-year{font-size:9px;font-family:'IBM Plex Mono',monospace;color:var(--text-4)}
+  .cal-day-num { font-size:11.5px; font-family:'IBM Plex Mono',monospace; color:var(--text-3); text-align:right; margin-bottom:4px; line-height:1; }
+  .cal-day-num.today-circle { display:inline-flex; align-items:center; justify-content:center; width:20px; height:20px; background:var(--navy); color:#fff; border-radius:50%; font-size:10.5px; margin-left:auto; }
 
-  .booking-info{flex:1;min-width:0}
-  .booking-customer{font-size:15px;font-weight:600;color:var(--navy);text-decoration:none;font-family:'Playfair Display',serif}
-  .booking-customer:hover{text-decoration:underline}
-  .booking-time{font-size:11.5px;font-family:'IBM Plex Mono',monospace;color:var(--text-3);margin-top:2px}
-  .booking-notes{font-size:12px;color:var(--text-2);margin-top:5px;line-height:1.5}
-
-  .booking-tags{display:flex;align-items:center;gap:6px;margin-top:6px;flex-wrap:wrap}
-
-  .svc-badge{display:inline-flex;align-items:center;font-size:10px;font-family:'IBM Plex Mono',monospace;padding:2px 9px;border-radius:3px;white-space:nowrap;font-weight:500}
-  .svc-badge-maintenance{background:var(--blue-pale);color:var(--blue);border:1px solid #bfdbfe}
-  .svc-badge-install{background:var(--green-pale);color:var(--green);border:1px solid #a7f3d0}
-  .svc-badge-repair{background:var(--amber-pale);color:var(--amber);border:1px solid #fde68a}
-  .svc-badge-other{background:var(--bg);color:var(--text-3);border:1px solid var(--border)}
-
-  .status-badge{display:inline-flex;align-items:center;gap:4px;font-size:10px;font-family:'IBM Plex Mono',monospace;padding:2px 9px;border-radius:3px;white-space:nowrap}
-  .status-badge::before{content:'';width:4px;height:4px;border-radius:50%}
-  .sb-tentative{background:var(--amber-pale);color:var(--amber);border:1px solid #fde68a}
-  .sb-tentative::before{background:var(--amber)}
-  .sb-confirmed{background:var(--green-pale);color:var(--green);border:1px solid #a7f3d0}
-  .sb-confirmed::before{background:var(--green)}
-  .sb-complete{background:var(--green-pale);color:var(--green);border:1px solid #a7f3d0}
-  .sb-complete::before{background:var(--green)}
-  .sb-cancelled{background:var(--bg);color:var(--text-3);border:1px solid var(--border)}
-  .sb-cancelled::before{background:var(--text-4)}
-
-  .source-label{font-size:9.5px;font-family:'IBM Plex Mono',monospace;color:var(--text-4);letter-spacing:0.5px}
+  /* Booking chips */
+  .cal-chip { display:block; font-size:10px; font-family:'IBM Plex Sans',sans-serif; padding:2px 6px; border-radius:3px; margin-bottom:2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; text-decoration:none; line-height:1.5; transition:opacity 0.12s; }
+  .cal-chip:hover { opacity:0.82; }
+  .chip-maintenance { background:var(--blue-pale); color:var(--blue); border:1px solid #bfdbfe; }
+  .chip-install { background:var(--green-pale); color:var(--green); border:1px solid #a7f3d0; }
+  .chip-repair { background:var(--amber-pale); color:var(--amber); border:1px solid #fde68a; }
+  .chip-other { background:var(--bg); color:var(--text-2); border:1px solid var(--border); }
+  .chip-more { background:var(--bg); color:var(--text-3); border:1px solid var(--border); font-size:9.5px; font-family:'IBM Plex Mono',monospace; }
 </style>
 {% endblock %}
 
 {% block content %}
 
-<div style="display:flex;align-items:flex-end;justify-content:space-between;margin-bottom:28px;flex-wrap:wrap;gap:12px">
+<div style="display:flex;align-items:flex-end;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:12px">
   <div>
     <div style="font-size:10.5px;font-family:'IBM Plex Mono',monospace;letter-spacing:1.5px;text-transform:uppercase;color:var(--text-3);margin-bottom:6px">Schedule</div>
     <h1 style="font-family:'Playfair Display',serif;font-size:28px;font-weight:700;color:var(--navy);line-height:1.2">Calendar</h1>
-    <div style="font-size:13px;color:var(--text-3);margin-top:6px">Upcoming and past bookings from Foreman outreach.</div>
   </div>
   <div style="display:flex;align-items:center;gap:10px">
+    <span style="font-size:12px;color:var(--text-3);font-family:'IBM Plex Mono',monospace">{{ total_month_bookings }} booking{{ 's' if total_month_bookings != 1 else '' }} this month</span>
     <a href="/meetings" class="btn-ghost" style="text-decoration:none;font-size:12.5px">
       📅 Meetings Queue{% if meetings_queue_count is defined and meetings_queue_count > 0 %} ({{ meetings_queue_count }}){% endif %}
     </a>
-    <a href="/" class="btn-ghost" style="text-decoration:none;font-size:12px;font-family:'IBM Plex Mono',monospace;color:var(--text-3)">Dashboard</a>
   </div>
 </div>
 
-{% if bookings %}
+{# ── Month Navigation ── #}
+<div class="month-nav">
+  <a href="/calendar?month={{ prev_month }}" class="month-nav-btn">← {{ prev_month_label }}</a>
+  <span class="month-nav-title">{{ month_label }}</span>
+  <a href="/calendar?month={{ next_month }}" class="month-nav-btn">{{ next_month_label }} →</a>
+</div>
 
-{# Group bookings by month #}
-{% set ns = namespace(current_month='', month_started=false) %}
-{% for booking in bookings %}
-  {% if booking.slot_start %}
-    {% set month_key = booking.slot_start.strftime('%B %Y') %}
-    {% if month_key != ns.current_month %}
-      {% if ns.month_started %}</div>{% endif %}
-      {% set ns.current_month = month_key %}
-      {% set ns.month_started = true %}
-      <div class="cal-month-section">
-      <div class="cal-month-header">{{ month_key }}</div>
-    {% endif %}
+{# ── Calendar Grid ── #}
+<div class="cal-grid-wrap">
+  <div class="cal-grid">
+    {# Day-of-week headers #}
+    {% for day_name in ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] %}
+    <div class="cal-doh">{{ day_name }}</div>
+    {% endfor %}
 
-    {# Determine service type class #}
-    {% set svc = booking.service_type | lower if booking.service_type else 'other' %}
-    {% if 'maintenance' in svc or 'tune' in svc or 'check' in svc %}
-      {% set svc_cls = 'maintenance' %}
-      {% set svc_label = 'Maintenance' %}
-    {% elif 'install' in svc %}
-      {% set svc_cls = 'install' %}
-      {% set svc_label = 'Install' %}
-    {% elif 'repair' in svc or 'fix' in svc or 'replac' in svc %}
-      {% set svc_cls = 'repair' %}
-      {% set svc_label = 'Repair' %}
-    {% else %}
-      {% set svc_cls = 'other' %}
-      {% set svc_label = booking.service_type or 'Service' %}
-    {% endif %}
-
-    {# Determine status class #}
-    {% set st = booking.status or 'tentative' %}
-    {% if st == 'confirmed' %}{% set st_cls = 'confirmed' %}
-    {% elif st == 'complete' %}{% set st_cls = 'complete' %}
-    {% elif st == 'cancelled' %}{% set st_cls = 'cancelled' %}
-    {% else %}{% set st_cls = 'tentative' %}{% endif %}
-
-    <div class="booking-row svc-{{ svc_cls }}">
-      <div class="booking-date-block">
-        <div class="booking-date-month">{{ booking.slot_start.strftime('%b') }}</div>
-        <div class="booking-date-day">{{ booking.slot_start.strftime('%-d') }}</div>
-        <div class="booking-date-year">{{ booking.slot_start.strftime('%Y') }}</div>
-      </div>
-      <div class="booking-info">
-        <a href="/customer/{{ booking.customer_id }}" class="booking-customer">{{ booking.customer_name }}</a>
-        <div class="booking-time">
-          {{ booking.slot_start.strftime('%-I:%M %p') }}
-          {% if booking.slot_end %} – {{ booking.slot_end.strftime('%-I:%M %p') }}{% endif %}
-          {% if booking.customer_email %}
-            <span style="color:var(--text-4);margin-left:6px">· {{ booking.customer_email }}</span>
+    {# Week rows #}
+    {% for week in grid %}
+      {% for cell in week %}
+      <div class="cal-cell {% if not cell.day %}empty{% elif cell.is_today %}today{% endif %}">
+        {% if cell.day %}
+        <div class="cal-day-num">
+          {% if cell.is_today %}
+          <span class="today-circle">{{ cell.day }}</span>
+          {% else %}
+          {{ cell.day }}
           {% endif %}
         </div>
-        {% if booking.notes %}
-        <div class="booking-notes">{{ booking.notes }}</div>
+
+        {# Booking chips (max 3, then +N more) #}
+        {% for booking in cell.bookings[:3] %}
+          {# Service type classification #}
+          {% set svc = booking.service_type | lower %}
+          {% if 'maintenance' in svc or 'tune' in svc or 'check' in svc %}
+            {% set chip_cls = 'chip-maintenance' %}
+          {% elif 'install' in svc %}
+            {% set chip_cls = 'chip-install' %}
+          {% elif 'repair' in svc or 'fix' in svc or 'replac' in svc %}
+            {% set chip_cls = 'chip-repair' %}
+          {% else %}
+            {% set chip_cls = 'chip-other' %}
+          {% endif %}
+          <a href="/conversations/{{ booking.customer_id }}" class="cal-chip {{ chip_cls }}" title="{{ booking.customer_name }} · {{ booking.slot_start.strftime('%-I:%M %p') }}{% if booking.estimated_value %} · ${{ '{:,.0f}'.format(booking.estimated_value) }}{% endif %}">
+            {{ booking.slot_start.strftime('%-I:%M %p') }} {{ booking.customer_name }}
+          </a>
+        {% endfor %}
+        {% if cell.bookings | length > 3 %}
+        <span class="cal-chip chip-more">+{{ cell.bookings | length - 3 }} more</span>
         {% endif %}
-        <div class="booking-tags">
-          <span class="svc-badge svc-badge-{{ svc_cls }}">{{ svc_label }}</span>
-          <span class="status-badge sb-{{ st_cls }}">{{ st }}</span>
-          {% if booking.source and booking.source != 'manual' %}
-          <span class="source-label">via {{ booking.source | replace('_', ' ') }}</span>
-          {% endif %}
-        </div>
+
+        {% endif %}{# end if cell.day #}
       </div>
-    </div>
-
-  {% endif %}
-{% endfor %}
-{% if ns.month_started %}</div>{% endif %}
-
-{% else %}
-<div class="card" style="padding:72px 40px;text-align:center">
-  <div style="font-size:40px;margin-bottom:16px;opacity:0.3">🗓</div>
-  <div style="font-family:'Playfair Display',serif;font-size:20px;font-weight:700;color:var(--navy);margin-bottom:8px">No bookings yet</div>
-  <div style="font-size:13px;color:var(--text-3);margin-bottom:24px;max-width:380px;margin-left:auto;margin-right:auto;line-height:1.6">
-    Confirmed bookings from customer replies will appear here. Review booking proposals in the Meetings Queue.
+      {% endfor %}
+    {% endfor %}
   </div>
-  <a href="/meetings" class="btn-primary" style="text-decoration:none">View Meetings Queue</a>
+</div>
+
+{# ── Legend ── #}
+<div style="display:flex;gap:12px;align-items:center;margin-top:14px;flex-wrap:wrap">
+  <span style="font-size:10.5px;font-family:'IBM Plex Mono',monospace;color:var(--text-4);letter-spacing:0.5px">Legend:</span>
+  <span class="cal-chip chip-maintenance" style="display:inline-flex;width:auto">Maintenance</span>
+  <span class="cal-chip chip-install" style="display:inline-flex;width:auto">Install</span>
+  <span class="cal-chip chip-repair" style="display:inline-flex;width:auto">Repair</span>
+  <span class="cal-chip chip-other" style="display:inline-flex;width:auto">Other</span>
+</div>
+
+{% if total_month_bookings == 0 %}
+<div style="text-align:center;padding:40px 20px;margin-top:16px">
+  <div style="font-size:13px;color:var(--text-3);line-height:1.6">No bookings in {{ month_label }}. Use ← → to navigate months.</div>
 </div>
 {% endif %}
 

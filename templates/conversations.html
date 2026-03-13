@@ -34,6 +34,12 @@
   .right-label{font-size:10px;font-family:'IBM Plex Mono',monospace;letter-spacing:1px;text-transform:uppercase;color:var(--text-3);margin-bottom:3px}
   .right-value{font-size:12px;color:var(--text)}
 
+  .conv-filter-btn{padding:5px 12px;border-radius:20px;font-size:11.5px;font-family:'IBM Plex Mono',monospace;border:1px solid var(--border);color:var(--text-3);background:var(--surface);cursor:pointer;transition:all 0.15s;white-space:nowrap;display:inline-flex;align-items:center;gap:5px}
+  .conv-filter-btn:hover{border-color:var(--fc, var(--navy));color:var(--fc, var(--navy));background:var(--fbc, var(--navy-soft))}
+  .conv-filter-btn.active-filter{background:var(--fbc, var(--navy));border-color:var(--fbc2, var(--navy));color:var(--fc, #fff);font-weight:600}
+  .conv-filter-btn#filter-all.active-filter{background:var(--navy);border-color:var(--navy);color:#fff}
+  .filter-count{font-size:10px;font-family:'IBM Plex Mono',monospace;opacity:0.75}
+
   @media (max-width: 1024px){
     .kpi-row{grid-template-columns:repeat(2,minmax(0,1fr))}
   }
@@ -62,36 +68,44 @@
 </div>
 
 {% if conversations %}
-<div style="margin-bottom:18px">
-  <div style="position:relative;max-width:320px">
+<div style="display:flex;align-items:center;gap:12px;margin-bottom:14px;flex-wrap:wrap">
+  <div style="position:relative;flex:1;min-width:200px;max-width:320px">
     <span style="position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--text-4);font-size:13px;pointer-events:none">⌕</span>
     <input type="text" id="convSearch" placeholder="Search by name or email…" oninput="filterConversations()"
-           style="width:100%;padding:8px 12px 8px 32px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:'IBM Plex Sans',sans-serif;color:var(--text);background:var(--surface);outline:none;transition:border-color 0.15s"
+           style="width:100%;padding:8px 12px 8px 32px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:'IBM Plex Sans',sans-serif;color:var(--text);background:var(--surface);outline:none;transition:border-color 0.15s;box-sizing:border-box"
            onfocus="this.style.borderColor='var(--navy)'" onblur="this.style.borderColor='var(--border)'" autocomplete="off">
+  </div>
+  {# Status filter tabs #}
+  <div style="display:flex;gap:5px;flex-wrap:wrap">
+    <button onclick="setStatusFilter('all', this)" id="filter-all" class="conv-filter-btn active-filter">All <span class="filter-count">{{ conversations|length }}</span></button>
+    <button onclick="setStatusFilter('needs-response', this)" id="filter-needs-response" class="conv-filter-btn" style="--fc:var(--red);--fbc:#fee2e2;--fbc2:#fecaca">Needs Response <span class="filter-count">{{ needs_response_count }}</span></button>
+    <button onclick="setStatusFilter('needs-follow-up', this)" id="filter-needs-follow-up" class="conv-filter-btn" style="--fc:var(--amber);--fbc:#fef3c7;--fbc2:#fde68a">Needs Follow-up <span class="filter-count">{{ needs_follow_up_count }}</span></button>
+    <button onclick="setStatusFilter('awaiting-reply', this)" id="filter-awaiting-reply" class="conv-filter-btn" style="--fc:var(--blue);--fbc:var(--blue-pale);--fbc2:#bfdbfe">Awaiting Reply <span class="filter-count">{{ awaiting_reply_count }}</span></button>
+    <button onclick="setStatusFilter('closed', this)" id="filter-closed" class="conv-filter-btn" style="--fc:var(--green);--fbc:var(--green-pale);--fbc2:#a7f3d0">Closed <span class="filter-count">{{ closed_count }}</span></button>
   </div>
 </div>
 
-<div class="kpi-row">
-  <div class="kpi">
+<div class="kpi-row" style="margin-bottom:16px">
+  <div class="kpi" style="cursor:pointer" onclick="setStatusFilter('all', document.getElementById('filter-all'))">
     <div class="kpi-label">Active Threads</div>
     <div class="kpi-value">{{ conversations|length }}</div>
   </div>
-  <div class="kpi">
+  <div class="kpi" style="cursor:pointer" onclick="setStatusFilter('needs-response', document.getElementById('filter-needs-response'))">
     <div class="kpi-label">Needs Response</div>
-    <div class="kpi-value">{{ needs_response_count }}</div>
+    <div class="kpi-value" style="color:var(--red)">{{ needs_response_count }}</div>
   </div>
-  <div class="kpi">
+  <div class="kpi" style="cursor:pointer" onclick="setStatusFilter('needs-follow-up', document.getElementById('filter-needs-follow-up'))">
     <div class="kpi-label">Needs Follow-up</div>
-    <div class="kpi-value">{{ needs_follow_up_count }}</div>
+    <div class="kpi-value" style="color:var(--amber)">{{ needs_follow_up_count }}</div>
   </div>
-  <div class="kpi">
+  <div class="kpi" style="cursor:pointer" onclick="setStatusFilter('awaiting-reply', document.getElementById('filter-awaiting-reply'))">
     <div class="kpi-label">Awaiting Reply</div>
-    <div class="kpi-value">{{ awaiting_reply_count }}</div>
+    <div class="kpi-value" style="color:var(--blue)">{{ awaiting_reply_count }}</div>
   </div>
 </div>
 
 {% for item in conversations %}
-<div class="conv-card {{ item.health_chip_cls }}" data-name="{{ item.customer_name|lower }}" data-email="{{ item.customer_email|lower if item.customer_email else '' }}">
+<div class="conv-card {{ item.health_chip_cls }}" data-name="{{ item.customer_name|lower }}" data-email="{{ item.customer_email|lower if item.customer_email else '' }}" data-health="{{ item.health_chip_cls }}">
   <div class="conv-layout">
     <div class="conv-left">
       <div class="conv-top">
@@ -158,16 +172,30 @@
 
 {% block scripts %}
 <script>
+let _activeStatus = 'all';
+
+function setStatusFilter(status, btn) {
+  _activeStatus = status;
+  // Update button styles
+  document.querySelectorAll('.conv-filter-btn').forEach(b => b.classList.remove('active-filter'));
+  if (btn) btn.classList.add('active-filter');
+  filterConversations();
+}
+
 function filterConversations() {
   const q = document.getElementById('convSearch').value.toLowerCase();
   const cards = document.querySelectorAll('.conv-card');
   let shown = 0;
   cards.forEach(c => {
-    const match = !q || c.dataset.name.includes(q) || (c.dataset.email||'').includes(q);
-    c.style.display = match ? '' : 'none';
-    if (match) shown++;
+    const textMatch = !q || c.dataset.name.includes(q) || (c.dataset.email||'').includes(q);
+    const statusMatch = _activeStatus === 'all' || c.dataset.health === _activeStatus;
+    const visible = textMatch && statusMatch;
+    c.style.display = visible ? '' : 'none';
+    if (visible) shown++;
   });
-  document.getElementById('conv-no-results').style.display = (shown === 0 && q) ? '' : 'none';
+  document.getElementById('conv-no-results').style.display = (shown === 0) ? '' : 'none';
 }
+
+// Allow clicking KPI cards to set filter — wired via onclick in the template
 </script>
 {% endblock %}

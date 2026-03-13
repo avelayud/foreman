@@ -16,6 +16,7 @@ JSON API:
   POST /api/draft/{customer_id}/approve  → log draft, mark customer contacted
 """
 
+import calendar as _cal
 import json
 import os
 import sys
@@ -1786,9 +1787,33 @@ def meetings_queue(request: Request):
 
 
 @app.get("/calendar", response_class=HTMLResponse)
-def calendar_view(request: Request):
+def calendar_view(request: Request, month: str = ""):
     if (guard := _db_starting_response()):
         return guard
+
+    # Parse month param (YYYY-MM). Default to current month.
+    today = datetime.utcnow().date()
+    if month:
+        try:
+            year, mon = map(int, month.split("-"))
+            if not (1 <= mon <= 12):
+                raise ValueError
+        except (ValueError, AttributeError):
+            year, mon = today.year, today.month
+    else:
+        year, mon = today.year, today.month
+
+    # Prev / next month strings
+    prev_y, prev_m = (year - 1, 12) if mon == 1 else (year, mon - 1)
+    next_y, next_m = (year + 1, 1) if mon == 12 else (year, mon + 1)
+    prev_month_str = f"{prev_y}-{prev_m:02d}"
+    next_month_str = f"{next_y}-{next_m:02d}"
+    month_label = datetime(year, mon, 1).strftime("%B %Y")
+    prev_month_label = datetime(prev_y, prev_m, 1).strftime("%b %Y")
+    next_month_label = datetime(next_y, next_m, 1).strftime("%b %Y")
+    month_start = datetime(year, mon, 1)
+    month_end = datetime(next_y, next_m, 1)
+
     with get_db() as db:
         operator = db.query(Operator).filter_by(id=OPERATOR_ID).first()
         operator_data = _operator_data(operator)
@@ -1796,27 +1821,53 @@ def calendar_view(request: Request):
         meetings_queue_count = _get_meetings_queue_count(db)
         conversations_attention_count = _get_conversations_attention_count(db)
 
-        bookings = (
+        bookings_raw = (
             db.query(Booking, Customer)
             .join(Customer, Booking.customer_id == Customer.id)
-            .filter(Booking.operator_id == OPERATOR_ID)
+            .filter(
+                Booking.operator_id == OPERATOR_ID,
+                Booking.slot_start >= month_start,
+                Booking.slot_start < month_end,
+                Booking.status != "cancelled",
+            )
             .order_by(Booking.slot_start)
             .all()
         )
-        bookings_data = []
-        for b, c in bookings:
-            bookings_data.append({
+        bookings_by_day: dict[int, list] = {}
+        for b, c in bookings_raw:
+            day = b.slot_start.day
+            entry = {
                 "id": b.id,
                 "customer_name": c.name,
-                "customer_email": c.email,
                 "customer_id": c.id,
                 "slot_start": b.slot_start,
                 "slot_end": b.slot_end,
-                "status": b.status,
+                "status": b.status or "tentative",
                 "service_type": b.service_type or "Service",
                 "notes": b.notes or "",
+                "estimated_value": b.estimated_value,
                 "source": b.source,
-            })
+            }
+            bookings_by_day.setdefault(day, []).append(entry)
+
+        # Sunday-first (firstweekday=6) calendar grid
+        cal_obj = _cal.Calendar(firstweekday=6)
+        from datetime import date as _date
+        grid = []
+        for week in cal_obj.monthdayscalendar(year, mon):
+            cells = []
+            for day in week:
+                if day == 0:
+                    cells.append({"day": None, "bookings": [], "is_today": False})
+                else:
+                    cells.append({
+                        "day": day,
+                        "bookings": bookings_by_day.get(day, []),
+                        "is_today": (today == _date(year, mon, day)),
+                    })
+            grid.append(cells)
+
+        total_month_bookings = sum(len(v) for v in bookings_by_day.values())
         log_page_view(db, request, "calendar", operator_id=OPERATOR_ID)
 
     return templates.TemplateResponse("calendar.html", {
@@ -1826,7 +1877,13 @@ def calendar_view(request: Request):
         "queue_count": queue_count,
         "meetings_queue_count": meetings_queue_count,
         "conversations_attention_count": conversations_attention_count,
-        "bookings": bookings_data,
+        "grid": grid,
+        "month_label": month_label,
+        "prev_month": prev_month_str,
+        "next_month": next_month_str,
+        "prev_month_label": prev_month_label,
+        "next_month_label": next_month_label,
+        "total_month_bookings": total_month_bookings,
     })
 
 
@@ -1923,6 +1980,7 @@ def conversations(request: Request):
         "awaiting_reply_count": health_counts["awaiting_reply"],
         "needs_response_count": health_counts["needs_response"],
         "needs_follow_up_count": health_counts["needs_follow_up"],
+        "closed_count": health_counts["closed"],
     })
 
 
@@ -1963,6 +2021,13 @@ def conversation_detail(request: Request, customer_id: int):
         )
         pending_draft_summary = _compact_summary(pending_draft_log.content or "", 120) if pending_draft_log else ""
         pending_draft_created_at = _log_timestamp(pending_draft_log) if pending_draft_log else None
+        # Serialize raw ORM fields now — after db.commit() they would be expired
+        # and accessing them outside the with block raises DetachedInstanceError.
+        _pdf = pending_draft_log
+        pending_draft_id = _pdf.id if _pdf else None
+        pending_draft_subject_raw = _pdf.subject if _pdf else None
+        pending_draft_content_raw = _pdf.content if _pdf else None
+        pending_draft_seq_raw = _pdf.sequence_step if _pdf else None
         operator_data = _operator_data(operator)
         queue_count = _get_queue_count(db)
         conversations_attention_count = _get_conversations_attention_count(db)
@@ -2048,17 +2113,18 @@ def conversation_detail(request: Request, customer_id: int):
             })
 
     # Add pending draft as a "queued" timeline entry (visually distinct from sent messages)
-    if has_pending_draft and pending_draft_log:
+    # Use pre-serialized scalars to avoid DetachedInstanceError outside the with block.
+    if has_pending_draft and pending_draft_id is not None:
         timeline_events.append({
-            "id": pending_draft_log.id,
+            "id": pending_draft_id,
             "type": "queued",
             "title": "Draft in Queue",
             "detail": f"Awaiting approval · {'Meetings Queue' if pending_draft_queue == 'meetings' else 'Outreach Queue'}",
-            "subject": pending_draft_log.subject or "(draft)",
+            "subject": pending_draft_subject_raw or "(draft)",
             "summary": pending_draft_summary,
-            "content": pending_draft_log.content or "",
+            "content": pending_draft_content_raw or "",
             "sender_label": "Queued Draft",
-            "sequence_step": (pending_draft_log.sequence_step or 0) + 1,
+            "sequence_step": (pending_draft_seq_raw or 0) + 1,
             "gmail_thread_id": None,
             "at": pending_draft_created_at,
             "response_classification": None,
