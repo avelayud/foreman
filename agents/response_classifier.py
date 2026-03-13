@@ -35,27 +35,33 @@ CLASSIFIER_SYSTEM = """You are an expert at reading customer replies to service 
 Your job: classify a customer's reply into exactly one category.
 
 Categories:
-  booking_confirmed — The customer has explicitly agreed to a SPECIFIC proposed time slot.
-                      Only use this when a concrete date/time was already proposed and the
-                      customer is accepting it. Signals: "Tuesday works for me", "I'll take
-                      the 10am slot", "that time works", "perfect, see you then",
-                      "confirmed, see you Tuesday"
-  booking_intent    — The customer clearly wants to book but hasn't confirmed a specific slot.
-                      Signals: "yes", "when can you come?", "book me in", "let's do it",
-                      asking for dates/times, saying "I need this done", or a general yes
-                      without referring to a specific proposed slot
-  callback_request  — Customer wants a phone call before deciding or to discuss details.
-                      Signals: "call me", "give me a ring", "easier to talk", phone number given
-  price_inquiry     — Customer is asking about cost, pricing, or value before committing.
-                      Signals: "how much", "what's the cost", "do you have a quote", "is it expensive"
-  not_interested    — Customer declines, is not ready, or asks to be removed.
-                      Signals: "not right now", "remove me", "already handled", "not interested",
-                      "maybe later" (when combined with no engagement signal)
-  unclear           — Reply is ambiguous, too short to classify, or could be multiple categories.
+  booking_confirmed    — The customer has explicitly agreed to a SPECIFIC proposed time slot.
+                         Only use this when a concrete date/time was already proposed and the
+                         customer is accepting it. Signals: "Tuesday works for me", "I'll take
+                         the 10am slot", "that time works", "perfect, see you then".
+  booking_intent       — The customer clearly wants to book but hasn't confirmed a specific slot.
+                         Signals: "yes", "when can you come?", "book me in", "let's do it",
+                         asking for dates/times, saying "I need this done".
+  callback_request     — Customer wants a phone call before deciding or to discuss details.
+                         Signals: "call me", "give me a ring", "easier to talk", phone number given.
+  price_inquiry        — Customer is asking about cost, pricing, or value before committing.
+                         Signals: "how much", "what's the cost", "do you have a quote".
+  not_interested       — Customer declines this specific offer or says timing is wrong, but has NOT
+                         asked to be removed or permanently opted out. They may still be open to
+                         future contact or have questions. Signals: "not right now", "already handled",
+                         "not interested at the moment", "maybe later", declining while asking a
+                         question, or expressing mild disengagement. Use this when a "no" is soft,
+                         conditional, or paired with any engagement signal (e.g. a question).
+  unsubscribe_request  — Customer explicitly requests to stop receiving emails permanently.
+                         ONLY use when the language is unambiguous and final.
+                         Signals: "remove me from your list", "stop emailing me", "unsubscribe",
+                         "don't contact me again", "please take me off your list".
+                         Do NOT use for a soft decline like "not right now" or "not interested".
+  unclear              — Reply is ambiguous, too short to classify, or doesn't fit other categories.
 
 Return ONLY a JSON object — no markdown, no explanation:
 {
-  "classification": "<one of the six categories>",
+  "classification": "<one of the seven categories>",
   "confidence": "<high|medium|low>",
   "reasoning": "<one sentence explaining why>",
   "key_phrase": "<the exact phrase from their reply that drove the classification>"
@@ -178,10 +184,13 @@ def classify_reply(operator_id: int, inbound_log_id: int, verbose: bool = True) 
             log.response_classification = result["classification"]
             log.classified_at = datetime.now(timezone.utc).replace(tzinfo=None)
 
-            # Note: we intentionally do NOT auto-unsubscribe on "not_interested".
-            # A decline is not the same as an unsubscribe request — the customer
-            # may still have questions or become interested later.
-            # The operator can manually close the conversation from the conversation page.
+            # Only mark unsubscribed on an explicit opt-out request.
+            # "not_interested" is a soft decline — the customer may still have
+            # questions or become interested later. Keep them active.
+            if result["classification"] == "unsubscribe_request":
+                customer = db.query(Customer).filter_by(id=log.customer_id).first()
+                if customer:
+                    customer.reactivation_status = "unsubscribed"
 
     if verbose:
         print(

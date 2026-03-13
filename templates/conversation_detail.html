@@ -170,7 +170,9 @@
                 {% elif event.response_classification == 'callback_request' %}
                   <span class="cls-badge cls-callback">📞 Callback</span>
                 {% elif event.response_classification == 'not_interested' %}
-                  <span class="cls-badge cls-declined">✗ Declined</span>
+                  <span class="cls-badge cls-declined">✗ Not interested</span>
+                {% elif event.response_classification == 'unsubscribe_request' %}
+                  <span class="cls-badge cls-declined">⊘ Unsubscribe</span>
                 {% elif event.response_classification == 'unclear' %}
                   <span class="cls-badge cls-unclear">? Unclear</span>
                 {% endif %}

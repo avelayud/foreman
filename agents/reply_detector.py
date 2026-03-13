@@ -32,11 +32,9 @@ except Exception:
     GMAIL_AVAILABLE = False
 
 
-# Statuses that indicate an active outreach sequence — used for thread-based scan.
-ACTIVE_STATUSES = {"outreach_sent", "sequence_step_2", "sequence_step_3", "replied"}
-
-# Broader set used for the email-address fallback scan (catches orphaned threads).
-SCAN_STATUSES = {"outreach_sent", "sequence_step_2", "sequence_step_3", "replied", "booked"}
+# No longer filtering by status — we scan ALL customers who have an outbound thread.
+# A customer marked "unsubscribed" or "booked" can still send us a reply that needs
+# logging (e.g. they changed their mind, or their earlier reply was miscategorised).
 
 
 def _already_logged_rfc_ids(customer_id: int) -> set[str]:
@@ -126,8 +124,8 @@ def _log_and_process_reply(operator_id: int, customer_id: int, customer_name: st
     except Exception as e:
         print(f"  [reply_detector] Classification failed: {e}")
 
-    # Generate bespoke response draft (skip if not_interested)
-    if classification != "not_interested":
+    # Generate bespoke response draft (skip only on explicit unsubscribe requests)
+    if classification != "unsubscribe_request":
         try:
             from agents.conversation_agent import generate_response
             generate_response(
@@ -158,7 +156,8 @@ def run(operator_id: int) -> int:
     new_replies = 0
 
     # ── Pass 1: Thread-based scan (primary) ──────────────────────────────────
-    # Check each known gmail_thread_id for INBOX messages (fast, exact).
+    # Check every known outbound gmail_thread_id for INBOX messages (fast, exact).
+    # No status filter — a customer can reply regardless of their current status.
     with get_db() as db:
         rows = (
             db.query(OutreachLog, Customer)
@@ -168,7 +167,6 @@ def run(operator_id: int) -> int:
                 OutreachLog.dry_run == False,
                 OutreachLog.gmail_thread_id != None,
                 OutreachLog.direction == "outbound",
-                Customer.reactivation_status.in_(ACTIVE_STATUSES),
             )
             .all()
         )
@@ -200,16 +198,14 @@ def run(operator_id: int) -> int:
         print("[reply_detector] Pass 1: no active threads to check")
 
     # ── Pass 2: Email-address inbox scan (fallback for orphaned threads) ─────
-    # For each customer with active outreach, search inbox for messages FROM
-    # their email that aren't already logged. Catches replies that landed on a
-    # different thread than the one we sent (client threading differences).
+    # For every customer who has received at least one real outbound email, search
+    # inbox for messages FROM their address not yet logged.  No status filter.
     with get_db() as db:
         active_customers = (
             db.query(Customer)
             .filter(
                 Customer.operator_id == operator_id,
                 Customer.email != None,
-                Customer.reactivation_status.in_(SCAN_STATUSES),
             )
             .all()
         )
