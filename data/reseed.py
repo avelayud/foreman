@@ -27,7 +27,7 @@ import random
 import json
 
 from core.database import init_db, get_db
-from core.models import Operator, Customer, Job, OutreachLog, Booking
+from core.models import Operator, Customer, Job, OutreachLog, Booking, ProductEvent
 
 random.seed(42)
 NOW = datetime.utcnow()
@@ -609,6 +609,10 @@ def reseed():
         db.query(Job).delete()
         db.query(Customer).delete()
         db.query(Operator).delete()
+        try:
+            db.query(ProductEvent).delete()
+        except Exception:
+            pass
         db.flush()
 
         # Operator

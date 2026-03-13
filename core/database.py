@@ -40,6 +40,7 @@ engine = create_engine(
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 SCHEMA_PATCHES = {
+    "product_events": {},
     "operators": {
         "voice_profiles": "TEXT",
         "outreach_mode": "VARCHAR",

@@ -1,0 +1,307 @@
+{% extends "base.html" %}
+{% block page_title %}Analytics{% endblock %}
+
+{% block extra_styles %}
+<style>
+  .an-tabs { display: flex; gap: 4px; margin-bottom: 28px; border-bottom: 1px solid var(--border); padding-bottom: 0; }
+  .an-tab { padding: 9px 20px; font-size: 13px; font-weight: 500; color: var(--text-3); border-bottom: 2px solid transparent; cursor: pointer; text-decoration: none; display: inline-block; margin-bottom: -1px; transition: all 0.15s; }
+  .an-tab:hover { color: var(--navy); }
+  .an-tab.active { color: var(--navy); border-bottom-color: var(--navy); font-weight: 600; }
+  .tab-panel { display: none; }
+  .tab-panel.active { display: block; }
+  .stat-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 28px; }
+  .stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px 22px; box-shadow: var(--shadow-sm); }
+  .stat-value { font-size: 28px; font-weight: 700; color: var(--text); font-family: 'IBM Plex Mono', monospace; margin-bottom: 4px; }
+  .stat-label { font-size: 10px; font-family: 'IBM Plex Mono', monospace; letter-spacing: 1.5px; text-transform: uppercase; color: var(--text-3); }
+  .section-header { font-size: 12px; font-family: 'IBM Plex Mono', monospace; letter-spacing: 1.5px; text-transform: uppercase; color: var(--text-3); margin-bottom: 16px; padding-bottom: 8px; border-bottom: 1px solid var(--border); margin-top: 32px; }
+  .bar-row { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
+  .bar-label { font-size: 12.5px; color: var(--text-2); min-width: 180px; }
+  .bar-track { flex: 1; background: var(--bg); border-radius: 4px; height: 12px; border: 1px solid var(--border); overflow: hidden; }
+  .bar-fill { height: 100%; border-radius: 4px; transition: width 0.4s; }
+  .bar-fill-navy { background: var(--navy); }
+  .bar-fill-gold { background: var(--gold); }
+  .bar-fill-green { background: var(--green); }
+  .bar-fill-red { background: var(--red); }
+  .bar-count { font-size: 12px; font-family: 'IBM Plex Mono', monospace; color: var(--text-3); min-width: 40px; text-align: right; }
+  .funnel-row { display: flex; gap: 0; margin-bottom: 24px; }
+  .funnel-step { flex: 1; padding: 18px 14px; text-align: center; background: var(--surface); border: 1px solid var(--border); position: relative; }
+  .funnel-step:first-child { border-radius: var(--radius) 0 0 var(--radius); }
+  .funnel-step:last-child { border-radius: 0 var(--radius) var(--radius) 0; border-left: none; }
+  .funnel-step + .funnel-step { border-left: none; }
+  .funnel-step + .funnel-step::before { content: '→'; position: absolute; left: -10px; top: 50%; transform: translateY(-50%); color: var(--text-4); font-size: 14px; z-index: 1; background: var(--surface); padding: 2px; }
+  .funnel-num { font-size: 24px; font-weight: 700; font-family: 'IBM Plex Mono', monospace; color: var(--navy); }
+  .funnel-lbl { font-size: 10.5px; font-weight: 500; color: var(--text-2); margin: 4px 0 2px; }
+  .funnel-rate { font-size: 10px; font-family: 'IBM Plex Mono', monospace; color: var(--green); }
+  .range-tabs { display: flex; gap: 6px; }
+  .range-tab { padding: 5px 14px; border-radius: 20px; font-size: 11px; font-family: 'IBM Plex Mono', monospace; border: 1px solid var(--border); color: var(--text-3); text-decoration: none; background: var(--surface); transition: all 0.15s; }
+  .range-tab:hover { border-color: var(--navy); color: var(--navy); }
+  .range-tab.active { background: var(--navy); color: #fff; border-color: var(--navy); }
+  .an-table th { font-size: 10px; font-family: 'IBM Plex Mono', monospace; letter-spacing: 1.2px; text-transform: uppercase; color: var(--text-3); padding: 10px 14px; text-align: left; border-bottom: 1px solid var(--border); background: var(--bg); }
+  .an-table td { font-size: 12.5px; color: var(--text-2); padding: 12px 14px; border-bottom: 1px solid var(--border); }
+  .an-table tr:last-child td { border-bottom: none; }
+  .tier-pct { font-size: 11px; font-family: 'IBM Plex Mono', monospace; color: var(--text-4); min-width: 38px; text-align: right; }
+  @media (max-width: 700px) { .stat-grid { grid-template-columns: repeat(2, 1fr); } .funnel-row { flex-direction: column; } }
+</style>
+{% endblock %}
+
+{% block content %}
+<div style="max-width: 980px;">
+
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:24px;">
+    <div>
+      <h1 style="font-family:'Playfair Display',serif;font-size:26px;font-weight:700;color:var(--text);margin-bottom:4px;">Analytics</h1>
+      <p style="font-size:13px;color:var(--text-3);">Understanding your customer base and Foreman's revenue impact.</p>
+    </div>
+    <div class="range-tabs">
+      <a href="/analytics?range=30{% if active_tab == 'revenue' %}&tab=revenue{% endif %}" class="range-tab {% if range_label == '30d' %}active{% endif %}">30d</a>
+      <a href="/analytics?range=90{% if active_tab == 'revenue' %}&tab=revenue{% endif %}" class="range-tab {% if range_label == '90d' %}active{% endif %}">90d</a>
+      <a href="/analytics?range=all{% if active_tab == 'revenue' %}&tab=revenue{% endif %}" class="range-tab {% if range_label == 'all' %}active{% endif %}">All</a>
+    </div>
+  </div>
+
+  <!-- Tab nav -->
+  <div class="an-tabs">
+    <a href="/analytics?range={{ range_param }}&tab=insights" class="an-tab {% if active_tab == 'insights' %}active{% endif %}">Customer Insights</a>
+    <a href="/analytics?range={{ range_param }}&tab=revenue" class="an-tab {% if active_tab == 'revenue' %}active{% endif %}">Revenue &amp; ROI</a>
+  </div>
+
+  <!-- TAB 1: Customer Insights -->
+  <div class="tab-panel {% if active_tab == 'insights' %}active{% endif %}" id="panel-insights">
+
+    <!-- Snapshot cards -->
+    <div class="stat-grid">
+      <div class="stat-card">
+        <div class="stat-value">{{ snapshot.total_customers }}</div>
+        <div class="stat-label">Total Customers</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value">${{ "{:,.0f}".format(snapshot.avg_ltv) }}</div>
+        <div class="stat-label">Avg Lifetime Value</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value">{{ snapshot.avg_days_dormant }}d</div>
+        <div class="stat-label">Avg Days Dormant</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value">{{ snapshot.customers_3plus_jobs }}</div>
+        <div class="stat-label">Customers 3+ Jobs</div>
+      </div>
+    </div>
+
+    <!-- Value Tier Breakdown -->
+    <div class="section-header">Value Tier Breakdown</div>
+    {% if value_tiers %}
+    {% set max_tier = value_tiers | map(attribute='count') | max %}
+    {% for tier in value_tiers %}
+    {% set tier_colors = ['bar-fill-gold', 'bar-fill-navy', 'bar-fill-green'] %}
+    <div class="bar-row">
+      <span class="bar-label">{{ tier.tier }}</span>
+      <div class="bar-track">
+        <div class="bar-fill {{ tier_colors[loop.index0] }}" style="width: {{ (tier.count / max_tier * 100)|round|int if max_tier else 0 }}%"></div>
+      </div>
+      <span class="bar-count">{{ tier.count }}</span>
+    </div>
+    {% endfor %}
+    {% else %}
+    <p style="color:var(--text-3);font-size:13px;">No customer data yet.</p>
+    {% endif %}
+
+    <!-- Dormancy Distribution -->
+    <div class="section-header">Dormancy Distribution</div>
+    {% if dormancy %}
+    {% set max_dorm = dormancy | map(attribute='count') | max %}
+    {% set dorm_colors = ['bar-fill-green', 'bar-fill-gold', 'bar-fill-red'] %}
+    {% for bucket in dormancy %}
+    <div class="bar-row">
+      <span class="bar-label">{{ bucket.label }}</span>
+      <div class="bar-track">
+        <div class="bar-fill {{ dorm_colors[loop.index0] }}" style="width: {{ (bucket.count / max_dorm * 100)|round|int if max_dorm else 0 }}%"></div>
+      </div>
+      <span class="bar-count">{{ bucket.count }}</span>
+    </div>
+    {% endfor %}
+    {% else %}
+    <p style="color:var(--text-3);font-size:13px;">No customer data yet.</p>
+    {% endif %}
+
+    <!-- Engagement by Status -->
+    <div class="section-header">Engagement by Reactivation Status</div>
+    {% if engagement_by_status %}
+    <table class="an-table" style="width:100%;border-collapse:collapse;">
+      <thead>
+        <tr>
+          <th>Status</th>
+          <th>Count</th>
+          <th>% of Total</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in engagement_by_status %}
+        <tr>
+          <td>
+            {% if row.status == 'never_contacted' %}<span class="status-pill s-none">never contacted</span>
+            {% elif row.status == 'outreach_sent' %}<span class="status-pill s-sent">outreach sent</span>
+            {% elif row.status == 'replied' %}<span class="status-pill s-ok">replied</span>
+            {% elif row.status == 'booked' %}<span class="status-pill s-ok">booked</span>
+            {% elif row.status == 'unsubscribed' %}<span class="status-pill s-none">unsubscribed</span>
+            {% elif row.status == 'sequence_step_2' %}<span class="status-pill s-sent">step 2</span>
+            {% elif row.status == 'sequence_step_3' %}<span class="status-pill s-sent">step 3</span>
+            {% elif row.status == 'sequence_complete' %}<span class="status-pill s-warm">sequence complete</span>
+            {% else %}<span class="status-pill s-none">{{ row.status }}</span>{% endif %}
+          </td>
+          <td style="font-family:'IBM Plex Mono',monospace;color:var(--text);">{{ row.count }}</td>
+          <td style="font-family:'IBM Plex Mono',monospace;color:var(--text-3);">{{ row.pct }}%</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p style="color:var(--text-3);font-size:13px;">No customers yet.</p>
+    {% endif %}
+
+  </div>
+
+  <!-- TAB 2: Revenue & ROI -->
+  <div class="tab-panel {% if active_tab == 'revenue' %}active{% endif %}" id="panel-revenue">
+
+    <!-- Revenue stat cards -->
+    <div class="stat-grid">
+      <div class="stat-card">
+        <div class="stat-value">${{ "{:,.0f}".format(revenue.revenue_generated) }}</div>
+        <div class="stat-label">Revenue Generated</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value">${{ "{:,.0f}".format(revenue.pipeline_value) }}</div>
+        <div class="stat-label">Pipeline Value</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value">{{ revenue.jobs_booked }}</div>
+        <div class="stat-label">Jobs Booked</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value">${{ "{:,.0f}".format(revenue.avg_job_value) }}</div>
+        <div class="stat-label">Avg Job Value</div>
+      </div>
+    </div>
+
+    <!-- Outreach Funnel -->
+    <div class="section-header">Outreach Funnel</div>
+    <div class="funnel-row">
+      <div class="funnel-step">
+        <div class="funnel-num">{{ funnel.dormant_identified }}</div>
+        <div class="funnel-lbl">Dormant Identified</div>
+        <div class="funnel-rate">&nbsp;</div>
+      </div>
+      <div class="funnel-step">
+        <div class="funnel-num">{{ funnel.contacted }}</div>
+        <div class="funnel-lbl">Contacted</div>
+        <div class="funnel-rate">{{ funnel.contact_rate }}</div>
+      </div>
+      <div class="funnel-step">
+        <div class="funnel-num">{{ funnel.replied }}</div>
+        <div class="funnel-lbl">Replied</div>
+        <div class="funnel-rate">{{ funnel.reply_rate }}</div>
+      </div>
+      <div class="funnel-step">
+        <div class="funnel-num">{{ funnel.booked }}</div>
+        <div class="funnel-lbl">Booked</div>
+        <div class="funnel-rate">{{ funnel.book_rate }}</div>
+      </div>
+    </div>
+    {% if funnel.dormant_identified == 0 %}
+    <div style="background:var(--amber-pale);border:1px solid #fde68a;border-radius:var(--radius);padding:14px 18px;margin-bottom:16px;font-size:13px;color:var(--amber);">
+      No dormant customers identified yet. Run the <a href="/agents" style="color:var(--amber);font-weight:600;">Reactivation Agent</a> to get started.
+    </div>
+    {% endif %}
+
+    <!-- Activity Over Time -->
+    <div class="section-header" style="display:flex;align-items:center;justify-content:space-between;">
+      <span>Outreach Activity Over Time</span>
+    </div>
+    {% if activity_over_time %}
+    <div style="overflow-x:auto;margin-bottom:24px;">
+      <table class="an-table" style="width:100%;border-collapse:collapse;">
+        <thead>
+          <tr>
+            <th>Week</th>
+            <th>Sent</th>
+            <th>Replies</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in activity_over_time %}
+          <tr>
+            <td style="font-family:'IBM Plex Mono',monospace;color:var(--text-3);">{{ row.week }}</td>
+            <td style="font-family:'IBM Plex Mono',monospace;">{{ row.sent }}</td>
+            <td style="font-family:'IBM Plex Mono',monospace;color:var(--green);">{{ row.replies }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div style="padding:32px;text-align:center;color:var(--text-3);font-size:13px;border:1px dashed var(--border);border-radius:var(--radius);margin-bottom:24px;">
+      No outreach activity yet for this time range. Approve and send outreach to see data here.
+    </div>
+    {% endif %}
+
+    <!-- Recent Conversions -->
+    <div class="section-header">Recent Conversions</div>
+    {% if recent_conversions %}
+    <div style="overflow-x:auto;">
+      <table class="an-table" style="width:100%;border-collapse:collapse;">
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Sent</th>
+            <th>Replied</th>
+            <th>Job Value</th>
+            <th>Days to Book</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for c in recent_conversions %}
+          <tr>
+            <td style="font-weight:500;color:var(--text);">{{ c.name }}</td>
+            <td style="font-family:'IBM Plex Mono',monospace;color:var(--text-3);">{{ c.sent_at }}</td>
+            <td style="font-family:'IBM Plex Mono',monospace;color:var(--text-3);">{{ c.replied_at }}</td>
+            <td style="font-family:'IBM Plex Mono',monospace;color:var(--green);">${{ "{:,.0f}".format(c.job_value) }}</td>
+            <td style="font-family:'IBM Plex Mono',monospace;color:var(--text-3);">{{ c.days_to_book }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div style="padding:32px;text-align:center;color:var(--text-3);font-size:13px;border:1px dashed var(--border);border-radius:var(--radius);">
+      No conversions recorded yet. Use <a href="/" style="color:var(--navy);">Mark as Booked</a> on the dashboard to track revenue.
+    </div>
+    {% endif %}
+
+  </div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Tab switching is server-rendered via query param — no client JS needed.
+// This script handles any future client-side tab events.
+document.addEventListener('DOMContentLoaded', function() {
+    var tabLinks = document.querySelectorAll('.an-tab');
+    tabLinks.forEach(function(link) {
+        link.addEventListener('click', function() {
+            var tabName = link.getAttribute('href').match(/tab=(\w+)/);
+            if (tabName) trackEvent('tab_switched', {tab_name: tabName[1], page: 'analytics'});
+        });
+    });
+    var rangeTabs = document.querySelectorAll('.range-tab');
+    rangeTabs.forEach(function(link) {
+        link.addEventListener('click', function() {
+            var rangeMatch = link.getAttribute('href').match(/range=(\w+)/);
+            if (rangeMatch) trackEvent('filter_applied', {filter_name: 'range', filter_value: rangeMatch[1], page: 'analytics'});
+        });
+    });
+});
+</script>
+{% endblock %}

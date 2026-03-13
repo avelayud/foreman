@@ -29,14 +29,16 @@ from pathlib import Path
 from apscheduler.schedulers.background import BackgroundScheduler
 
 import anthropic
-from fastapi import Body, FastAPI, HTTPException, Request
+from fastapi import Body, FastAPI, HTTPException, Request, Response
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 
 from core.config import config
 from core.database import get_db, init_db
-from core.models import Booking, Customer, Job, Operator, OutreachLog
+from core.models import Booking, Customer, Job, Operator, OutreachLog, ProductEvent
+from core.product_analytics import get_session_id, log_event, log_page_view
+import core.analytics as _analytics
 
 app = FastAPI(title="Foreman", version="0.2.0")
 
@@ -1346,6 +1348,7 @@ def dashboard(request: Request):
         ).count()
         conversations_attention_count = _get_conversations_attention_count(db)
         operator_data = _operator_data(operator)
+        log_page_view(db, request, "dashboard", operator_id=OPERATOR_ID)
 
         # ── Phase 5 metrics ────────────────────────────────────────────────
         # Responses received (inbound outreach logs)
@@ -1463,6 +1466,7 @@ def customers_list(request: Request, search: str = "", group: str = "all"):
         operator_data = _operator_data(op)
         queue_count = db.query(OutreachLog).filter_by(operator_id=OPERATOR_ID, dry_run=True).count()
         conversations_attention_count = _get_conversations_attention_count(db)
+        log_page_view(db, request, "customers", operator_id=OPERATOR_ID)
 
     enriched = _get_enriched_customers(OPERATOR_ID)
     all_customers = sorted(enriched, key=lambda x: -x["score"])
@@ -1641,6 +1645,7 @@ def outreach_queue(request: Request):
         queue_count = len(pending)
         meetings_queue_count = _get_meetings_queue_count(db)
         conversations_attention_count = _get_conversations_attention_count(db)
+        log_page_view(db, request, "outreach", operator_id=OPERATOR_ID)
 
     return templates.TemplateResponse("outreach.html", {
         "request": request,
@@ -1675,6 +1680,7 @@ def meetings_queue(request: Request):
         queue_count = _get_queue_count(db)
         meetings_queue_count = len(pending)
         conversations_attention_count = _get_conversations_attention_count(db)
+        log_page_view(db, request, "meetings", operator_id=OPERATOR_ID)
 
     return templates.TemplateResponse("meetings.html", {
         "request": request,
@@ -1719,6 +1725,7 @@ def calendar_view(request: Request):
                 "notes": b.notes or "",
                 "source": b.source,
             })
+        log_page_view(db, request, "calendar", operator_id=OPERATOR_ID)
 
     return templates.TemplateResponse("calendar.html", {
         "request": request,
@@ -1740,6 +1747,7 @@ def conversations(request: Request):
         operator_data = _operator_data(operator)
         queue_count = _get_queue_count(db)
         customers = db.query(Customer).filter_by(operator_id=OPERATOR_ID).all()
+        log_page_view(db, request, "conversations", operator_id=OPERATOR_ID)
 
         conversations_data = []
         health_counts = {key: 0 for key in CONVERSATION_HEALTH_META}
@@ -1868,6 +1876,7 @@ def conversation_detail(request: Request, customer_id: int):
         conversations_attention_count = _get_conversations_attention_count(db)
         customer_data = add_segment(enrich(customer))
         customer_data["customer_profile"] = _normalize_customer_profile(customer.customer_profile)
+        log_page_view(db, request, f"conversations/{customer_id}", operator_id=OPERATOR_ID, properties={"customer_id": customer_id})
 
         log_entries = []
         for log in logs:
@@ -3491,6 +3500,7 @@ def agents_page(request: Request):
             .filter_by(operator_id=OPERATOR_ID, response_classification="booking_intent")
             .count()
         )
+        log_page_view(db, request, "agents", operator_id=OPERATOR_ID)
 
     return templates.TemplateResponse("agents.html", {
         "request": request,
@@ -3639,6 +3649,7 @@ def internal_page(request: Request):
         outreach_count = db.query(OutreachLog).filter_by(operator_id=OPERATOR_ID).count()
         booking_count = db.query(Booking).count()
         conversations_attention_count = _get_conversations_attention_count(db)
+        log_page_view(db, request, "internal", operator_id=OPERATOR_ID)
 
     return templates.TemplateResponse("internal.html", {
         "request": request,
@@ -3713,3 +3724,254 @@ def api_reseed():
         return JSONResponse(status_code=500, content={"ok": False, "error": "Reseed timed out after 120s"})
     except Exception as exc:
         return JSONResponse(status_code=500, content={"ok": False, "error": str(exc)})
+
+
+# ── Product Analytics endpoints ────────────────────────────────────────────────
+
+@app.post("/api/events")
+async def api_track_event(request: Request):
+    """Client-side event tracking. Always returns 200 {"ok": true} — never 500."""
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    try:
+        session_id = get_session_id(request)
+        event_name = str(body.get("event_name", "unknown"))
+        event_type = str(body.get("event_type", "navigation"))
+        page = str(body.get("page", ""))
+        # Infer event_type from event_name if not provided
+        if event_type == "navigation":
+            if event_name.startswith("page_view"):
+                event_type = "page_view"
+            elif event_name.startswith("draft"):
+                event_type = "draft"
+            elif event_name.startswith("outreach"):
+                event_type = "outreach"
+            elif event_name.startswith("booking") or event_name.startswith("conversion"):
+                event_type = "conversion"
+            elif event_name.startswith("agent"):
+                event_type = "agent"
+        props = {k: v for k, v in body.items() if k not in ("event_name", "event_type", "page")}
+        with get_db() as db:
+            log_event(
+                db=db,
+                session_id=session_id,
+                event_type=event_type,
+                event_name=event_name,
+                page=page,
+                properties=props,
+                operator_id=OPERATOR_ID,
+            )
+    except Exception:
+        pass
+    return JSONResponse({"ok": True})
+
+
+@app.get("/internal/product", response_class=HTMLResponse)
+def internal_product_page(request: Request, range: str = "30"):
+    if (guard := _db_starting_response()):
+        return guard
+
+    # Determine time range cutoff
+    if range == "7":
+        days = 7
+        range_label = "7d"
+    elif range == "all":
+        days = None
+        range_label = "all"
+    else:
+        days = 30
+        range_label = "30d"
+
+    cutoff = (datetime.utcnow() - timedelta(days=days)) if days else None
+
+    with get_db() as db:
+        op = db.query(Operator).filter_by(id=OPERATOR_ID).first()
+        operator_data = _operator_data(op)
+        conversations_attention_count = _get_conversations_attention_count(db)
+
+        # Query ProductEvent table
+        try:
+            from sqlalchemy import func as _func
+
+            base_q = db.query(ProductEvent)
+            if cutoff:
+                base_q = base_q.filter(ProductEvent.created_at >= cutoff)
+
+            all_events = base_q.all()
+            total_events = len(all_events)
+
+            page_view_events = [e for e in all_events if e.event_type == "page_view"]
+            total_page_views = len(page_view_events)
+
+            session_ids = {e.session_id for e in all_events if e.session_id}
+            unique_sessions = len(session_ids)
+
+            avg_events_per_session = (
+                round(total_events / unique_sessions, 1) if unique_sessions else 0
+            )
+
+            # Page popularity
+            page_counts: dict[str, int] = {}
+            for e in page_view_events:
+                pg = e.page or "unknown"
+                page_counts[pg] = page_counts.get(pg, 0) + 1
+            page_views_sorted = sorted(page_counts.items(), key=lambda x: -x[1])
+            pv_total = sum(c for _, c in page_views_sorted)
+            page_views_data = [
+                {
+                    "page": pg,
+                    "count": cnt,
+                    "pct": round(cnt / pv_total * 100) if pv_total else 0,
+                }
+                for pg, cnt in page_views_sorted
+            ]
+
+            # Draft behavior
+            draft_events = [e for e in all_events if e.event_type == "draft"]
+            total_generated = sum(1 for e in draft_events if e.event_name == "draft_generated")
+            unchanged = sum(1 for e in draft_events if e.event_name == "draft_approved_unchanged")
+            edited = sum(1 for e in draft_events if e.event_name == "draft_edited_then_approved")
+            edit_pcts = []
+            for e in draft_events:
+                if e.event_name == "draft_edited_then_approved" and e.properties:
+                    try:
+                        p = json.loads(e.properties)
+                        ep = p.get("edit_pct", 0)
+                        if ep:
+                            edit_pcts.append(float(ep))
+                    except Exception:
+                        pass
+            pct_unchanged = round(unchanged / total_generated * 100) if total_generated else 0
+            pct_edited = round(edited / total_generated * 100) if total_generated else 0
+            avg_edit_pct = round(sum(edit_pcts) / len(edit_pcts), 1) if edit_pcts else 0
+            draft_stats = {
+                "total_generated": total_generated,
+                "pct_unchanged": pct_unchanged,
+                "pct_edited": pct_edited,
+                "avg_edit_pct": avg_edit_pct,
+            }
+
+            # Feature engagement
+            nav_events = [e for e in all_events if e.event_type == "navigation"]
+            feat_counts: dict[str, int] = {}
+            for e in nav_events:
+                feat_counts[e.event_name] = feat_counts.get(e.event_name, 0) + 1
+            feature_engagement = sorted(
+                [{"name": k, "count": v} for k, v in feat_counts.items()],
+                key=lambda x: -x["count"],
+            )[:20]
+
+            # Navigation funnel — session counts at each step
+            dashboard_sessions = {e.session_id for e in page_view_events if e.page == "dashboard"}
+            customer_sessions = {e.session_id for e in page_view_events if e.page and e.page.startswith("customer")}
+            outreach_sessions = {e.session_id for e in page_view_events if e.page in ("outreach", "meetings")}
+            convo_sessions = {e.session_id for e in page_view_events if e.page and e.page.startswith("conversations")}
+            booked_events = [e for e in all_events if e.event_name == "booking_marked_manual"]
+            booked_sessions = {e.session_id for e in booked_events}
+
+            funnel_steps = [
+                {"label": "Dashboard", "count": len(dashboard_sessions)},
+                {"label": "Customer Detail", "count": len(customer_sessions)},
+                {"label": "Outreach / Meetings", "count": len(outreach_sessions)},
+                {"label": "Conversation", "count": len(convo_sessions)},
+                {"label": "Booked", "count": len(booked_sessions)},
+            ]
+
+            # Recent events (last 100)
+            recent_raw = sorted(all_events, key=lambda e: e.created_at or datetime.min, reverse=True)[:100]
+            recent_events = [
+                {
+                    "created_at": e.created_at.strftime("%-m/%-d %H:%M") if e.created_at else "—",
+                    "page": e.page or "",
+                    "event_type": e.event_type or "",
+                    "event_name": e.event_name or "",
+                    "properties": e.properties or "{}",
+                }
+                for e in recent_raw
+            ]
+
+        except Exception:
+            # ProductEvent table may not exist yet
+            total_events = total_page_views = unique_sessions = avg_events_per_session = 0
+            page_views_data = []
+            draft_stats = {"total_generated": 0, "pct_unchanged": 0, "pct_edited": 0, "avg_edit_pct": 0}
+            feature_engagement = []
+            funnel_steps = []
+            recent_events = []
+
+    return templates.TemplateResponse("internal_product.html", {
+        "request": request,
+        "active": "internal_product",
+        "operator": operator_data,
+        "conversations_attention_count": conversations_attention_count,
+        "range_label": range_label,
+        "activity": {
+            "total_page_views": total_page_views,
+            "unique_sessions": unique_sessions,
+            "total_events": total_events,
+            "avg_events_per_session": avg_events_per_session,
+        },
+        "page_views": page_views_data,
+        "draft_stats": draft_stats,
+        "feature_engagement": feature_engagement,
+        "funnel_steps": funnel_steps,
+        "recent_events": recent_events,
+    })
+
+
+@app.get("/analytics", response_class=HTMLResponse)
+def analytics_page(request: Request, range: str = "90", tab: str = "insights"):
+    if (guard := _db_starting_response()):
+        return guard
+
+    if range == "30":
+        days = 30
+        range_label = "30d"
+        range_param = "30"
+    elif range == "all":
+        days = None
+        range_label = "all"
+        range_param = "all"
+    else:
+        days = 90
+        range_label = "90d"
+        range_param = "90"
+
+    active_tab = tab if tab in ("insights", "revenue") else "insights"
+
+    with get_db() as db:
+        op = db.query(Operator).filter_by(id=OPERATOR_ID).first()
+        operator_data = _operator_data(op)
+        conversations_attention_count = _get_conversations_attention_count(db)
+        queue_count = _get_queue_count(db)
+        log_page_view(db, request, "analytics", operator_id=OPERATOR_ID, properties={"tab": active_tab, "range": range_label})
+
+        snapshot = _analytics.get_customer_snapshot(db, OPERATOR_ID)
+        value_tiers = _analytics.get_value_tier_breakdown(db, OPERATOR_ID)
+        dormancy = _analytics.get_dormancy_distribution(db, OPERATOR_ID)
+        funnel = _analytics.get_outreach_funnel(db, OPERATOR_ID)
+        revenue = _analytics.get_revenue_stats(db, OPERATOR_ID)
+        engagement_by_status = _analytics.get_engagement_by_status(db, OPERATOR_ID)
+        activity_over_time = _analytics.get_activity_over_time(db, OPERATOR_ID, days=days)
+        recent_conversions = _analytics.get_recent_conversions(db, OPERATOR_ID, limit=10)
+
+    return templates.TemplateResponse("analytics.html", {
+        "request": request,
+        "active": "analytics",
+        "operator": operator_data,
+        "conversations_attention_count": conversations_attention_count,
+        "queue_count": queue_count,
+        "range_label": range_label,
+        "range_param": range_param,
+        "active_tab": active_tab,
+        "snapshot": snapshot,
+        "value_tiers": value_tiers,
+        "dormancy": dormancy,
+        "funnel": funnel,
+        "revenue": revenue,
+        "engagement_by_status": engagement_by_status,
+        "activity_over_time": activity_over_time,
+        "recent_conversions": recent_conversions,
+    })

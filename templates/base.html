@@ -187,34 +187,33 @@
 
     <nav style="padding:12px 10px;flex:1">
       <div class="sb-section">Workspace</div>
-      <a href="/" class="sb-link {% if active == 'dashboard' %}active{% endif %}">
+      <a href="/" class="sb-link {% if active == 'dashboard' %}active{% endif %}" onclick="trackEvent('nav_click', {target:'dashboard'})">
         <span>◼</span> Dashboard
       </a>
-      <span class="sb-link" style="opacity:0.38;cursor:default;pointer-events:none">
+      <a href="/analytics" class="sb-link {% if active == 'analytics' %}active{% endif %}" onclick="trackEvent('nav_click', {target:'analytics'})">
         <span>📊</span> Analytics Dashboard
-        <span style="margin-left:auto;font-size:8.5px;font-family:'IBM Plex Mono',monospace;color:rgba(255,255,255,0.3);letter-spacing:0.5px">SOON</span>
-      </span>
-      <a href="/customers" class="sb-link {% if active == 'customers' %}active{% endif %}">
+      </a>
+      <a href="/customers" class="sb-link {% if active == 'customers' %}active{% endif %}" onclick="trackEvent('nav_click', {target:'customers'})">
         <span>👥</span> All Customers
       </a>
-      <a href="/conversations" class="sb-link {% if active == 'conversations' %}active{% endif %}">
+      <a href="/conversations" class="sb-link {% if active == 'conversations' %}active{% endif %}" onclick="trackEvent('nav_click', {target:'conversations'})">
         <span>💬</span> Conversations
         {% if conversations_attention_count is defined and conversations_attention_count > 0 %}
         <span style="margin-left:auto;background:var(--red);color:#fff;font-size:9.5px;font-weight:600;font-family:'IBM Plex Mono',monospace;padding:1px 7px;border-radius:20px">{{ conversations_attention_count }}</span>
         {% endif %}
       </a>
-      <a href="/calendar" class="sb-link {% if active == 'calendar' %}active{% endif %}">
+      <a href="/calendar" class="sb-link {% if active == 'calendar' %}active{% endif %}" onclick="trackEvent('nav_click', {target:'calendar'})">
         <span>🗓</span> Calendar
       </a>
 
       <div class="sb-section">Queues</div>
-      <a href="/outreach" class="sb-link {% if active == 'outreach' %}active{% endif %}">
+      <a href="/outreach" class="sb-link {% if active == 'outreach' %}active{% endif %}" onclick="trackEvent('nav_click', {target:'outreach'})">
         <span>✉</span> Outreach Queue
         {% if queue_count is defined and queue_count > 0 %}
         <span style="margin-left:auto;background:var(--gold);color:#fff;font-size:9.5px;font-weight:600;font-family:'IBM Plex Mono',monospace;padding:1px 7px;border-radius:20px">{{ queue_count }}</span>
         {% endif %}
       </a>
-      <a href="/meetings" class="sb-link {% if active == 'meetings' %}active{% endif %}">
+      <a href="/meetings" class="sb-link {% if active == 'meetings' %}active{% endif %}" onclick="trackEvent('nav_click', {target:'meetings'})">
         <span>📅</span> Meetings Queue
         {% if meetings_queue_count is defined and meetings_queue_count > 0 %}
         <span style="margin-left:auto;background:var(--blue);color:#fff;font-size:9.5px;font-weight:600;font-family:'IBM Plex Mono',monospace;padding:1px 7px;border-radius:20px">{{ meetings_queue_count }}</span>
@@ -222,18 +221,17 @@
       </a>
 
       <div class="sb-section">Agents</div>
-      <a href="/agents" class="sb-link {% if active == 'agents' %}active{% endif %}">
+      <a href="/agents" class="sb-link {% if active == 'agents' %}active{% endif %}" onclick="trackEvent('nav_click', {target:'agents'})">
         <span style="font-size:11px">⚙</span> All Agents
       </a>
 
       <div class="sb-section">Internal</div>
-      <a href="/internal" class="sb-link {% if active == 'internal' %}active{% endif %}">
+      <a href="/internal" class="sb-link {% if active == 'internal' %}active{% endif %}" onclick="trackEvent('nav_click', {target:'internal'})">
         <span style="font-size:11px">🛠</span> Dev Tools
       </a>
-      <span class="sb-link" style="opacity:0.38;cursor:default;pointer-events:none">
+      <a href="/internal/product" class="sb-link {% if active == 'internal_product' %}active{% endif %}" onclick="trackEvent('nav_click', {target:'internal_product'})">
         <span>📈</span> Internal Metrics
-        <span style="margin-left:auto;font-size:8.5px;font-family:'IBM Plex Mono',monospace;color:rgba(255,255,255,0.3);letter-spacing:0.5px">SOON</span>
-      </span>
+      </a>
     </nav>
 
     <!-- Active voice block -->
@@ -330,6 +328,17 @@
   }
 </script>
 {% endif %}
+<script>
+function trackEvent(name, props) {
+    try {
+        fetch('/api/events', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({event_name: name, ...(props || {})})
+        }).catch(function(){});
+    } catch(e) {}
+}
+</script>
 {% block scripts %}{% endblock %}
 </body>
 </html>

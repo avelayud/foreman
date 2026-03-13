@@ -308,3 +308,20 @@ class OutreachLog(Base):
 
     def __repr__(self):
         return f"<OutreachLog {self.channel} {self.direction} to customer {self.customer_id}>"
+
+
+class ProductEvent(Base):
+    """
+    Lightweight product analytics event. Internal-only — never shown to operators.
+    Tracks page views, draft behavior, feature engagement, and navigation patterns.
+    """
+    __tablename__ = "product_events"
+
+    id = Column(Integer, primary_key=True)
+    operator_id = Column(Integer, nullable=True)
+    session_id = Column(String)
+    event_type = Column(String)   # page_view | draft | outreach | conversion | agent | navigation
+    event_name = Column(String)
+    page = Column(String)
+    properties = Column(Text)     # JSON string
+    created_at = Column(DateTime, default=datetime.utcnow)
