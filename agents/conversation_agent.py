@@ -67,6 +67,7 @@ Rules:
   asks for it, grant the request. Their current ask overrides their earlier position.
 - Never be pushy, salesy, or follow a script. Sound like a real person, not a funnel step
 - Keep it short: 2-5 sentences unless the situation genuinely demands more
+- Sign off with the name on its own line (e.g. "Best,\nArjuna" not "Best, Arjuna")
 - Return ONLY a JSON object with keys "subject" and "body" -- no markdown, no fences"""
 
 

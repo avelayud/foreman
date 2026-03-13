@@ -21,14 +21,33 @@
 ## Current Status
 
 - **Active Phase:** Phase 6b — Booking Confirmation Detection + Calendar Write-back
-- **State:** Phase 7 complete (Analytics Dashboard + Internal Metrics). Conversation page redesigned with lazy loading, Schedule Appointment panel, post-booking notes capture, and error tracking. Email body normalization fixed. Next: Phase 6b (booking confirmation detection) and Job 01 (Customer Analyzer OutreachLog fix).
-- **Last Updated:** 2026-03-12
+- **State:** Phase 7 complete. Email formatting fixed (multipart/alternative HTML). Conversation agent over-restriction fixed (respects current message, not conversation history). Regenerate draft now context-aware (uses conversation agent for reply drafts). Next: Phase 6b and Job 01.
+- **Last Updated:** 2026-03-13
 - **Live URL:** https://web-production-3df3a.up.railway.app
 - **Repo:** https://github.com/avelayud/foreman
 
 ---
 
 ## Recently Completed
+
+### 2026-03-13 — Email Formatting Fix, Conversation Agent Improvements, Regenerate Draft Fix
+
+- **Email line-break fix (multipart/alternative):** root cause was Python's `MIMEText` with `charset="utf-8"` applying quoted-printable encoding, wrapping lines at 76 chars with `=\r\n` soft breaks. Gmail on the recipient side stripped `=` but kept `\r\n`, causing hard line breaks. Fix: `send_email()` now sends `multipart/alternative` (plain text + HTML). HTML part converts paragraphs to `<p>` tags via `_plain_to_html()` so text reflows naturally. Plain text part retained as fallback.
+- **Conversation agent context-awareness:** `AGENT_SYSTEM` now scopes "respect their decision" rule to the *current* message only. Agent explicitly grants requests when customer previously declined something (e.g. a call) but asks for it again later. `NOT_INTERESTED_PROMPT` removed hardcoded "no proposed times" ban — now only skips if customer didn't ask. `PRICE_RESPONSE_PROMPT` gives ballpark ranges and offers alternatives without hard-pushing.
+- **Regenerate draft context-aware:** `POST /api/outreach/{id}/regenerate` now reads `response_classification` from the existing draft. If it's a conversation reply, routes to `conversation_agent.generate_response` with the correct classification and latest inbound message as context. Falls back to cold reactivation draft only when no classification is set.
+- **Signoff formatting:** `AGENT_SYSTEM` now instructs agent to put the name on its own line (`Best,\nArjuna` not `Best, Arjuna`).
+
+### 2026-03-13 — Conversation State Fixes, Classifier Overhaul, Updates Inbox, Internal Metrics Improvements
+- **Updates inbox (`/updates`):** new operator inbox page with four sections — Needs Response (red, unread inbound awaiting reply), Follow-ups Overdue (amber, past-due sequences), Inbound Replies Last 7 Days (blue, full classified feed), Follow-ups Coming Up (green, next 3 days). Sidebar link with amber attention badge showing count of conversations needing response.
+- **Reply detector all-customer scan:** removed `ACTIVE_STATUSES` and `SCAN_STATUSES` filters from both Pass 1 (thread scan) and Pass 2 (inbox scan). All customers with outbound threads are now scanned regardless of `reactivation_status` — fixes missed replies from customers previously marked closed/unsubscribed.
+- **`unsubscribe_request` classifier category:** added as a separate 7th category distinct from `not_interested`. `reactivation_status = "unsubscribed"` and draft-skip now only triggered by explicit permanent opt-out language ("remove me from your list", "stop emailing me"). `not_interested` (soft decline) no longer marks unsubscribed.
+- **`NOT_INTERESTED_PROMPT` in conversation agent:** instead of skipping draft for `not_interested`, agent now generates a conversational reply that respects the customer's position and directly answers any question they asked. No proposed times, no rebooking push.
+- **Booking_intent / callback_request guardrails:** classifier now explicitly requires affirmative intent for both categories. "I don't think I need a call just yet" + question → `not_interested`. Declining + asking a question is never `booking_intent` or `callback_request`.
+- **`AGENT_SYSTEM` strengthened:** rules added prohibiting re-proposing something the customer already declined. Agent must respond to what the customer actually said rather than following a pipeline script toward booking.
+- **Per-page analytics in Internal Metrics:** new "Per-page Analytics" section (Section 4b) with expandable `<details>` elements for 10 key pages. Shows page view count + action event bar chart per page. `conversations_detail` aggregates all `/conversations/{id}` page events server-side.
+- **Server-side action event tracking:** `log_event` calls added after draft generation, draft queue, and approve-send so Internal Metrics shows draft behavior without requiring frontend tracking.
+- **Action event naming:** sidebar nav events renamed from generic `nav_click` to descriptive `nav_to_{page}` names. `"unknown"` entries and `page_view`/`error` types excluded from Feature Engagement display.
+- **Email CRLF normalization:** `_normalize_email_body()` now strips `\r\n` and `\r` before splitting on `\n{2,}` — fixes paragraph detection failing on textarea submissions from browsers that send CRLF line endings.
 
 ### 2026-03-12 — Phase 7 (Analytics + Internal Metrics), Conversation Page, Error Tracking
 - Analytics Dashboard (`/analytics`): customer base composition, outreach funnel, revenue ROI, time-range filter (30d/90d/All), `core/analytics.py` with 7 server-side aggregation functions
@@ -109,7 +128,7 @@
 | 5 | Customer Scoring + Revenue Dashboard | ✅ Complete | Live |
 | 6 | Booking Conversion Flow + Google Calendar | ✅ Core complete | Classifier, calendar, meetings queue live |
 | 6b | Booking Confirmation Detection + Calendar Write-back | 🔵 Active | Job 02 in plans/ |
-| 7 | Customer Analytics Page + Product Analytics | ⬜ Planned | Jobs 03 + 04 in plans/; Job 04 before 03 |
+| 7 | Customer Analytics Page + Product Analytics | ✅ Complete | Jobs 03 + 04 done; per-page analytics + error tracking added 2026-03-13 |
 | 8 | Outreach Composer Redesign | ⬜ Planned | See backlog |
 | 9 | SMS Channel (Twilio) | ⬜ Planned | |
 | 10 | Service Interval Prediction | ⬜ Planned | |
@@ -124,7 +143,7 @@
 **Goal:** When a customer replies with booking intent, Foreman automatically detects it, proposes real available calendar slots, and closes the loop. The operator's job becomes reviewing and confirming — not managing scheduling back-and-forth manually.
 
 ### Response Classifier (✅ Complete)
-- [x] `agents/response_classifier.py`: Claude classifier, 5 categories (booking_intent / callback_request / price_inquiry / not_interested / unclear)
+- [x] `agents/response_classifier.py`: Claude classifier, 7 categories (booking_intent / booking_confirmed / callback_request / price_inquiry / not_interested / unsubscribe_request / unclear)
 - [x] Wired into reply detector pipeline (auto-runs on each new inbound reply)
 - [x] Stores classification on `OutreachLog.response_classification` + `classified_at`
 - [x] Conversation workspace shows classification badge + recommended next action
@@ -167,7 +186,7 @@
 
 ## Phase 7 — Customer Analytics + Product Analytics
 
-**Status:** ⬜ Planned. Full specs in `plans/job_03_customer_analytics/plan.md` and `plans/job_04_product_analytics/plan.md`.
+**Status:** ✅ Complete. Extended 2026-03-13 with per-page analytics breakdown and server-side action event tracking.
 **Execution order:** Job 04 (Product Analytics) → Job 03 (Customer Analytics) — so that `/analytics` itself is instrumented when built.
 
 ### Job 04 — Product Analytics Instrumentation
@@ -186,6 +205,10 @@ All aggregations server-side in new `core/analytics.py`. Chart.js via CDN. Time-
 
 ## Backlog / TODOs
 
+### ~~BUG — Email Body CRLF / Formatting on Recipient Side~~ ✅ Fixed (2026-03-13)
+- Root cause: browser textarea submissions use `\r\n` line endings; `_normalize_email_body()` only split on `\n{2,}` so `\r\n\r\n` paragraph breaks were not detected
+- Fix: strip `\r\n` → `\n` and `\r` → `\n` before the regex split. Outbound emails now render as clean paragraphs on recipient side.
+
 ### BUG — Stale Customer Analyzer Profiles After Reseed (PRIORITY)
 - **Symptom:** After wiping + reseeding the DB and rerunning Customer Analyzer, a specific customer's profile still shows old/stale data from before the reseed.
 - **Likely causes to investigate:**
@@ -201,15 +224,10 @@ All aggregations server-side in new `core/analytics.py`. Chart.js via CDN. Time-
 - `_agent_last_run` dict updated after every run (manual + scheduled) — agents page shows accurate last-run timestamps
 - Reply Detector dual-pass: Pass 1 thread scan + Pass 2 inbox address scan; per-message RFC dedup; `"replied"` status included
 
-### BUG — Email Body Line Breaks / Formatting on Recipient Side
-- **Symptom:** Customer receives an email where the body has hard line breaks that look exactly like how the draft appeared in the site's text box — with visible enter/return characters creating a broken layout. The same email looks fine in the operator's Gmail inbox.
-- **Root cause hypothesis:** The email body is stored and sent as plain text (`MIMEText(body, "plain", "utf-8")`). Claude's draft output contains literal `\n` newlines formatted for display in an HTML `<textarea>`. When sent as `text/plain`, some email clients (especially on mobile, or Gmail's web client when viewing on the recipient side) render each `\n` as a visible line break. The operator's Gmail view may be collapsing them. Alternatively, the body contains `\r\n` or double-newlines that format strangely.
-- **Fix plan:**
-  - Audit what the raw `body` string looks like before it's passed to `MIMEText` — print/log the first 500 chars at send time.
-  - Normalize line endings: strip leading/trailing whitespace, collapse 3+ consecutive newlines to 2, ensure consistent `\n` (not `\r\n`).
-  - Consider sending as `text/html` with `<br>` for line breaks and `<p>` for paragraphs — more consistent across clients.
-  - Or: send multipart/alternative with both plain and HTML parts.
-- **Files:** `integrations/gmail.py` (`send_email()`), `agents/conversation_agent.py` (where body is generated)
+### ~~BUG — Email Body Line Breaks / Formatting on Recipient Side~~ ✅ Fixed (2026-03-13)
+- Root cause confirmed: browser textarea uses `\r\n`; `_normalize_email_body()` only matched `\n{2,}` so paragraph breaks weren't detected and the body was sent as a wall of text
+- Fix: `body.replace('\r\n', '\n').replace('\r', '\n')` before regex split in `api/app.py`
+- **Files:** `api/app.py` (`_normalize_email_body()`)
 
 ### ~~BUG — Email Threading Still Creating New Thread on Second Reply~~ ✅ Fixed (2026-03-12)
 - Root cause confirmed: `In-Reply-To` was referencing our last outbound RFC Message-ID, not the customer's reply — recipient's client couldn't connect the chain
@@ -282,11 +300,19 @@ Priority tiers: high ≥70, medium 40–69, low <40.
 
 | Classification | Trigger Example | Next Action |
 |---|---|---|
-| `booking_intent` | "Yes, when can you come?" | Propose 3 calendar slots |
-| `callback_request` | "Call me to discuss" | Flag for operator, show phone number |
+| `booking_intent` | "Yes, when can you come?" | Propose 3 calendar slots — requires affirmative explicit intent |
+| `booking_confirmed` | "Tuesday at 10am works for me" | Create Booking record |
+| `callback_request` | "Call me to discuss" | Flag for operator, show phone number — requires affirmative call request |
 | `price_inquiry` | "How much would that cost?" | Draft pricing response |
-| `not_interested` | "Please remove me" | Unsubscribe, suppress all future outreach |
+| `not_interested` | "Not right now, but what does a tune-up include?" | Draft conversational reply answering question; do NOT re-propose booking |
+| `unsubscribe_request` | "Remove me from your list" | Mark unsubscribed, suppress all outreach, skip draft |
 | `unclear` | Ambiguous reply | Surface to operator with full context |
+
+**Key rules (2026-03-13):**
+- Decline + question → `not_interested` (never `booking_intent` or `callback_request`)
+- "I don't need a call just yet" → `not_interested` even if they also ask a question
+- `unsubscribe_request` requires final, unambiguous language — soft declines always land on `not_interested`
+- `not_interested` does NOT set `reactivation_status = "unsubscribed"` — customer stays active
 
 ---
 
@@ -355,6 +381,17 @@ venv/bin/python -m agents.follow_up --operator-id 1 --limit 20
 | 2026-03-12 | Run Now synchronous | Agent run endpoints block until completion; JS auto-reloads. `_agent_last_run` dict updated by all agents for accurate last-run display. |
 | 2026-03-12 | Conversation draft on demand | Draft only generated on explicit user click — not on page load. Pending draft in queue shows notice + link to prevent duplicate drafts. |
 | 2026-03-12 | Active Conversation banner | Customer detail page shows conversation state (reply count, thread count, amber warning for orphaned threads) with link to workspace. |
+| 2026-03-13 | unsubscribe_request split | `not_interested` = soft decline, conversation stays active, draft generated. `unsubscribe_request` = explicit permanent opt-out only — triggers unsubscribed status + draft skip. Root cause: Samuel Keller declined service + asked a question, system auto-unsubscribed him and hid the conversation. |
+| 2026-03-13 | Reply detector all-customer scan | Removed ACTIVE_STATUSES/SCAN_STATUSES filters from Pass 1 and Pass 2. All customers with outbound gmail_thread_id are scanned. A customer marked unsubscribed or booked can still reply and that reply must be logged. |
+| 2026-03-13 | not_interested draft behavior | Instead of skipping draft on not_interested, conversation_agent now uses NOT_INTERESTED_PROMPT — answers the customer's actual question, respects their position, no rebooking push. Better matches real business behavior (decliner who asked a question deserves an answer). |
+| 2026-03-13 | booking_intent guardrails | Added explicit IMPORTANT rules to classifier: decline + question → not_interested (not booking_intent). Affirmative, explicit booking desire required. "I don't think I need a call just yet" is not callback_request. |
+| 2026-03-13 | Updates inbox | New /updates page consolidates operator action items: needs response (highest priority), overdue follow-ups, recent inbound replies, upcoming follow-ups. Sidebar amber badge shows count of conversations awaiting reply. |
+| 2026-03-13 | Per-page analytics | Internal Metrics Section 4b: expandable breakdown per page using server-side page_event_data dict. conversations_detail aggregates all /conversations/{id} events into one synthetic key. |
+| 2026-03-13 | Server-side event tracking | draft_generated, draft_queued, outreach_sent logged via log_event() in API endpoints — not dependent on frontend JS. Ensures Internal Metrics populates even if client-side tracking is blocked. |
+| 2026-03-13 | Email formatting (multipart/alternative) | MIMEText + charset="utf-8" uses QP encoding which wraps at 76 chars; Gmail recipient strips = but keeps \r\n → hard line breaks. Fix: send_email() now sends multipart/alternative. HTML part via _plain_to_html() uses <p> tags for natural reflow. Plain text retained as fallback. |
+| 2026-03-13 | Conversation agent temporal awareness | AGENT_SYSTEM "respect their decision" rule scoped to current message only. If customer previously declined but now asks for it, grant the request. NOT_INTERESTED_PROMPT hard "no proposed times" ban removed — only skip if customer didn't ask. |
+| 2026-03-13 | Regenerate draft context routing | /api/outreach/{id}/regenerate reads response_classification from existing draft. If set, routes to conversation_agent.generate_response with latest inbound_log_id. Falls back to cold reactivation only when no classification. |
+| 2026-03-13 | Signoff formatting | AGENT_SYSTEM instructs agent to put name on its own line: "Best,\nArjuna" not "Best, Arjuna". |
 
 ---
 
@@ -367,26 +404,26 @@ I'm continuing work on Foreman — an AI reactivation system for HVAC & field se
 
 Read PROJECT_PLAN.md and README.md first for full context, then look at any code files attached.
 
-Current state (2026-03-12): Phases 1–6 core complete. Phase 6b active.
+Current state (2026-03-13): Phases 1–7 complete. Phase 6b active.
 Live: https://web-production-3df3a.up.railway.app
 
-Completed recently (2026-03-12 session):
-- Email threading fix: rfc_message_id stored on inbound OutreachLog at detection; send_email() uses it as explicit In-Reply-To
-- Dual-pass reply detection: thread scan + inbox address scan fallback; per-message RFC dedup; "replied" status included in scan
-- Active Conversation banner on customer detail page (reply count, thread count, orphaned thread warning)
-- Run Now buttons now synchronous (block until done, auto-reload page); _agent_last_run dict for accurate last-run display
-- Follow-up Sequencer added to APScheduler daily schedule
-- Conversation page: draft only generated on explicit click (removed auto-load); pending draft notice if already in queue
-- Plans scaffold: plans/ directory with job_01–04 folders, plan.md + tasks/ per job
+Completed recently (2026-03-13 session):
+- Email formatting fixed: send_email() now sends multipart/alternative (plain + HTML). Root cause was
+  Python MIMEText QP encoding wrapping at 76 chars; Gmail recipient stripped = markers → hard line breaks.
+  _plain_to_html() converts paragraphs to <p> tags for natural reflow.
+- Conversation agent context-awareness: AGENT_SYSTEM "respect decision" rule scoped to current message.
+  Agent grants requests even if customer declined same thing earlier in thread. NOT_INTERESTED_PROMPT
+  hard "no proposed times" ban removed. PRICE_RESPONSE_PROMPT gives ballpark ranges + alternatives.
+- Regenerate draft fixed: /api/outreach/{id}/regenerate now routes to conversation_agent for reply drafts
+  (uses stored response_classification + latest inbound_log_id). Cold outreach still uses reactivation agent.
+- Signoff formatting: AGENT_SYSTEM enforces "Best,\nArjuna" (name on own line).
 
 Open bugs:
-1. Email body line breaks: Claude drafts sent as plain text have hard line breaks that render badly on recipient side
-2. Stale customer profiles after reseed: Customer Analyzer re-reads Gmail API which has old real emails
+1. Stale customer profiles after reseed: Customer Analyzer re-reads Gmail API which has old real emails
 
 Next priorities:
 1. Job 01 (plans/job_01_customer_analyzer/): fix Customer Analyzer to use OutreachLog as primary source — plan + tasks already written
-2. Fix email body line breaks (normalize body before MIMEText, or send as HTML)
-3. Phase 6b — booking confirmation detection → create Booking record automatically (plans/job_02_booking_confirmation/)
+2. Phase 6b — booking confirmation detection → create Booking record automatically (plans/job_02_booking_confirmation/)
 
 Make code changes directly and summarize what changed.
 ```

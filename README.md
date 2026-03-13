@@ -18,7 +18,7 @@ Foreman identifies dormant customers, scores them by rebooking probability, reac
 3. Finds dormant customers and drafts personalized outreach in the operator's voice (Reactivation Analyzer)
 4. Builds customer context from Gmail correspondence (Customer Analyzer — runs daily)
 5. Tracks replies by Gmail thread; feeds context-aware follow-up drafts (Reply Detector + Follow-up Sequencer)
-6. Classifies inbound responses: booking intent → propose calendar slots, not interested → suppress
+6. Classifies inbound responses into 7 categories: booking intent → propose slots, not interested → answer their question conversationally, unsubscribe → suppress
 7. Reads Google Calendar to propose real available slots; detects confirmation replies and creates bookings automatically *(Phase 6b)*
 8. Tracks booked jobs and revenue attributed to Foreman outreach
 9. Analytics page: customer base composition, outreach funnel, revenue ROI *(Phase 7)*
@@ -28,10 +28,10 @@ Foreman identifies dormant customers, scores them by rebooking probability, reac
 
 ---
 
-## Product State (2026-03-12)
+## Product State (2026-03-13)
 
 > **Open bugs:** stale customer profiles after reseed. See `PROJECT_PLAN.md` backlog for details.
-> **Recently completed:** Analytics Dashboard (`/analytics`), Internal Metrics Dashboard (`/internal/product`), error tracking log (all 500s captured to DB), Schedule Appointment panel on conversation page, post-booking notes & revenue capture, email body line-break normalization fix, conversation page redesign (lazy timeline summaries), nav reorganization.
+> **Recently completed:** Email line-break formatting fixed (multipart/alternative HTML — root cause was Python QP encoding). Conversation agent over-restriction fixed (respects current message intent, not conversation history). Regenerate draft now context-aware (routes reply drafts to conversation agent). Signoff formatting enforced (name on its own line).
 
 ## Feature Status
 
@@ -44,7 +44,7 @@ Foreman identifies dormant customers, scores them by rebooking probability, reac
 | Reply Detector agent (background, 15-min poll) | ✅ |
 | Follow-up Sequencer agent | ✅ |
 | Priority Scorer agent (scheduled daily) | ✅ |
-| Response Classifier agent (booking_intent / not_interested / etc.) | ✅ |
+| Response Classifier agent (7 categories: booking_intent / callback_request / price_inquiry / not_interested / booking_confirmed / unsubscribe_request / unclear) | ✅ |
 | Dry Run / Production mode toggle | ✅ |
 | Outreach queue: Needs Approval + Send Pending sections | ✅ |
 | Meetings Queue (booking proposals, separate from outreach) | ✅ |
@@ -63,6 +63,13 @@ Foreman identifies dormant customers, scores them by rebooking probability, reac
 | Calendar view (agenda-style, color-coded by service type) | ✅ |
 | Email thread continuity (In-Reply-To + References RFC headers) | ✅ Fixed — In-Reply-To uses customer's own reply RFC Message-ID |
 | Dual-pass reply detection (thread scan + inbox address scan fallback) | ✅ |
+| Reply detector scans ALL customers regardless of status (no active-only filter) | ✅ |
+| Updates inbox (`/updates`) — needs response, overdue follow-ups, recent replies, upcoming | ✅ |
+| Per-page analytics in Internal Metrics (expandable breakdown per page) | ✅ |
+| Server-side action event tracking (draft_generated, draft_queued, outreach_sent) | ✅ |
+| `unsubscribe_request` classifier category (explicit opt-out only — `not_interested` stays active) | ✅ |
+| `NOT_INTERESTED_PROMPT` — conversational reply for declined-but-engaged customers | ✅ |
+| booking_intent / callback_request classification guardrails (decline + question → not_interested) | ✅ |
 | Active Conversation banner on customer detail page | ✅ |
 | Run Now buttons synchronous with auto-reload + last-run tracking | ✅ |
 | Follow-up Sequencer added to daily APScheduler | ✅ |
@@ -77,6 +84,9 @@ Foreman identifies dormant customers, scores them by rebooking probability, reac
 | Product Analytics instrumentation + internal dashboard | ✅ Phase 7 (Job 04) |
 | Error tracking log (all 500s captured, visible in Internal Metrics) | ✅ |
 | Lazy timeline summaries (conversation page loads without Claude block) | ✅ |
+| Email body formatting (multipart/alternative HTML, natural reflow on recipient side) | ✅ Fixed |
+| Conversation agent context-awareness (respects current message, grants requests that were prev. declined) | ✅ Fixed |
+| Regenerate draft context routing (reply drafts re-run conversation agent, not cold reactivation) | ✅ Fixed |
 | **BUG: Stale customer profiles after reseed** | 🔴 Open |
 | Booking confirmation detection + job record creation | ⬜ Phase 6b (Job 02) |
 | Calendar write-back (create Google Calendar event on booking) | ⬜ Phase 6b (Job 02) |
@@ -155,7 +165,8 @@ foreman/
 │   ├── calendar.html             # Agenda view, color-coded by service type
 │   ├── agents.html               # All agents with Run Now buttons
 │   ├── analytics.html            # Customer analytics: funnel, ROI, composition
-│   └── internal_product.html     # Internal metrics: events, drafts, error log
+│   ├── updates.html              # Operator inbox: needs response, follow-ups, recent replies
+│   └── internal_product.html     # Internal metrics: events, drafts, per-page analytics, error log
 ├── data/
 │   ├── README.md                 # Reseed docs: how to run, add emails, add scenarios
 │   ├── reseed.py                 # Full wipe + reseed: 200 customers, rich conversations
@@ -190,7 +201,8 @@ foreman/
 | `/calendar` | Calendar view: agenda by month, color-coded by service type |
 | `/agents` | Agent catalog: status, last run, Run Now buttons for all agents |
 | `/analytics` | Analytics: customer base composition, outreach funnel, revenue ROI |
-| `/internal/product` | Internal metrics: page views, draft behavior, error log |
+| `/updates` | Operator inbox: needs response, overdue follow-ups, recent replies, upcoming follow-ups |
+| `/internal/product` | Internal metrics: page views, draft behavior, per-page analytics, error log |
 
 ---
 
@@ -230,10 +242,14 @@ When a reply is detected, a Claude agent classifies it and routes to the next ac
 | Classification | Example | Next Action |
 |---|---|---|
 | `booking_intent` | "Yes, when can you come?" | Propose 3 real calendar slots |
+| `booking_confirmed` | "Tuesday at 10am works for me" | Create Booking record |
 | `callback_request` | "Call me to discuss" | Flag for operator, surface phone number |
 | `price_inquiry` | "How much would that cost?" | Draft pricing response |
-| `not_interested` | "Please remove me" | Unsubscribe, suppress all future outreach |
+| `not_interested` | "Not right now, but what does a tune-up include?" | Draft conversational reply answering their question — no booking push |
+| `unsubscribe_request` | "Please remove me from your list" | Mark unsubscribed, suppress all future outreach, skip draft |
 | `unclear` | Ambiguous reply | Surface to operator with full context |
+
+**Key distinction:** `not_interested` is a soft decline — the conversation stays active and the agent responds conversationally to any question the customer asked. `unsubscribe_request` requires explicit, unambiguous opt-out language — only this marks the customer unsubscribed.
 
 ---
 
