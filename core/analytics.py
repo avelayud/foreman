@@ -299,6 +299,50 @@ def get_recent_conversions(db, operator_id: int, limit: int = 10) -> list:
     return result
 
 
+def get_revenue_pipeline(db, operator_id: int) -> dict:
+    """
+    Foreman-attributed revenue pipeline funnel.
+    Booked → Visit Confirmed → Quote Given → Job Won
+    Only counts bookings linked to operator's customers.
+    """
+    from core.models import Booking  # already imported at top, safe to re-reference
+
+    bookings = (
+        db.query(Booking)
+        .join(Customer, Booking.customer_id == Customer.id)
+        .filter(Customer.operator_id == operator_id)
+        .all()
+    )
+
+    total_booked = len(bookings)
+    total_estimated = sum(b.estimated_value or 0 for b in bookings if b.estimated_value)
+
+    visit_confirmed = [b for b in bookings if (b.visit_outcome or "pending") in ("confirmed", "no_show") or b.quote_given]
+    confirmed_count = len(visit_confirmed)
+    show_rate = f"{round(confirmed_count / total_booked * 100)}%" if total_booked else "—"
+
+    quote_given = [b for b in bookings if b.quote_given]
+    quote_count = len(quote_given)
+    total_quotes = sum(b.quote_given or 0 for b in quote_given)
+
+    jobs_won = [b for b in bookings if b.job_won]
+    won_count = len(jobs_won)
+    total_revenue = sum(b.final_invoice_value or 0 for b in jobs_won)
+    close_rate = f"{round(won_count / quote_count * 100)}%" if quote_count else "—"
+
+    return {
+        "booked_count": total_booked,
+        "booked_estimated": round(total_estimated, 2),
+        "confirmed_count": confirmed_count,
+        "show_rate": show_rate,
+        "quote_count": quote_count,
+        "total_quotes": round(total_quotes, 2),
+        "won_count": won_count,
+        "total_revenue": round(total_revenue, 2),
+        "close_rate": close_rate,
+    }
+
+
 def get_engagement_by_status(db, operator_id: int) -> list:
     """Count customers per reactivation_status bucket."""
     from sqlalchemy import func

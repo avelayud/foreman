@@ -1,0 +1,353 @@
+{% extends "base.html" %}
+{% block page_title %}Settings{% endblock %}
+
+{% block extra_styles %}
+<style>
+  .setting-section { margin-bottom: 32px; }
+  .setting-row { display: flex; align-items: flex-start; gap: 32px; margin-bottom: 24px; }
+  .setting-label-col { width: 220px; flex-shrink: 0; }
+  .setting-label { font-size: 13px; font-weight: 600; color: var(--text); margin-bottom: 3px; }
+  .setting-hint { font-size: 11.5px; color: var(--text-3); line-height: 1.45; }
+  .setting-control { flex: 1; }
+
+  /* Slider */
+  .slider-wrap { display: flex; align-items: center; gap: 12px; }
+  .slider-wrap input[type=range] {
+    flex: 1; height: 4px; border-radius: 2px; outline: none; cursor: pointer;
+    accent-color: var(--navy);
+  }
+  .slider-value {
+    font-size: 12px; font-family: 'IBM Plex Mono', monospace; font-weight: 600;
+    color: var(--navy); width: 28px; text-align: center;
+  }
+  .slider-endpoints { display: flex; justify-content: space-between; margin-top: 6px; }
+  .slider-endpoints span { font-size: 10.5px; color: var(--text-3); }
+  .slider-label-live {
+    font-size: 12px; font-weight: 500; color: var(--text-2); margin-top: 6px;
+    font-style: italic;
+  }
+
+  /* Job priority list */
+  .priority-list { list-style: none; }
+  .priority-item {
+    display: flex; align-items: center; gap: 10px;
+    padding: 9px 14px; background: var(--surface); border: 1px solid var(--border);
+    border-radius: 7px; margin-bottom: 6px; font-size: 13px; font-weight: 500; color: var(--text);
+  }
+  .priority-item .rank {
+    font-size: 10px; font-family: 'IBM Plex Mono', monospace; color: var(--text-4);
+    width: 18px; text-align: center;
+  }
+  .priority-item .job-name { flex: 1; }
+  .priority-btn {
+    background: none; border: 1px solid var(--border); border-radius: 5px;
+    width: 26px; height: 26px; cursor: pointer; font-size: 11px; color: var(--text-3);
+    display: flex; align-items: center; justify-content: center;
+    transition: all 0.1s;
+  }
+  .priority-btn:hover:not(:disabled) { border-color: var(--navy); color: var(--navy); }
+  .priority-btn:disabled { opacity: 0.25; cursor: default; }
+
+  /* Estimate ranges */
+  .range-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; }
+  .range-card {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 14px;
+  }
+  .range-card-label {
+    font-size: 10px; font-family: 'IBM Plex Mono', monospace; letter-spacing: 1.2px;
+    text-transform: uppercase; color: var(--text-3); margin-bottom: 10px; display: block;
+  }
+  .range-inputs { display: flex; align-items: center; gap: 8px; }
+  .range-inputs input {
+    flex: 1; background: var(--bg); border: 1px solid var(--border); border-radius: 6px;
+    padding: 7px 10px; font-size: 13px; font-family: 'IBM Plex Mono', monospace;
+    color: var(--text); outline: none; text-align: right;
+    transition: border-color 0.15s;
+  }
+  .range-inputs input:focus { border-color: var(--navy); background: var(--surface); }
+  .range-dash { font-size: 12px; color: var(--text-3); }
+  .range-dollar { font-size: 12px; color: var(--text-3); }
+
+  /* Seasonal grid */
+  .seasonal-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; }
+  .seasonal-card {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 14px;
+  }
+  .seasonal-card-label {
+    font-size: 10px; font-family: 'IBM Plex Mono', monospace; letter-spacing: 1.2px;
+    text-transform: uppercase; color: var(--text-3); margin-bottom: 10px; display: block;
+  }
+  .month-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 5px; }
+  .month-cb { display: flex; flex-direction: column; align-items: center; gap: 3px; cursor: pointer; }
+  .month-cb input { cursor: pointer; accent-color: var(--navy); width: 14px; height: 14px; }
+  .month-cb span { font-size: 10px; font-family: 'IBM Plex Mono', monospace; color: var(--text-3); }
+
+  /* Context textarea */
+  .context-wrap { position: relative; }
+  .context-wrap textarea {
+    width: 100%; resize: vertical; min-height: 80px;
+    background: var(--bg); border: 1px solid var(--border); border-radius: 7px;
+    padding: 12px 14px; font-size: 13px; font-family: 'IBM Plex Sans', sans-serif;
+    color: var(--text); outline: none; line-height: 1.5;
+    transition: border-color 0.15s;
+  }
+  .context-wrap textarea:focus { border-color: var(--navy); background: var(--surface); }
+  .char-count { font-size: 10.5px; font-family: 'IBM Plex Mono', monospace; color: var(--text-4); margin-top: 5px; text-align: right; }
+
+  /* Save bar */
+  .save-bar {
+    position: sticky; bottom: 0; background: var(--surface); border-top: 1px solid var(--border);
+    padding: 16px 0; display: flex; align-items: center; gap: 14px; margin-top: 32px;
+    z-index: 20;
+  }
+  .save-toast {
+    font-size: 12px; font-family: 'IBM Plex Mono', monospace; color: var(--green);
+    display: none;
+  }
+  .save-toast.visible { display: inline; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div style="max-width:800px">
+
+  <div style="margin-bottom:28px">
+    <h1 style="font-size:20px;font-weight:700;color:var(--text);margin-bottom:6px">Settings</h1>
+    <p style="font-size:13px;color:var(--text-3);line-height:1.5">
+      These values feed directly into every agent prompt — tone, pricing, job priorities.
+      The more accurate they are, the better the drafts sound.
+    </p>
+  </div>
+
+  <!-- ── TONE & STYLE ── -->
+  <div class="card" style="padding:28px;margin-bottom:20px">
+    <div class="card-label">Tone & Style</div>
+
+    <div class="setting-row">
+      <div class="setting-label-col">
+        <div class="setting-label">Communication tone</div>
+        <div class="setting-hint">How warm vs. direct should the operator's voice be in drafts?</div>
+      </div>
+      <div class="setting-control">
+        <div class="slider-wrap">
+          <input type="range" id="toneSlider" min="1" max="5" value="{{ config.tone }}"
+            oninput="updateSlider('tone', this.value)">
+          <span class="slider-value" id="toneVal">{{ config.tone }}</span>
+        </div>
+        <div class="slider-endpoints">
+          <span>Consultative &amp; warm</span>
+          <span>Direct &amp; no-frills</span>
+        </div>
+        <div class="slider-label-live" id="toneLabel"></div>
+      </div>
+    </div>
+
+    <div class="setting-row" style="margin-bottom:0">
+      <div class="setting-label-col">
+        <div class="setting-label">Sales approach</div>
+        <div class="setting-hint">How assertively should agents push for a booking?</div>
+      </div>
+      <div class="setting-control">
+        <div class="slider-wrap">
+          <input type="range" id="salesy_Slider" min="1" max="5" value="{{ config.salesy }}"
+            oninput="updateSlider('salesy_', this.value)">
+          <span class="slider-value" id="salesy_Val">{{ config.salesy }}</span>
+        </div>
+        <div class="slider-endpoints">
+          <span>Low-key, relationship-first</span>
+          <span>Confident push</span>
+        </div>
+        <div class="slider-label-live" id="salesy_Label"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── JOB PRIORITY ── -->
+  <div class="card" style="padding:28px;margin-bottom:20px">
+    <div class="card-label">Job Priority</div>
+    <p style="font-size:12.5px;color:var(--text-3);margin-bottom:16px;line-height:1.5">
+      Drag the order that matters most to your business. Agents prioritize customers based on their last service type.
+    </p>
+
+    <ul class="priority-list" id="priorityList">
+      {% for job_type in config.job_priority %}
+      <li class="priority-item" data-job="{{ job_type }}">
+        <span class="rank">{{ loop.index }}</span>
+        <span class="job-name">{{ job_type|capitalize }}</span>
+        <button class="priority-btn" onclick="movePriority('{{ job_type }}', -1)" title="Move up">▲</button>
+        <button class="priority-btn" onclick="movePriority('{{ job_type }}', 1)" title="Move down">▼</button>
+      </li>
+      {% endfor %}
+    </ul>
+  </div>
+
+  <!-- ── ESTIMATE RANGES ── -->
+  <div class="card" style="padding:28px;margin-bottom:20px">
+    <div class="card-label">Estimate Ranges</div>
+    <p style="font-size:12.5px;color:var(--text-3);margin-bottom:16px;line-height:1.5">
+      Typical price ranges for your market. Agents use these when customers ask about cost.
+    </p>
+
+    <div class="range-grid">
+      {% for job_type in config.job_priority %}
+      {% set rng = config.estimate_ranges.get(job_type, {}) %}
+      <div class="range-card">
+        <span class="range-card-label">{{ job_type|capitalize }}</span>
+        <div class="range-inputs">
+          <span class="range-dollar">$</span>
+          <input type="number" id="range_min_{{ job_type }}" value="{{ rng.get('min', 0) }}"
+            min="0" max="999999" placeholder="Min">
+          <span class="range-dash">—</span>
+          <span class="range-dollar">$</span>
+          <input type="number" id="range_max_{{ job_type }}" value="{{ rng.get('max', 0) }}"
+            min="0" max="999999" placeholder="Max">
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+
+  <!-- ── SEASONAL FOCUS ── -->
+  <div class="card" style="padding:28px;margin-bottom:20px">
+    <div class="card-label">Seasonal Focus</div>
+    <p style="font-size:12.5px;color:var(--text-3);margin-bottom:16px;line-height:1.5">
+      Which months should agents push each service type? Helps time outreach for peak seasons.
+    </p>
+
+    <div class="seasonal-grid">
+      {% set months_short = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'] %}
+      {% for job_type in config.job_priority %}
+      {% set active_months = config.seasonal_focus.get(job_type, []) %}
+      <div class="seasonal-card">
+        <span class="seasonal-card-label">{{ job_type|capitalize }}</span>
+        <div class="month-grid">
+          {% for i in range(1, 13) %}
+          <label class="month-cb">
+            <input type="checkbox" class="seasonal-cb" data-job="{{ job_type }}" value="{{ i }}"
+              {% if i in active_months %}checked{% endif %}>
+            <span>{{ months_short[i-1] }}</span>
+          </label>
+          {% endfor %}
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+
+  <!-- ── BUSINESS CONTEXT ── -->
+  <div class="card" style="padding:28px;margin-bottom:20px">
+    <div class="card-label">Business Context</div>
+    <p style="font-size:12.5px;color:var(--text-3);margin-bottom:16px;line-height:1.5">
+      One or two sentences about your business that agents should always know — service area, specialties, anything that makes you different.
+    </p>
+    <div class="context-wrap">
+      <textarea id="businessContext" maxlength="200"
+        placeholder="e.g. We serve the greater Boston area, specialize in high-efficiency heat pump installs, and are a family-owned shop with 18 years in the field."
+        oninput="updateCharCount()">{{ config.business_context or '' }}</textarea>
+      <div class="char-count"><span id="charCount">{{ (config.business_context or '')|length }}</span>/200</div>
+    </div>
+  </div>
+
+  <!-- ── SAVE BAR ── -->
+  <div class="save-bar">
+    <button class="btn-primary" onclick="saveSettings()">Save Settings</button>
+    <span class="save-toast" id="saveToast">✓ Saved</span>
+  </div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const TONE_LABELS = {1:'Consultative and warm',2:'Leaning consultative',3:'Balanced',4:'Leaning direct',5:'Direct and no-frills'};
+const SALESY_LABELS = {1:'Low-key, relationship-first',2:'Mostly low-key',3:'Balanced',4:'Mostly assertive',5:'Confident push for the booking'};
+
+function updateSlider(id, val) {
+  const v = parseInt(val);
+  document.getElementById(id + 'Val').textContent = v;
+  if (id === 'tone') document.getElementById('toneLabel').textContent = TONE_LABELS[v] || '';
+  if (id === 'salesy_') document.getElementById('salesy_Label').textContent = SALESY_LABELS[v] || '';
+}
+
+function updateCharCount() {
+  const len = document.getElementById('businessContext').value.length;
+  document.getElementById('charCount').textContent = len;
+}
+
+function movePriority(jobType, direction) {
+  const list = document.getElementById('priorityList');
+  const items = Array.from(list.querySelectorAll('.priority-item'));
+  const idx = items.findIndex(el => el.dataset.job === jobType);
+  const newIdx = idx + direction;
+  if (newIdx < 0 || newIdx >= items.length) return;
+  if (direction === -1) {
+    list.insertBefore(items[idx], items[newIdx]);
+  } else {
+    list.insertBefore(items[newIdx], items[idx]);
+  }
+  // Re-number ranks
+  Array.from(list.querySelectorAll('.priority-item')).forEach((el, i) => {
+    el.querySelector('.rank').textContent = i + 1;
+  });
+}
+
+function getSeasonalFocus() {
+  const result = {};
+  document.querySelectorAll('.seasonal-cb').forEach(cb => {
+    const job = cb.dataset.job;
+    if (!result[job]) result[job] = [];
+    if (cb.checked) result[job].push(parseInt(cb.value));
+  });
+  return result;
+}
+
+function getPriority() {
+  return Array.from(document.querySelectorAll('#priorityList .priority-item'))
+    .map(el => el.dataset.job);
+}
+
+function getEstimateRanges() {
+  const priority = getPriority();
+  const ranges = {};
+  priority.forEach(jt => {
+    const minEl = document.getElementById('range_min_' + jt);
+    const maxEl = document.getElementById('range_max_' + jt);
+    if (minEl && maxEl) {
+      ranges[jt] = { min: parseInt(minEl.value) || 0, max: parseInt(maxEl.value) || 0 };
+    }
+  });
+  return ranges;
+}
+
+async function saveSettings() {
+  const payload = {
+    tone: parseInt(document.getElementById('toneSlider').value),
+    salesy: parseInt(document.getElementById('salesy_Slider').value),
+    job_priority: getPriority(),
+    estimate_ranges: getEstimateRanges(),
+    seasonal_focus: getSeasonalFocus(),
+    business_context: document.getElementById('businessContext').value,
+  };
+
+  try {
+    const res = await fetch('/api/settings', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) throw new Error('Save failed');
+    const toast = document.getElementById('saveToast');
+    toast.classList.add('visible');
+    setTimeout(() => toast.classList.remove('visible'), 2500);
+    trackEvent('settings_saved', {page:'settings'});
+  } catch (err) {
+    alert('Could not save settings: ' + err.message);
+  }
+}
+
+// Init labels on load
+updateSlider('tone', document.getElementById('toneSlider').value);
+updateSlider('salesy_', document.getElementById('salesy_Slider').value);
+updateCharCount();
+</script>
+{% endblock %}

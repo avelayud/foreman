@@ -20,15 +20,16 @@ class CustomerScorer:
         "interested", "available", "when can", "sounds good", "go ahead",
     )
 
-    def score(self, customer, jobs: list, outreach_logs: list) -> dict:
+    def score(self, customer, jobs: list, outreach_logs: list, job_priority: list = None) -> dict:
         """
         Score a customer on 5 signals.
         Returns {total, breakdown, priority_tier}.
+        job_priority: ordered list of job type names (highest priority first).
         """
         recency = self._recency_score(customer)
         lifetime_value = self._lifetime_value_score(customer)
         frequency = self._frequency_score(jobs)
-        job_type = self._job_type_score(jobs)
+        job_type = self._job_type_score(jobs, job_priority=job_priority)
         engagement = self._engagement_score(outreach_logs)
 
         total = recency + lifetime_value + frequency + job_type + engagement
@@ -74,10 +75,28 @@ class CustomerScorer:
         """Max 15 pts. count * 3, capped at 15."""
         return min(len(jobs) * 3, 15)
 
-    def _job_type_score(self, jobs: list) -> int:
-        """Max 15 pts. Any maintenance = 15, repair-only = 8, single job = 4."""
+    def _job_type_score(self, jobs: list, job_priority: list = None) -> int:
+        """
+        Max 15 pts. Uses operator's job_priority list when available.
+        Top-priority job type in customer's history = 15. Second = 10. Rest = 8. Single job = 4.
+        Falls back to maintenance-keyword logic when no priority list is provided.
+        """
         if not jobs or len(jobs) == 1:
             return 4
+
+        if job_priority:
+            # Find the highest-ranked job type in the customer's history
+            svc_types = [(job.service_type or "").lower() for job in jobs]
+            for rank, ptype in enumerate(job_priority):
+                if any(ptype in svc for svc in svc_types):
+                    if rank == 0:
+                        return 15
+                    elif rank == 1:
+                        return 10
+                    else:
+                        return 8
+
+        # Fallback: keyword-based maintenance detection
         for job in jobs:
             svc = (job.service_type or "").lower()
             if any(kw in svc for kw in self.MAINTENANCE_KEYWORDS):
@@ -106,6 +125,15 @@ def score_all_customers(db_session, operator_id: int = 1) -> int:
     """
     from core.models import Customer, Job, OutreachLog
 
+    # Load job priority from operator config (graceful fallback if config not set)
+    job_priority = None
+    try:
+        from core.operator_config import get_config
+        cfg = get_config(operator_id)
+        job_priority = cfg.get("job_priority")
+    except Exception:
+        pass
+
     scorer = CustomerScorer()
     customers = db_session.query(Customer).filter_by(operator_id=operator_id).all()
 
@@ -115,7 +143,7 @@ def score_all_customers(db_session, operator_id: int = 1) -> int:
             customer_id=customer.id, operator_id=operator_id
         ).all()
 
-        result = scorer.score(customer, jobs, outreach_logs)
+        result = scorer.score(customer, jobs, outreach_logs, job_priority=job_priority)
 
         customer.score = result["total"]
         customer.score_breakdown = json.dumps(result["breakdown"])

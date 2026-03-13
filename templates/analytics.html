@@ -184,6 +184,31 @@
       </div>
     </div>
 
+    <!-- Revenue Pipeline -->
+    <div class="section-header">Foreman-Attributed Pipeline</div>
+    <div class="funnel-row" style="margin-bottom:8px">
+      <div class="funnel-step">
+        <div class="funnel-num">{{ revenue_pipeline.booked_count }}</div>
+        <div class="funnel-lbl">Booked</div>
+        <div class="funnel-rate" style="color:var(--text-3)">${{ "{:,.0f}".format(revenue_pipeline.booked_estimated) }} est.</div>
+      </div>
+      <div class="funnel-step">
+        <div class="funnel-num">{{ revenue_pipeline.confirmed_count }}</div>
+        <div class="funnel-lbl">Visit Confirmed</div>
+        <div class="funnel-rate">{{ revenue_pipeline.show_rate }} show</div>
+      </div>
+      <div class="funnel-step">
+        <div class="funnel-num">{{ revenue_pipeline.quote_count }}</div>
+        <div class="funnel-lbl">Quote Given</div>
+        <div class="funnel-rate" style="color:var(--text-3)">${{ "{:,.0f}".format(revenue_pipeline.total_quotes) }}</div>
+      </div>
+      <div class="funnel-step">
+        <div class="funnel-num">{{ revenue_pipeline.won_count }}</div>
+        <div class="funnel-lbl">Job Won</div>
+        <div class="funnel-rate" style="color:var(--green)">${{ "{:,.0f}".format(revenue_pipeline.total_revenue) }} · {{ revenue_pipeline.close_rate }} close</div>
+      </div>
+    </div>
+
     <!-- Outreach Funnel -->
     <div class="section-header">Outreach Funnel</div>
     <div class="funnel-row">

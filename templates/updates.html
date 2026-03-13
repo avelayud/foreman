@@ -43,6 +43,31 @@
   <div style="font-size:12px;color:var(--text-3);font-family:'IBM Plex Mono',monospace">What needs attention right now</div>
 </div>
 
+{# ── Needs Post-Visit Update (blocking — shown first) ── #}
+{% if post_visit_updates %}
+<div class="updates-section">
+  <div class="updates-section-title">
+    <span>Needs Post-Visit Update</span>
+    <span class="badge badge-red">{{ post_visit_updates|length }}</span>
+  </div>
+  {% for item in post_visit_updates %}
+  <div class="update-card urgent">
+    <div>
+      <div class="update-name">
+        <a href="/conversations/{{ item.customer_id }}" style="text-decoration:none;color:var(--navy)">{{ item.customer_name }}</a>
+      </div>
+      <div class="update-meta">
+        Appointment · {% if item.appointment_date %}{{ item.appointment_date | est }}{% else %}Date unknown{% endif %}
+        {% if item.estimated_value %} · Est. ${{ "{:,.0f}".format(item.estimated_value) }}{% endif %}
+      </div>
+      <div class="update-preview" style="color:var(--red);font-size:11.5px;font-weight:500">What happened? Log the outcome to unlock this conversation.</div>
+    </div>
+    <a href="/conversations/{{ item.customer_id }}" class="btn-primary" style="text-decoration:none;font-size:12px;padding:7px 14px;flex-shrink:0">Log Outcome →</a>
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
 {# ── Needs Response ── #}
 <div class="updates-section">
   <div class="updates-section-title">

@@ -397,6 +397,13 @@ def _generate_booking_confirmation(
     # Generate confirmation email draft
     client = anthropic.Anthropic(api_key=config.ANTHROPIC_API_KEY)
     try:
+        from core.operator_config import get_agent_context
+        _conf_agent_ctx = get_agent_context(operator_id)
+        _conf_system = _conf_agent_ctx + "\n\n" + AGENT_SYSTEM
+    except Exception:
+        _conf_system = AGENT_SYSTEM
+
+    try:
         user_prompt = _fmt(
             BOOKING_CONFIRMATION_PROMPT,
             tone=op_tone,
@@ -411,7 +418,7 @@ def _generate_booking_confirmation(
         message = client.messages.create(
             model=config.CLAUDE_MODEL,
             max_tokens=500,
-            system=AGENT_SYSTEM,
+            system=_conf_system,
             messages=[{"role": "user", "content": user_prompt}],
         )
         raw = message.content[0].text.strip()
@@ -661,10 +668,17 @@ def generate_response(
         print(f"  [conversation_agent] Drafting {classification} response for {cust_name}")
 
     try:
+        from core.operator_config import get_agent_context
+        agent_ctx = get_agent_context(operator_id)
+        system_prompt = agent_ctx + "\n\n" + AGENT_SYSTEM
+    except Exception:
+        system_prompt = AGENT_SYSTEM
+
+    try:
         message = client.messages.create(
             model=config.CLAUDE_MODEL,
             max_tokens=700,
-            system=AGENT_SYSTEM,
+            system=system_prompt,
             messages=[{"role": "user", "content": user_prompt}],
         )
         raw = message.content[0].text.strip()

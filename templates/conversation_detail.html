@@ -200,6 +200,59 @@
   {# ═══ RIGHT: Message viewer → Action banner → Draft → Schedule ═══ #}
   <div class="right-col">
 
+    {# ── Post-Visit Banner (blocking — shown when appointment passed with no outcome logged) ── #}
+    {% if customer_needs_post_visit and active_booking %}
+    <div id="post-visit-banner" style="background:#fef2f2;border:1px solid #fca5a5;border-radius:8px;padding:14px 16px;margin-bottom:2px">
+      <div style="font-size:12px;font-weight:700;color:#991b1b;margin-bottom:4px">
+        Your appointment with {{ customer.name }} was on {{ active_booking.slot_start.strftime('%a %b %-d') if active_booking.slot_start else 'a past date' }}. What happened?
+      </div>
+      <div style="font-size:11.5px;color:var(--text-2);margin-bottom:12px;line-height:1.4">Log the outcome to unlock this conversation and keep your revenue data accurate.</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button onclick="openQuoteModal()" class="btn-primary" style="font-size:12px;padding:7px 14px;background:#15803d">Quote Given</button>
+        <button onclick="confirmVisitNoQuote()" class="btn-ghost" style="font-size:12px;padding:7px 14px">Confirmed — No Quote Yet</button>
+        <button onclick="confirmNoShow()" style="all:unset;cursor:pointer;font-size:12px;color:var(--red);font-family:'IBM Plex Mono',monospace;padding:7px 10px;border:1px solid #fca5a5;border-radius:7px">No Show</button>
+      </div>
+    </div>
+    {% elif customer_needs_post_visit %}
+    <div style="background:#fef2f2;border:1px solid #fca5a5;border-radius:8px;padding:14px 16px;margin-bottom:2px">
+      <div style="font-size:12px;font-weight:700;color:#991b1b;margin-bottom:4px">Post-visit outcome needed</div>
+      <div style="font-size:11.5px;color:var(--text-2)">An appointment has passed without a logged outcome. Check the booking panel below.</div>
+    </div>
+    {% endif %}
+
+    {# ── Awaiting Estimate Banner (auto-booking with no value captured yet) ── #}
+    {% if active_booking and active_booking.awaiting_estimate %}
+    <div id="estimate-banner" style="background:#eff6ff;border:1px solid #93c5fd;border-radius:8px;padding:14px 16px;margin-bottom:2px">
+      <div style="font-size:12px;font-weight:700;color:var(--blue);margin-bottom:4px">Booking created for {{ active_booking.slot_start.strftime('%a %b %-d') if active_booking.slot_start else 'upcoming date' }}. What's the estimated job value?</div>
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+        <input type="number" id="estimate-input" placeholder="e.g. 850" min="0" step="50" style="border:1px solid var(--border);border-radius:7px;padding:7px 10px;font-size:13px;width:130px;outline:none">
+        <label style="font-size:12px;color:var(--text-3);display:flex;align-items:center;gap:5px"><input type="checkbox" id="estimate-unknown-cb" onchange="toggleEstimateUnknown()"> Value Unknown</label>
+        <button onclick="saveEstimate({{ active_booking.id }})" class="btn-primary" style="font-size:12px;padding:7px 14px">Save</button>
+        <span id="estimate-status" style="font-size:12px"></span>
+      </div>
+    </div>
+    {% endif %}
+
+    {# ── Job Won Banner (shown after quote given, before close) ── #}
+    {% if active_booking and active_booking.visit_outcome == 'confirmed' and active_booking.quote_given and not active_booking.job_won %}
+    <div style="background:#f0fdf4;border:1px solid #a7f3d0;border-radius:8px;padding:14px 16px;margin-bottom:2px">
+      <div style="font-size:12px;font-weight:700;color:var(--green);margin-bottom:3px">Quote given: ${{ "{:,.0f}".format(active_booking.quote_given) }}</div>
+      <div style="font-size:11.5px;color:var(--text-2);margin-bottom:10px">Did the customer accept? Mark as Job Won to record final revenue.</div>
+      <button onclick="openCloseModal({{ active_booking.id }}, {{ active_booking.quote_given }})" class="btn-primary" style="font-size:12px;padding:7px 14px;background:var(--green)">Mark as Job Won</button>
+    </div>
+    {% endif %}
+
+    {# ── Job Won Summary (closed bookings) ── #}
+    {% if active_booking and active_booking.job_won %}
+    <div style="background:#f0fdf4;border:1px solid #a7f3d0;border-radius:8px;padding:12px 14px;margin-bottom:2px;display:flex;align-items:center;gap:10px">
+      <span style="font-size:16px">✓</span>
+      <div>
+        <div style="font-size:12px;font-weight:700;color:var(--green)">Job Won — ${{ "{:,.0f}".format(active_booking.final_invoice_value) }}</div>
+        <div style="font-size:11px;color:var(--text-3);font-family:'IBM Plex Mono',monospace">Revenue captured</div>
+      </div>
+    </div>
+    {% endif %}
+
     {# ── Expanded message — appears at top when a timeline item is clicked ── #}
     <div class="panel" id="msg-panel" style="display:none">
       <div class="panel-head">
@@ -328,6 +381,13 @@
           <div class="booking-field" style="margin-bottom:10px">
             <label>Email subject</label>
             <input type="text" id="book-subject" placeholder="Your appointment is confirmed">
+          </div>
+          <div class="booking-field" style="margin-bottom:10px">
+            <label>Estimated job value ($) <span style="color:var(--red)">*</span></label>
+            <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+              <input type="number" id="book-estimated-value" placeholder="e.g. 850" min="0" step="50" style="max-width:160px" onchange="toggleEstimateUnknownBook()">
+              <label style="font-size:12px;color:var(--text-3);display:flex;align-items:center;gap:5px;margin-top:0"><input type="checkbox" id="book-estimate-unknown" onchange="toggleEstimateUnknownBook()"> Value Unknown</label>
+            </div>
           </div>
           <div class="booking-field" style="margin-bottom:14px">
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
@@ -476,12 +536,41 @@
   </div>
 </div>
 
+{# ── Post-visit quote modal ── #}
+<div id="quote-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:1000;align-items:center;justify-content:center">
+  <div style="background:#fff;border-radius:10px;padding:24px;width:360px;max-width:90vw;box-shadow:0 8px 32px rgba(0,0,0,0.18)">
+    <div style="font-size:14px;font-weight:700;color:var(--navy);margin-bottom:4px">What was the quote amount?</div>
+    <div style="font-size:12px;color:var(--text-3);margin-bottom:16px">This will be stored as the quoted price for this job.</div>
+    <input type="number" id="quote-amount-input" placeholder="e.g. 1200" min="0" step="50" style="width:100%;border:1px solid var(--border);border-radius:7px;padding:9px 11px;font-size:14px;outline:none;box-sizing:border-box;margin-bottom:14px">
+    <div style="display:flex;gap:8px;justify-content:flex-end">
+      <button onclick="closeQuoteModal()" class="btn-ghost" style="font-size:13px;padding:7px 16px">Cancel</button>
+      <button onclick="submitQuote()" class="btn-primary" style="font-size:13px;padding:7px 16px;background:#15803d">Save Quote</button>
+    </div>
+    <div id="quote-modal-status" style="font-size:12px;margin-top:8px;color:var(--red)"></div>
+  </div>
+</div>
+
+{# ── Job Won / Close modal ── #}
+<div id="close-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:1000;align-items:center;justify-content:center">
+  <div style="background:#fff;border-radius:10px;padding:24px;width:360px;max-width:90vw;box-shadow:0 8px 32px rgba(0,0,0,0.18)">
+    <div style="font-size:14px;font-weight:700;color:var(--navy);margin-bottom:4px">What was the final invoice value?</div>
+    <div style="font-size:12px;color:var(--text-3);margin-bottom:16px">Record the final amount charged to close out this job.</div>
+    <input type="number" id="invoice-amount-input" placeholder="e.g. 1200" min="0" step="50" style="width:100%;border:1px solid var(--border);border-radius:7px;padding:9px 11px;font-size:14px;outline:none;box-sizing:border-box;margin-bottom:14px">
+    <div style="display:flex;gap:8px;justify-content:flex-end">
+      <button onclick="closeCloseModal()" class="btn-ghost" style="font-size:13px;padding:7px 16px">Cancel</button>
+      <button onclick="submitClose()" class="btn-primary" style="font-size:13px;padding:7px 16px;background:var(--green)">Mark as Won</button>
+    </div>
+    <div id="close-modal-status" style="font-size:12px;margin-top:8px;color:var(--red)"></div>
+  </div>
+</div>
+
 {% endblock %}
 
 {% block scripts %}
 <script>
   const TIMELINE_EVENTS = {{ timeline_events_json|tojson }};
   const CUSTOMER_ID = {{ customer.id }};
+  const ACTIVE_BOOKING_ID = {{ active_booking.id if active_booking else 'null' }};
   let selectedIndex = -1;
 
   // Lazy-load AI summaries after page render so they don't block initial load
@@ -616,6 +705,12 @@
     }
   }
 
+  function toggleEstimateUnknownBook() {
+    const cb = document.getElementById('book-estimate-unknown');
+    const input = document.getElementById('book-estimated-value');
+    if (cb && input) input.disabled = cb.checked;
+  }
+
   // ── Schedule Appointment panel ─────────────────────────────────────────────
 
   // Pre-seed booking id if one already exists on page load
@@ -683,6 +778,14 @@
       return;
     }
 
+    const estimateUnknown = document.getElementById('book-estimate-unknown')?.checked || false;
+    const estimatedValueStr = document.getElementById('book-estimated-value')?.value?.trim() || '';
+    if (!estimateUnknown && !estimatedValueStr) {
+      statusEl.style.color = 'var(--red)';
+      statusEl.textContent = '⚠ Enter an estimated job value or check "Value Unknown".';
+      return;
+    }
+
     if (!window.confirm('Confirm this booking? This will:\n• Create a Google Calendar event\n• Auto-send a .ics invite to the customer\n• Send a confirmation email')) return;
 
     btn.disabled = true;
@@ -690,6 +793,8 @@
     statusEl.textContent = '';
 
     try {
+      const estimUnknown = document.getElementById('book-estimate-unknown')?.checked || false;
+      const estimVal = estimUnknown ? null : (parseFloat(document.getElementById('book-estimated-value')?.value) || null);
       const res = await fetch(`/api/customer/${CUSTOMER_ID}/book-and-invite`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -700,6 +805,8 @@
           notes: document.getElementById('book-notes').value || '',
           email_subject: document.getElementById('book-subject').value || '',
           email_body: document.getElementById('book-body').value || '',
+          estimated_value: estimVal,
+          estimate_unknown: estimUnknown,
         }),
       });
       const data = await res.json().catch(() => ({}));
@@ -729,6 +836,127 @@
       btn.textContent = 'Send Invite + Confirmation Email';
     }
   }
+
+  // ── Post-Visit flows ───────────────────────────────────────────────────────
+
+  function openQuoteModal() {
+    const modal = document.getElementById('quote-modal');
+    modal.style.display = 'flex';
+    document.getElementById('quote-amount-input').focus();
+  }
+  function closeQuoteModal() {
+    document.getElementById('quote-modal').style.display = 'none';
+    document.getElementById('quote-modal-status').textContent = '';
+  }
+
+  let _closeBookingId = ACTIVE_BOOKING_ID;
+  function openCloseModal(bookingId, prefillAmount) {
+    _closeBookingId = bookingId;
+    const inp = document.getElementById('invoice-amount-input');
+    if (prefillAmount) inp.value = prefillAmount;
+    document.getElementById('close-modal').style.display = 'flex';
+    inp.focus();
+  }
+  function closeCloseModal() {
+    document.getElementById('close-modal').style.display = 'none';
+    document.getElementById('close-modal-status').textContent = '';
+  }
+
+  async function submitQuote() {
+    const amount = parseFloat(document.getElementById('quote-amount-input').value);
+    const statusEl = document.getElementById('quote-modal-status');
+    if (!amount || amount <= 0) { statusEl.textContent = 'Enter a valid amount.'; return; }
+    if (!ACTIVE_BOOKING_ID) { statusEl.textContent = 'No booking found.'; return; }
+    try {
+      const res = await fetch(`/api/booking/${ACTIVE_BOOKING_ID}/quote`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ quote_given: amount }),
+      });
+      if (!res.ok) throw new Error('Save failed');
+      closeQuoteModal();
+      window.location.reload();
+    } catch (e) {
+      statusEl.textContent = e.message;
+    }
+  }
+
+  async function submitClose() {
+    const amount = parseFloat(document.getElementById('invoice-amount-input').value);
+    const statusEl = document.getElementById('close-modal-status');
+    if (!amount || amount <= 0) { statusEl.textContent = 'Enter a valid amount.'; return; }
+    if (!_closeBookingId) { statusEl.textContent = 'No booking found.'; return; }
+    try {
+      const res = await fetch(`/api/booking/${_closeBookingId}/close`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ final_invoice_value: amount }),
+      });
+      if (!res.ok) throw new Error('Save failed');
+      closeCloseModal();
+      window.location.reload();
+    } catch (e) {
+      statusEl.textContent = e.message;
+    }
+  }
+
+  async function confirmVisitNoQuote() {
+    if (!ACTIVE_BOOKING_ID) return;
+    if (!window.confirm('Mark as confirmed with no quote yet? You can add a quote later.')) return;
+    try {
+      await fetch(`/api/booking/${ACTIVE_BOOKING_ID}/confirm-visit`, { method: 'POST' });
+      window.location.reload();
+    } catch (e) { alert('Error: ' + e.message); }
+  }
+
+  async function confirmNoShow() {
+    if (!ACTIVE_BOOKING_ID) return;
+    if (!window.confirm('Mark as no show? This will unlock the conversation.')) return;
+    try {
+      await fetch(`/api/booking/${ACTIVE_BOOKING_ID}/no-show`, { method: 'POST' });
+      window.location.reload();
+    } catch (e) { alert('Error: ' + e.message); }
+  }
+
+  // ── Awaiting Estimate flow ─────────────────────────────────────────────────
+
+  function toggleEstimateUnknown() {
+    const cb = document.getElementById('estimate-unknown-cb');
+    const input = document.getElementById('estimate-input');
+    if (cb && input) input.disabled = cb.checked;
+  }
+
+  async function saveEstimate(bookingId) {
+    const statusEl = document.getElementById('estimate-status');
+    const cb = document.getElementById('estimate-unknown-cb');
+    const input = document.getElementById('estimate-input');
+    const isUnknown = cb && cb.checked;
+    const value = input ? parseFloat(input.value) : null;
+    if (!isUnknown && (!value || value <= 0)) {
+      if (statusEl) { statusEl.style.color = 'var(--red)'; statusEl.textContent = 'Enter an amount or check Value Unknown.'; }
+      return;
+    }
+    try {
+      const res = await fetch(`/api/booking/${bookingId}/estimate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ estimated_value: isUnknown ? null : value, estimate_unknown: isUnknown }),
+      });
+      if (!res.ok) throw new Error('Save failed');
+      if (statusEl) { statusEl.style.color = 'var(--green)'; statusEl.textContent = '✓ Saved'; }
+      setTimeout(() => window.location.reload(), 700);
+    } catch (e) {
+      if (statusEl) { statusEl.style.color = 'var(--red)'; statusEl.textContent = e.message; }
+    }
+  }
+
+  // Close modals on backdrop click
+  document.addEventListener('click', function(e) {
+    const quoteModal = document.getElementById('quote-modal');
+    const closeModal = document.getElementById('close-modal');
+    if (e.target === quoteModal) closeQuoteModal();
+    if (e.target === closeModal) closeCloseModal();
+  });
 
   async function saveBookingNotes() {
     if (!_bookingId) { window.location.reload(); return; }

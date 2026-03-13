@@ -185,10 +185,17 @@ def run(operator_id: int, limit: int = 20):
         tone = json.dumps(op.get("tone_profile") or {}, indent=2)
 
         try:
+            from core.operator_config import get_agent_context
+            try:
+                _fu_ctx = get_agent_context(operator_id)
+                _fu_system = _fu_ctx + "\n\n" + FOLLOWUP_SYSTEM
+            except Exception:
+                _fu_system = FOLLOWUP_SYSTEM
+
             message = client.messages.create(
                 model=config.CLAUDE_MODEL,
                 max_tokens=600,
-                system=FOLLOWUP_SYSTEM,
+                system=_fu_system,
                 messages=[{
                     "role": "user",
                     "content": FOLLOWUP_USER.format(

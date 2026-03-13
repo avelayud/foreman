@@ -109,6 +109,7 @@ def _auto_create_booking(operator_id: int, customer_id: int, inbound_log_id: int
             status="confirmed",
             source="ai_outreach",
             service_type=service_type,
+            awaiting_estimate=True,  # prompt operator to capture job value
         )
         db.add(booking)
         db.flush()

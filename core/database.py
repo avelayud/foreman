@@ -44,6 +44,7 @@ SCHEMA_PATCHES = {
     "operators": {
         "voice_profiles": "TEXT",
         "outreach_mode": "VARCHAR",
+        "operator_config": "TEXT",
     },
     "customers": {
         "assigned_voice_id": "VARCHAR",
@@ -54,9 +55,18 @@ SCHEMA_PATCHES = {
         "estimated_job_value": "FLOAT",
         "service_interval_days": "INTEGER",
         "predicted_next_service": "TIMESTAMP",
+        "needs_post_visit_update": "BOOLEAN",
     },
     "bookings": {
         "estimated_value": "FLOAT",
+        "estimate_unknown": "BOOLEAN",
+        "awaiting_estimate": "BOOLEAN",
+        "visit_outcome": "VARCHAR",
+        "quote_given": "FLOAT",
+        "quote_given_at": "TIMESTAMP",
+        "job_won": "BOOLEAN",
+        "final_invoice_value": "FLOAT",
+        "closed_at": "TIMESTAMP",
     },
     "outreach_logs": {
         "gmail_thread_id": "VARCHAR",

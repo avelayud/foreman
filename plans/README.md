@@ -13,17 +13,21 @@ Plans are authored in Claude app and executed in Claude Code.
 ```
 plans/
 ├── README.md
-├── job_01_customer_analyzer/       # active
-│   ├── plan.md
-│   └── tasks/
-│       ├── task_01_*.md
-│       └── task_02_*.md
-├── job_02_booking_confirmation/    # backlog
-├── job_03_customer_analytics/      # backlog
-└── job_04_product_analytics/       # backlog
+├── job_05_operator_config_page/    # Phase 8 — next up
+│   └── plan.md
+├── job_06_prompt_quality/          # Phase 8 — depends on 05
+│   └── plan.md
+├── job_07_sms_send_path/           # Phase 9
+│   └── plan.md
+├── job_08_sms_ux/                  # Phase 9 — depends on 07
+│   └── plan.md
+├── job_09_revenue_data_integrity/  # Phase 8 — parallel with 05
+│   └── plan.md
+└── job_10_jobber_integration/      # Phase 10
+    └── plan.md
 ```
 
-Move a job folder to `plans/done/` when all tasks are complete.
+Delete a job folder when all tasks are complete. Context is preserved in PROJECT_PLAN.md.
 
 ---
 
@@ -66,14 +70,18 @@ Any gotchas, design decisions, or watch-outs.
 
 ## Job Execution Order
 
-| Job | Name | Status | Depends On |
-|-----|------|--------|------------|
-| 01 | Customer Analyzer Fix | 🔵 Active | — |
-| 02 | Booking Confirmation + Calendar Write-back | ⬜ Backlog | — |
-| 04 | Product Analytics Instrumentation | ⬜ Backlog | — |
-| 03 | Customer Analytics Page | ⬜ Backlog | 01, 04 |
+| Job | Name | Phase | Status | Depends On |
+|-----|------|-------|--------|------------|
+| 05 | Operator Config Page | 8 | ⬜ Not started | — |
+| 09 | Revenue Data Integrity | 8 | ⬜ Not started | — *(parallel with 05)* |
+| 06 | Prompt Quality Sprint | 8 | ⬜ Not started | Job 05 |
+| 07 | Twilio SMS Send Path | 9 | ⬜ Not started | — |
+| 08 | SMS Draft Pipeline + UX | 9 | ⬜ Not started | Job 07 |
+| 10 | Jobber / HousecallPro Integration | 10 | ⬜ Not started | Phases 8+9 stable |
 
-> Job 04 runs before Job 03 so that the `/analytics` page itself is instrumented when built.
+> Jobs 05 and 09 are fully independent — run them in parallel (two Claude Code sessions).
+> Job 06 requires Job 05 (`core/operator_config.py`) to exist first.
+> Job 07 and 08 are sequential. Job 10 is standalone once Phases 8+9 are done.
 
 ---
 

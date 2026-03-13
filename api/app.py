@@ -657,6 +657,18 @@ def _run_follow_up_job():
         print(f"[follow_up] error: {exc}", flush=True)
 
 
+def _run_post_visit_job():
+    """Flag customers whose appointments have passed but outcome not logged."""
+    global _agent_last_run
+    try:
+        from agents.post_visit import run as run_post_visit
+        count = run_post_visit(operator_id=OPERATOR_ID)
+        _agent_last_run["post_visit"] = datetime.utcnow()
+        print(f"[post_visit] Daily run complete. {count} customer(s) flagged.", flush=True)
+    except Exception as exc:
+        print(f"[post_visit] error: {exc}", flush=True)
+
+
 def _refresh_queued_drafts():
     """
     Scans pending queue drafts. If a customer replied after a draft was created,
@@ -725,10 +737,12 @@ def _start_scoring_scheduler():
         return
     _run_scoring_job()  # run once immediately
     _run_customer_analyzer_job()
+    _run_post_visit_job()  # flag any past-due appointments on startup
     scheduler = BackgroundScheduler(daemon=True)
     scheduler.add_job(_run_scoring_job, "interval", hours=24, id="daily_scoring")
     scheduler.add_job(_run_customer_analyzer_job, "interval", hours=24, id="daily_analyzer")
     scheduler.add_job(_run_follow_up_job, "interval", hours=24, id="daily_follow_up")
+    scheduler.add_job(_run_post_visit_job, "interval", hours=24, id="daily_post_visit")
     scheduler.add_job(_refresh_queued_drafts, "interval", minutes=15, id="queue_refresh")
     scheduler.start()
     _scoring_scheduler = scheduler
@@ -2033,6 +2047,36 @@ def updates_page(request: Request):
         follow_up_overdue.sort(key=lambda x: x["days_overdue"], reverse=True)
         follow_up_upcoming.sort(key=lambda x: x["days_until_due"])
 
+        # Post-visit updates: customers with past appointments needing outcome logged
+        post_visit_customers_raw = (
+            db.query(Customer)
+            .filter(
+                Customer.operator_id == OPERATOR_ID,
+                Customer.needs_post_visit_update == True,
+            )
+            .all()
+        )
+        post_visit_updates = []
+        for c in post_visit_customers_raw:
+            booking = (
+                db.query(Booking)
+                .filter(
+                    Booking.customer_id == c.id,
+                    Booking.operator_id == OPERATOR_ID,
+                    Booking.visit_outcome == "pending",
+                    Booking.slot_start < now,
+                )
+                .order_by(Booking.slot_start.desc())
+                .first()
+            )
+            post_visit_updates.append({
+                "customer_id": c.id,
+                "customer_name": c.name,
+                "appointment_date": booking.slot_start if booking and booking.slot_start else None,
+                "estimated_value": booking.estimated_value if booking else None,
+                "booking_id": booking.id if booking else None,
+            })
+
     return templates.TemplateResponse("updates.html", {
         "request": request,
         "active": "updates",
@@ -2044,6 +2088,7 @@ def updates_page(request: Request):
         "needs_response": needs_response,
         "follow_up_overdue": follow_up_overdue,
         "follow_up_upcoming": follow_up_upcoming,
+        "post_visit_updates": post_visit_updates,
     })
 
 
@@ -2215,12 +2260,20 @@ def conversation_detail(request: Request, customer_id: int):
                 "service_type": active_booking_raw.service_type or "",
                 "notes": active_booking_raw.notes or "",
                 "estimated_value": active_booking_raw.estimated_value,
+                "estimate_unknown": bool(active_booking_raw.estimate_unknown),
+                "awaiting_estimate": bool(active_booking_raw.awaiting_estimate),
                 "source": active_booking_raw.source or "manual",
                 "created_at": active_booking_raw.created_at,
+                "visit_outcome": active_booking_raw.visit_outcome or "pending",
+                "quote_given": active_booking_raw.quote_given,
+                "job_won": bool(active_booking_raw.job_won),
+                "final_invoice_value": active_booking_raw.final_invoice_value,
             }
             if active_booking_raw
             else None
         )
+        # Pass needs_post_visit_update flag from customer for banner logic
+        customer_needs_post_visit = bool(getattr(customer, "needs_post_visit_update", False))
 
         log_entries = []
         for log in logs:
@@ -2357,6 +2410,7 @@ def conversation_detail(request: Request, customer_id: int):
         "pending_draft_summary": pending_draft_summary,
         "pending_draft_created_at": pending_draft_created_at,
         "active_booking": active_booking,
+        "customer_needs_post_visit": customer_needs_post_visit,
     })
 
 
@@ -2386,19 +2440,27 @@ def mark_booked(log_id: int, req: MarkBookedRequest):
     """
     Mark an outreach thread as converted to a booked job.
     Sets converted_to_job=True, records job value, updates customer status.
+    Blocked if customer has a pending post-visit outcome to log.
     """
     now_utc = datetime.utcnow()
     with get_db() as db:
         log = db.query(OutreachLog).filter_by(id=log_id, operator_id=OPERATOR_ID).first()
         if not log:
             raise HTTPException(status_code=404, detail="Outreach log not found")
-        log.converted_to_job = True
-        log.converted_job_value = req.job_value
-        log.converted_at = now_utc
 
         customer = db.query(Customer).filter_by(
             id=log.customer_id, operator_id=OPERATOR_ID
         ).first()
+        if customer and customer.needs_post_visit_update:
+            return JSONResponse(status_code=403, content={
+                "error": "post_visit_required",
+                "message": "Log the outcome of your appointment with this customer before closing.",
+            })
+
+        log.converted_to_job = True
+        log.converted_job_value = req.job_value
+        log.converted_at = now_utc
+
         if customer:
             customer.reactivation_status = "booked"
             if req.notes:
@@ -2412,6 +2474,7 @@ def mark_booked_by_customer(customer_id: int, req: MarkBookedRequest):
     """
     Mark a customer as booked from the dashboard (no specific log_id).
     Finds the most recent outbound log and marks it converted.
+    Blocked if customer has a pending post-visit outcome to log.
     """
     now_utc = datetime.utcnow()
     with get_db() as db:
@@ -2420,6 +2483,11 @@ def mark_booked_by_customer(customer_id: int, req: MarkBookedRequest):
         ).first()
         if not customer:
             raise HTTPException(status_code=404, detail="Customer not found")
+        if customer.needs_post_visit_update:
+            return JSONResponse(status_code=403, content={
+                "error": "post_visit_required",
+                "message": "Log the outcome of your appointment with this customer before closing.",
+            })
 
         # Find most recent outbound log (dry_run=False preferred, else any)
         log = (
@@ -2999,11 +3067,155 @@ class ConfirmBookingRequest(BaseModel):
     notes: str = ""
     email_subject: str = ""
     email_body: str = ""
+    estimated_value: float | None = None   # Required unless estimate_unknown=True
+    estimate_unknown: bool = False
 
 
 class BookingNotesRequest(BaseModel):
     notes: str = ""
     estimated_value: float | None = None
+
+
+class BookingEstimateRequest(BaseModel):
+    estimated_value: float | None = None
+    estimate_unknown: bool = False
+
+
+class BookingQuoteRequest(BaseModel):
+    quote_given: float
+
+
+class BookingCloseRequest(BaseModel):
+    final_invoice_value: float
+    notes: str | None = None
+
+
+@app.post("/api/booking/{booking_id}/estimate")
+def save_booking_estimate(booking_id: int, req: BookingEstimateRequest):
+    """Save estimated_value on booking, clear awaiting_estimate flag."""
+    with get_db() as db:
+        booking = db.query(Booking).filter_by(id=booking_id, operator_id=OPERATOR_ID).first()
+        if not booking:
+            raise HTTPException(status_code=404, detail="Booking not found")
+        if req.estimate_unknown:
+            booking.estimate_unknown = True
+        elif req.estimated_value is not None:
+            booking.estimated_value = req.estimated_value
+        else:
+            raise HTTPException(status_code=400, detail="Provide estimated_value or set estimate_unknown=true")
+        booking.awaiting_estimate = False
+    return {"status": "ok"}
+
+
+@app.post("/api/booking/{booking_id}/quote")
+def save_booking_quote(booking_id: int, req: BookingQuoteRequest):
+    """Save quote_given, set visit_outcome=confirmed, clear needs_post_visit_update."""
+    now_utc = datetime.utcnow()
+    with get_db() as db:
+        booking = db.query(Booking).filter_by(id=booking_id, operator_id=OPERATOR_ID).first()
+        if not booking:
+            raise HTTPException(status_code=404, detail="Booking not found")
+        booking.quote_given = req.quote_given
+        booking.quote_given_at = now_utc
+        booking.visit_outcome = "confirmed"
+        customer = db.query(Customer).filter_by(id=booking.customer_id).first()
+        if customer:
+            customer.needs_post_visit_update = False
+    return {"status": "ok", "visit_outcome": "confirmed"}
+
+
+@app.post("/api/booking/{booking_id}/close")
+def close_booking(booking_id: int, req: BookingCloseRequest):
+    """Save final_invoice_value, set job_won=True, update OutreachLog revenue."""
+    now_utc = datetime.utcnow()
+    with get_db() as db:
+        booking = db.query(Booking).filter_by(id=booking_id, operator_id=OPERATOR_ID).first()
+        if not booking:
+            raise HTTPException(status_code=404, detail="Booking not found")
+        booking.final_invoice_value = req.final_invoice_value
+        booking.job_won = True
+        booking.closed_at = now_utc
+        if req.notes:
+            booking.notes = req.notes
+        # Update OutreachLog for revenue attribution
+        outreach_log = (
+            db.query(OutreachLog)
+            .filter(
+                OutreachLog.customer_id == booking.customer_id,
+                OutreachLog.operator_id == OPERATOR_ID,
+                OutreachLog.converted_to_job == True,
+            )
+            .order_by(OutreachLog.created_at.desc())
+            .first()
+        )
+        if outreach_log:
+            outreach_log.converted_job_value = req.final_invoice_value
+            outreach_log.converted_at = now_utc
+    return {"status": "ok", "job_won": True}
+
+
+@app.post("/api/booking/{booking_id}/no-show")
+def booking_no_show(booking_id: int):
+    """Set visit_outcome=no_show, clear needs_post_visit_update lock."""
+    with get_db() as db:
+        booking = db.query(Booking).filter_by(id=booking_id, operator_id=OPERATOR_ID).first()
+        if not booking:
+            raise HTTPException(status_code=404, detail="Booking not found")
+        booking.visit_outcome = "no_show"
+        customer = db.query(Customer).filter_by(id=booking.customer_id).first()
+        if customer:
+            customer.needs_post_visit_update = False
+    return {"status": "ok", "visit_outcome": "no_show"}
+
+
+@app.post("/api/booking/{booking_id}/confirm-visit")
+def confirm_visit_no_quote(booking_id: int):
+    """Set visit_outcome=confirmed (no quote yet), clear lock."""
+    with get_db() as db:
+        booking = db.query(Booking).filter_by(id=booking_id, operator_id=OPERATOR_ID).first()
+        if not booking:
+            raise HTTPException(status_code=404, detail="Booking not found")
+        booking.visit_outcome = "confirmed"
+        customer = db.query(Customer).filter_by(id=booking.customer_id).first()
+        if customer:
+            customer.needs_post_visit_update = False
+    return {"status": "ok", "visit_outcome": "confirmed"}
+
+
+@app.get("/api/updates/post-visit")
+def get_post_visit_updates():
+    """Return customers needing post-visit update (for Updates inbox)."""
+    now_utc = datetime.utcnow()
+    with get_db() as db:
+        customers = (
+            db.query(Customer)
+            .filter(
+                Customer.operator_id == OPERATOR_ID,
+                Customer.needs_post_visit_update == True,
+            )
+            .all()
+        )
+        result = []
+        for c in customers:
+            booking = (
+                db.query(Booking)
+                .filter(
+                    Booking.customer_id == c.id,
+                    Booking.operator_id == OPERATOR_ID,
+                    Booking.visit_outcome == "pending",
+                    Booking.slot_start < now_utc,
+                )
+                .order_by(Booking.slot_start.desc())
+                .first()
+            )
+            result.append({
+                "customer_id": c.id,
+                "customer_name": c.name,
+                "appointment_date": booking.slot_start.isoformat() if booking and booking.slot_start else None,
+                "estimated_value": booking.estimated_value if booking else None,
+                "booking_id": booking.id if booking else None,
+            })
+    return result
 
 
 @app.post("/api/booking/{booking_id}/notes")
@@ -3220,6 +3432,12 @@ def book_and_invite(customer_id: int, req: ConfirmBookingRequest):
     Create a booking + GCal event + send confirmation email directly from the
     conversation page — no outreach queue log required.
     """
+    if not req.estimate_unknown and req.estimated_value is None:
+        raise HTTPException(
+            status_code=400,
+            detail="estimated_value is required. Provide a dollar amount or set estimate_unknown=true.",
+        )
+
     try:
         slot_start = datetime.fromisoformat(req.slot_start)
         slot_end = datetime.fromisoformat(req.slot_end)
@@ -3260,6 +3478,8 @@ def book_and_invite(customer_id: int, req: ConfirmBookingRequest):
             source="ai_outreach",
             service_type=req.service_type,
             notes=req.notes,
+            estimated_value=req.estimated_value,
+            estimate_unknown=req.estimate_unknown,
         )
         db.add(booking)
         db.flush()
@@ -4430,6 +4650,7 @@ def analytics_page(request: Request, range: str = "90", tab: str = "insights"):
         dormancy = _analytics.get_dormancy_distribution(db, OPERATOR_ID)
         funnel = _analytics.get_outreach_funnel(db, OPERATOR_ID)
         revenue = _analytics.get_revenue_stats(db, OPERATOR_ID)
+        revenue_pipeline = _analytics.get_revenue_pipeline(db, OPERATOR_ID)
         engagement_by_status = _analytics.get_engagement_by_status(db, OPERATOR_ID)
         activity_over_time = _analytics.get_activity_over_time(db, OPERATOR_ID, days=days)
         recent_conversions = _analytics.get_recent_conversions(db, OPERATOR_ID, limit=10)
@@ -4448,7 +4669,87 @@ def analytics_page(request: Request, range: str = "90", tab: str = "insights"):
         "dormancy": dormancy,
         "funnel": funnel,
         "revenue": revenue,
+        "revenue_pipeline": revenue_pipeline,
         "engagement_by_status": engagement_by_status,
         "activity_over_time": activity_over_time,
         "recent_conversions": recent_conversions,
     })
+
+
+# ── Settings (Operator Config) ────────────────────────────────────────────────
+
+@app.get("/settings", response_class=HTMLResponse)
+async def settings_page(request: Request):
+    from core.operator_config import get_config, DEFAULT_CONFIG
+    with get_db() as db:
+        op = db.query(Operator).filter_by(id=OPERATOR_ID).first()
+        operator_data = _operator_data(op)
+        conversations_attention_count = _get_conversations_attention_count(db)
+        queue_count = _get_queue_count(db)
+        log_page_view(db, request, "settings", operator_id=OPERATOR_ID)
+
+    cfg = get_config(OPERATOR_ID)
+
+    return templates.TemplateResponse("settings.html", {
+        "request": request,
+        "active": "settings",
+        "operator": operator_data,
+        "conversations_attention_count": conversations_attention_count,
+        "queue_count": queue_count,
+        "config": cfg,
+        "default_config": DEFAULT_CONFIG,
+    })
+
+
+@app.post("/api/settings")
+async def save_settings(request: Request):
+    from core.operator_config import save_config, DEFAULT_CONFIG
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid JSON")
+
+    # Validate + coerce values
+    tone = int(body.get("tone", 3))
+    salesy = int(body.get("salesy", 2))
+    tone = max(1, min(5, tone))
+    salesy = max(1, min(5, salesy))
+
+    job_priority = body.get("job_priority", DEFAULT_CONFIG["job_priority"])
+    if not isinstance(job_priority, list):
+        job_priority = DEFAULT_CONFIG["job_priority"]
+
+    estimate_ranges = body.get("estimate_ranges", {})
+    if not isinstance(estimate_ranges, dict):
+        estimate_ranges = {}
+    # Coerce min/max to int
+    clean_ranges = {}
+    for job_type, rng in estimate_ranges.items():
+        if isinstance(rng, dict):
+            clean_ranges[job_type] = {
+                "min": int(rng.get("min", 0) or 0),
+                "max": int(rng.get("max", 0) or 0),
+            }
+
+    seasonal_focus = body.get("seasonal_focus", {})
+    if not isinstance(seasonal_focus, dict):
+        seasonal_focus = {}
+    # Coerce month lists to lists of ints
+    clean_seasonal = {}
+    for job_type, months in seasonal_focus.items():
+        if isinstance(months, list):
+            clean_seasonal[job_type] = [int(m) for m in months if 1 <= int(m) <= 12]
+
+    business_context = str(body.get("business_context", ""))[:200]
+
+    cfg = {
+        "tone": tone,
+        "salesy": salesy,
+        "job_priority": job_priority,
+        "estimate_ranges": clean_ranges,
+        "seasonal_focus": clean_seasonal,
+        "business_context": business_context,
+    }
+
+    save_config(OPERATOR_ID, cfg)
+    return {"status": "saved"}

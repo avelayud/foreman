@@ -84,10 +84,17 @@ def generate_draft(client: anthropic.Anthropic, customer: dict, operator: dict) 
     days = customer["days_dormant"]
     tone = json.dumps(operator.get("tone_profile") or {}, indent=2)
 
+    try:
+        from core.operator_config import get_agent_context
+        agent_ctx = get_agent_context(operator["id"])
+        system_prompt = agent_ctx + "\n\n" + DRAFT_SYSTEM
+    except Exception:
+        system_prompt = DRAFT_SYSTEM
+
     message = client.messages.create(
         model=config.CLAUDE_MODEL,
         max_tokens=600,
-        system=DRAFT_SYSTEM,
+        system=system_prompt,
         messages=[{
             "role": "user",
             "content": DRAFT_USER.format(

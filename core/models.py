@@ -42,6 +42,11 @@ class Operator(Base):
     # Schema: [{"id": "vp_xxx", "name": "...", "role": "..."}]
     _voice_profiles = Column("voice_profiles", Text, default="[]")
 
+    # Operator config — tone, salesy, job priorities, estimate ranges, seasonal focus, business context
+    # Schema: { tone: int, salesy: int, job_priority: list[str], estimate_ranges: dict,
+    #           seasonal_focus: dict, business_context: str }
+    _operator_config = Column("operator_config", Text, default="{}")
+
     # Which external services are connected
     # Schema: { gmail: bool, google_cal: bool, sendgrid: bool, twilio: bool }
     _integrations = Column("integrations", Text, default="{}")
@@ -86,6 +91,14 @@ class Operator(Base):
     @voice_profiles.setter
     def voice_profiles(self, value):
         self._voice_profiles = json.dumps(value)
+
+    @property
+    def operator_config(self):
+        return json.loads(self._operator_config or "{}")
+
+    @operator_config.setter
+    def operator_config(self, value):
+        self._operator_config = json.dumps(value)
 
     def __repr__(self):
         return f"<Operator {self.business_name}>"
@@ -137,6 +150,9 @@ class Customer(Base):
     _customer_profile = Column("customer_profile", Text, nullable=True)
 
     notes = Column(Text)
+
+    # Post-visit tracking
+    needs_post_visit_update = Column(Boolean, default=False)  # Cleared when operator logs outcome
 
     # Phase 5: scoring engine output
     score = Column(Integer, default=0)
@@ -227,6 +243,17 @@ class Booking(Base):
     service_type = Column(String)
     notes = Column(Text)
     estimated_value = Column(Float, nullable=True)  # Operator's estimate of job value ($)
+    estimate_unknown = Column(Boolean, default=False)  # True if operator explicitly marked value unknown
+    awaiting_estimate = Column(Boolean, default=False)  # True if auto-created and estimate not yet captured
+
+    # Post-visit outcome tracking
+    visit_outcome = Column(String, default="pending")   # pending / confirmed / no_show
+    quote_given = Column(Float, nullable=True)
+    quote_given_at = Column(DateTime, nullable=True)
+    job_won = Column(Boolean, default=False)
+    final_invoice_value = Column(Float, nullable=True)
+    closed_at = Column(DateTime, nullable=True)
+
     google_cal_event_id = Column(String)  # Populated if synced to Google Cal
     created_at = Column(DateTime, default=datetime.utcnow)
 

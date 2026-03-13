@@ -16,13 +16,13 @@ Foreman identifies dormant customers, scores them by rebooking probability, reac
 1. Learns operator voice from sent Gmail (Tone Profiler)
 2. Scores every past customer 0–100 by rebooking probability (Scoring Engine)
 3. Finds dormant customers and drafts personalized outreach in the operator's voice (Reactivation Analyzer)
-4. Builds customer context from Gmail correspondence (Customer Analyzer — runs daily)
+4. Builds customer context from Gmail correspondence and OutreachLog history (Customer Analyzer — runs daily)
 5. Tracks replies by Gmail thread; feeds context-aware follow-up drafts (Reply Detector + Follow-up Sequencer)
 6. Classifies inbound responses into 7 categories: booking intent → propose slots, not interested → answer their question conversationally, unsubscribe → suppress
-7. Reads Google Calendar to propose real available slots; detects confirmation replies and creates bookings automatically *(Phase 6b)*
+7. Reads Google Calendar to propose real available slots; detects confirmation replies and creates bookings automatically
 8. Tracks booked jobs and revenue attributed to Foreman outreach
-9. Analytics page: customer base composition, outreach funnel, revenue ROI *(Phase 7)*
-10. Product analytics: internal event tracking, draft quality metrics, operator behavior *(Phase 7)*
+9. Analytics page: customer base composition, outreach funnel, revenue ROI
+10. Product analytics: internal event tracking, draft quality metrics, operator behavior
 
 **Target customer:** HVAC, plumbing, and electrical contractors. Owner-operated teams of 3–15. Not highly technical. HVAC is the primary beachhead.
 
@@ -30,7 +30,7 @@ Foreman identifies dormant customers, scores them by rebooking probability, reac
 
 ## Product State (2026-03-13)
 
-> **All phases through 6b complete.** Customer Analyzer now reads from OutreachLog (DB-first, Gmail fallback) — profiles populate for all 200 customers. Booking confirmation auto-detected: `booking_confirmed` reply → Booking record + Google Calendar event created automatically. Email formatting fixed (multipart/alternative HTML). Conversation agent context-awareness fixed. Next: Phase 8 (Outreach Composer redesign).
+> **Phases 1–7 + 6b complete.** Customer Analyzer reads from OutreachLog (DB-first, Gmail fallback) — profiles populate for all 200 customers. Booking confirmation auto-detected: `booking_confirmed` reply → Booking record + Google Calendar event created automatically. Active: Phase 8 (Operator Config + Agent Quality).
 
 ## Feature Status
 
@@ -39,16 +39,16 @@ Foreman identifies dormant customers, scores them by rebooking probability, reac
 | Core models + DB (Operator, Customer, Job, Booking, OutreachLog) | ✅ |
 | Tone Profiler agent | ✅ |
 | Reactivation Analyzer agent | ✅ |
-| Customer Analyzer agent (scheduled daily) | ✅ |
+| Customer Analyzer agent (DB-first, Gmail fallback, --force flag) | ✅ |
 | Reply Detector agent (background, 15-min poll) | ✅ |
 | Follow-up Sequencer agent | ✅ |
 | Priority Scorer agent (scheduled daily) | ✅ |
-| Response Classifier agent (7 categories: booking_intent / callback_request / price_inquiry / not_interested / booking_confirmed / unsubscribe_request / unclear) | ✅ |
+| Response Classifier agent (7 categories) | ✅ |
 | Dry Run / Production mode toggle | ✅ |
 | Outreach queue: Needs Approval + Send Pending sections | ✅ |
-| Meetings Queue (booking proposals, separate from outreach) | ✅ |
+| Meetings Queue (booking proposals) | ✅ |
 | One-click dashboard actions (Draft Outreach / Book Call / Draft Follow-up) | ✅ |
-| Scheduled sender worker + smart queue refresh (background, every 15 min) | ✅ |
+| Scheduled sender worker + smart queue refresh | ✅ |
 | Revenue dashboard: 8 metric cards + 4 priority groups | ✅ |
 | All Customers page (search by name/email, filter by group) | ✅ |
 | Customer scoring engine (0–100, rules-based, 5 signals) | ✅ |
@@ -60,40 +60,27 @@ Foreman identifies dormant customers, scores them by rebooking probability, reac
 | Google Calendar OAuth + availability reading | ✅ |
 | Booking proposal flow (booking_intent → auto-draft → Meetings Queue) | ✅ |
 | Calendar view (agenda-style, color-coded by service type) | ✅ |
-| Email thread continuity (In-Reply-To + References RFC headers) | ✅ Fixed — In-Reply-To uses customer's own reply RFC Message-ID |
+| Email thread continuity (In-Reply-To + References RFC headers) | ✅ |
 | Dual-pass reply detection (thread scan + inbox address scan fallback) | ✅ |
-| Reply detector scans ALL customers regardless of status (no active-only filter) | ✅ |
-| Updates inbox (`/updates`) — needs response, overdue follow-ups, recent replies, upcoming | ✅ |
-| Per-page analytics in Internal Metrics (expandable breakdown per page) | ✅ |
-| Server-side action event tracking (draft_generated, draft_queued, outreach_sent) | ✅ |
-| `unsubscribe_request` classifier category (explicit opt-out only — `not_interested` stays active) | ✅ |
+| Updates inbox (`/updates`) — needs response, overdue follow-ups, recent replies | ✅ |
+| Per-page analytics in Internal Metrics | ✅ |
+| Server-side action event tracking | ✅ |
+| `unsubscribe_request` classifier category | ✅ |
 | `NOT_INTERESTED_PROMPT` — conversational reply for declined-but-engaged customers | ✅ |
-| booking_intent / callback_request classification guardrails (decline + question → not_interested) | ✅ |
 | Active Conversation banner on customer detail page | ✅ |
-| Run Now buttons synchronous with auto-reload + last-run tracking | ✅ |
-| Follow-up Sequencer added to daily APScheduler | ✅ |
-| Plans scaffold (`plans/` — plan.md + tasks/ per job) | ✅ |
-| Internal dev tools page (reseed DB, run all agents) | ✅ |
-| Railway deploy with Postgres | ✅ |
-| UTC timestamp storage + EDT/EST display | ✅ |
-| Schedule Appointment panel on conversation page | ✅ |
-| Post-booking notes + revenue capture on conversation page | ✅ |
-| Email body line-break normalization (outbound Gmail) | ✅ Fixed |
-| Customer Analytics page (`/analytics`) — funnel, ROI, composition | ✅ Phase 7 (Job 03) |
-| Product Analytics instrumentation + internal dashboard | ✅ Phase 7 (Job 04) |
+| Customer Analytics page (`/analytics`) — funnel, ROI, composition | ✅ |
+| Product Analytics instrumentation + internal dashboard | ✅ |
 | Error tracking log (all 500s captured, visible in Internal Metrics) | ✅ |
-| Lazy timeline summaries (conversation page loads without Claude block) | ✅ |
-| Email body formatting (multipart/alternative HTML, natural reflow on recipient side) | ✅ Fixed |
-| Conversation agent context-awareness (respects current message, grants requests that were prev. declined) | ✅ Fixed |
-| Regenerate draft context routing (reply drafts re-run conversation agent, not cold reactivation) | ✅ Fixed |
-| Customer Analyzer DB-first (OutreachLog as primary source, Gmail fallback, --force flag) | ✅ Phase 6b |
-| Booking confirmation auto-detection (booking_confirmed → Booking record + status flip) | ✅ Phase 6b |
-| Calendar write-back (Google Calendar event on booking confirmation) | ✅ Phase 6b |
-| Outreach composer redesign (dedicated page, not customer detail) | ⬜ Phase 8 |
-| SMS channel (Twilio) | ⬜ Phase 9 |
-| Service interval prediction | ⬜ Phase 10 |
-| Jobber / HousecallPro integration | ⬜ Phase 11 |
-| ML-trained scoring model (sklearn) | ⬜ Phase 12 |
+| Customer Analyzer DB-first (OutreachLog primary, Gmail fallback) | ✅ |
+| Booking confirmation auto-detection (booking_confirmed → Booking + GCal event) | ✅ |
+| Operator Config page (`/settings`) — tone, salesy, job ranking, estimate ranges | ⬜ Phase 8 (Job 05) |
+| Prompt Quality Sprint — HVAC-native agent voices using config values | ⬜ Phase 8 (Job 06) |
+| SMS channel (Twilio) — send path + inbound webhook | ⬜ Phase 9 (Job 07) |
+| SMS draft pipeline + UX (channel selector, timeline badges) | ⬜ Phase 9 (Job 08) |
+| Jobber / HousecallPro integration | ⬜ Phase 10 |
+| Service interval prediction | ⬜ Phase 11 |
+| Outreach composer redesign | ⬜ Phase 12 |
+| ML-trained scoring model (sklearn) | ⬜ Phase 13 |
 
 ---
 
@@ -106,7 +93,8 @@ Foreman identifies dormant customers, scores them by rebooking probability, reac
 | DB | SQLAlchemy + PostgreSQL (Railway) / SQLite (local) |
 | AI | Anthropic Claude (`claude-sonnet-4-6`) |
 | Email | Gmail API (OAuth2) |
-| Calendar | Google Calendar API (OAuth2) — Phase 6 |
+| SMS | Twilio (Phase 9) |
+| Calendar | Google Calendar API (OAuth2) |
 | Deployment | Railway |
 
 ---
@@ -117,8 +105,11 @@ Feature work is tracked in `plans/` — one folder per job, each containing a `p
 
 ```
 plans/
-├── README.md                               # How to use the system
-└── backlog_conversation_queue_design.md    # Design notes for Phase 8
+├── README.md
+├── job_05_operator_config/     # 🔵 Active — Phase 8
+├── job_06_prompt_quality/      # ⬜ Phase 8 (depends on Job 05)
+├── job_07_sms_send_path/       # ⬜ Phase 9
+└── job_08_sms_ux/              # ⬜ Phase 9 (depends on Job 07)
 ```
 
 ---
@@ -133,48 +124,44 @@ foreman/
 ├── agents/
 │   ├── tone_profiler.py
 │   ├── reactivation.py
-│   ├── customer_analyzer.py      # Builds profiles from Gmail history (daily)
+│   ├── customer_analyzer.py      # DB-first profile builder (daily)
 │   ├── reply_detector.py
 │   ├── follow_up.py
-│   └── response_classifier.py   # Phase 6 — classify inbound replies
+│   └── response_classifier.py
 ├── core/
 │   ├── config.py
 │   ├── database.py               # SCHEMA_PATCHES, get_db(), init_db()
 │   ├── models.py
-│   ├── scoring.py                # Rules-based 0–100 scorer, APScheduler job
-│   ├── analytics.py              # Server-side aggregations for /analytics
-│   └── product_analytics.py     # ProductEvent logging, session tracking
+│   ├── scoring.py
+│   ├── operator_config.py        # Phase 8 — config getter/setter + agent context helper
+│   ├── analytics.py
+│   └── product_analytics.py
 ├── integrations/
-│   ├── gmail.py                  # Send, read threads, search correspondence
-│   └── calendar.py               # Phase 6 — Google Calendar read/write
+│   ├── gmail.py
+│   ├── calendar.py
+│   └── sms.py                    # Phase 9 — Twilio send + inbound
 ├── templates/
 │   ├── base.html
-│   ├── dashboard.html            # Revenue metrics + 4 priority groups + one-click actions
-│   ├── customers.html            # Full searchable customer list
-│   ├── customer.html             # Customer detail + score breakdown
-│   ├── conversations.html        # Active threads with search
-│   ├── conversation_detail.html  # Workspace: draft + schedule + timeline
-│   ├── outreach.html             # Needs Approval + Send Pending sections
-│   ├── meetings.html             # Booking proposals queue
-│   ├── calendar.html             # Agenda view, color-coded by service type
-│   ├── agents.html               # All agents with Run Now buttons
-│   ├── analytics.html            # Customer analytics: funnel, ROI, composition
-│   ├── updates.html              # Operator inbox: needs response, follow-ups, recent replies
-│   └── internal_product.html     # Internal metrics: events, drafts, per-page analytics, error log
+│   ├── dashboard.html
+│   ├── customers.html
+│   ├── customer.html
+│   ├── conversations.html
+│   ├── conversation_detail.html
+│   ├── outreach.html
+│   ├── meetings.html
+│   ├── calendar.html
+│   ├── agents.html
+│   ├── analytics.html
+│   ├── updates.html
+│   ├── settings.html             # Phase 8 — operator config UI
+│   └── internal_product.html
 ├── data/
-│   ├── README.md                 # Reseed docs: how to run, add emails, add scenarios
-│   ├── reseed.py                 # Full wipe + reseed: 200 customers, rich conversations
-│   ├── fix_inbound_timestamps.py # One-time UTC migration (2026-03-11)
-│   └── archive/
-│       └── seed_v1_legacy.py     # Original 40-customer seed (superseded)
-├── tools/
-│   └── email_simulator.py        # Planned — standalone Gmail conversation simulator
-├── plans/                        # Feature work: plan.md + tasks/ per job
 │   ├── README.md
-│   ├── job_01_customer_analyzer/
-│   ├── job_02_booking_confirmation/
-│   ├── job_03_customer_analytics/
-│   └── job_04_product_analytics/
+│   ├── reseed.py
+│   └── archive/
+├── tools/
+│   └── email_simulator.py
+├── plans/
 ├── Procfile
 └── requirements.txt
 ```
@@ -196,13 +183,12 @@ foreman/
 | `/agents` | Agent catalog: status, last run, Run Now buttons for all agents |
 | `/analytics` | Analytics: customer base composition, outreach funnel, revenue ROI |
 | `/updates` | Operator inbox: needs response, overdue follow-ups, recent replies, upcoming follow-ups |
+| `/settings` | Operator config: tone, salesy, job priority, estimate ranges, business context *(Phase 8)* |
 | `/internal/product` | Internal metrics: page views, draft behavior, per-page analytics, error log |
 
 ---
 
 ## Dashboard Priority Groups
-
-The dashboard organizes customers into four actionable sections, each showing top 5 with expand-to-10:
 
 | Group | Who | Primary Action |
 |---|---|---|
@@ -215,8 +201,6 @@ The dashboard organizes customers into four actionable sections, each showing to
 
 ## Customer Scoring Model
 
-Every customer receives a score 0–100 based on weighted signals:
-
 | Signal | Max Points | Logic |
 |---|---|---|
 | Recency | 40 | Days since last job; >365 days = full 40, scales linearly below |
@@ -225,25 +209,21 @@ Every customer receives a score 0–100 based on weighted signals:
 | Job type | 15 | Any maintenance job = 15, repair-only = 8, single job = 4 |
 | Prior engagement | 10 | Prior positive response = 10, any reply = 5, none = 0 |
 
-Priority tiers: **high** ≥70 · **medium** 40–69 · **low** <40. Score breakdown stored per customer and visible on their detail page.
+Priority tiers: **high** ≥70 · **medium** 40–69 · **low** <40.
 
 ---
 
-## Response Classification (Phase 6)
-
-When a reply is detected, a Claude agent classifies it and routes to the next action:
+## Response Classification
 
 | Classification | Example | Next Action |
 |---|---|---|
 | `booking_intent` | "Yes, when can you come?" | Propose 3 real calendar slots |
-| `booking_confirmed` | "Tuesday at 10am works for me" | Create Booking record |
+| `booking_confirmed` | "Tuesday at 10am works for me" | Create Booking record + GCal event |
 | `callback_request` | "Call me to discuss" | Flag for operator, surface phone number |
 | `price_inquiry` | "How much would that cost?" | Draft pricing response |
-| `not_interested` | "Not right now, but what does a tune-up include?" | Draft conversational reply answering their question — no booking push |
-| `unsubscribe_request` | "Please remove me from your list" | Mark unsubscribed, suppress all future outreach, skip draft |
+| `not_interested` | "Not right now, but what does a tune-up include?" | Draft conversational reply |
+| `unsubscribe_request` | "Please remove me from your list" | Mark unsubscribed, suppress all future outreach |
 | `unclear` | Ambiguous reply | Surface to operator with full context |
-
-**Key distinction:** `not_interested` is a soft decline — the conversation stays active and the agent responds conversationally to any question the customer asked. `unsubscribe_request` requires explicit, unambiguous opt-out language — only this marks the customer unsubscribed.
 
 ---
 
@@ -267,8 +247,6 @@ DATABASE_URL=sqlite:///./foreman.db venv/bin/python -m api.run
 # → http://localhost:8000
 ```
 
-See **[data/README.md](data/README.md)** for full reseed documentation: Railway connection, adding live email addresses, adding scenario types, and augmenting bulk profiles.
-
 ---
 
 ## Environment Variables
@@ -278,11 +256,14 @@ ANTHROPIC_API_KEY
 GOOGLE_CLIENT_ID
 GOOGLE_CLIENT_SECRET
 GOOGLE_REDIRECT_URI
-DATABASE_URL          # sqlite:///./foreman.db locally; internal Railway URL in prod
+DATABASE_URL
 APP_ENV
 APP_PORT
 DRY_RUN
-PYTHONUNBUFFERED=1    # required on Railway
+TWILIO_ACCOUNT_SID        # Phase 9
+TWILIO_AUTH_TOKEN         # Phase 9
+TWILIO_FROM_NUMBER        # Phase 9 — E.164 format
+PYTHONUNBUFFERED=1        # required on Railway
 ```
 
 ---
@@ -293,13 +274,13 @@ PYTHONUNBUFFERED=1    # required on Railway
 - DB URL normalization handles `postgres://` → `postgresql://` automatically
 - Startup retries handle transient DB boot races
 - To connect to Postgres from local: `railway login` → `railway link` → `railway connect Postgres`
-- Public networking must be enabled on the Postgres service for external psql access
 
 ---
 
 ## Security
 
-Rotate immediately if any of these are exposed in logs or chat:
+Rotate immediately if any of these are exposed:
 - Anthropic API key
 - Google OAuth client secret
-- Railway Postgres credentials (Postgres service → Settings → Regenerate)
+- Railway Postgres credentials
+- Twilio Auth Token (Phase 9)

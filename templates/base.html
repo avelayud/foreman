@@ -232,6 +232,9 @@
       </a>
 
       <div class="sb-section">Internal</div>
+      <a href="/settings" class="sb-link {% if active == 'settings' %}active{% endif %}" onclick="trackEvent('nav_to_settings', {page:'settings'})">
+        <span style="font-size:11px">⚙</span> Settings
+      </a>
       <a href="/internal" class="sb-link {% if active == 'internal' %}active{% endif %}" onclick="trackEvent('nav_to_dev_tools', {page:'internal'})">
         <span style="font-size:11px">🛠</span> Dev Tools
       </a>
