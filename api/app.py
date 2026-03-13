@@ -22,6 +22,7 @@ import sys
 import threading
 import time
 import re
+import traceback as _traceback
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -35,12 +36,75 @@ from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 
 from core.config import config
-from core.database import get_db, init_db
+from core.database import get_db, init_db, SessionLocal
 from core.models import Booking, Customer, Job, Operator, OutreachLog, ProductEvent
 from core.product_analytics import get_session_id, log_event, log_page_view
 import core.analytics as _analytics
 
 app = FastAPI(title="Foreman", version="0.2.0")
+
+_ERROR_HTML = """<!DOCTYPE html>
+<html><head><meta charset="utf-8">
+<meta http-equiv="refresh" content="8">
+<title>Foreman — Error</title>
+<style>body{{font-family:system-ui,sans-serif;display:flex;align-items:center;
+justify-content:center;height:100vh;margin:0;background:#f9fafb;}}
+.box{{text-align:center;color:#374151;max-width:480px;padding:24px;}}
+h2{{font-size:1.4rem;margin-bottom:.5rem;color:#991b1b;}}
+p{{color:#6b7280;font-size:.9rem;line-height:1.5;}}
+.code{{font-family:monospace;font-size:.8rem;background:#fef2f2;color:#7f1d1d;
+border:1px solid #fecaca;border-radius:6px;padding:10px 14px;text-align:left;
+white-space:pre-wrap;word-break:break-all;margin-top:16px;max-height:200px;overflow-y:auto;}}
+</style></head>
+<body><div class="box">
+<h2>Something went wrong</h2>
+<p>The page hit an unexpected error. Refreshing in 8 seconds.<br>
+If it keeps happening, check <strong>Internal Metrics → Error Log</strong>.</p>
+{error_block}
+</div></body></html>"""
+
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    """Catch all unhandled exceptions, log to ProductEvent, return friendly error page."""
+    tb_str = _traceback.format_exc()
+    page = request.url.path
+    try:
+        session_id = request.cookies.get("foreman_session", "unknown")
+        _db = SessionLocal()
+        try:
+            ev = ProductEvent(
+                operator_id=OPERATOR_ID if "_db_ready" in dir() and _db_ready else None,
+                session_id=session_id,
+                event_type="error",
+                event_name=type(exc).__name__,
+                page=page,
+                properties=json.dumps({
+                    "message": str(exc)[:500],
+                    "traceback": tb_str[:3000],
+                }),
+                created_at=datetime.utcnow(),
+            )
+            _db.add(ev)
+            _db.commit()
+        except Exception:
+            pass
+        finally:
+            _db.close()
+    except Exception:
+        pass
+
+    # Show error block only in dev
+    error_block = ""
+    if config.is_development():
+        escaped = tb_str[-1500:].replace("&", "&amp;").replace("<", "&lt;")
+        error_block = f'<div class="code">{escaped}</div>'
+
+    return HTMLResponse(
+        content=_ERROR_HTML.format(error_block=error_block),
+        status_code=500,
+    )
+
 
 TEMPLATES_DIR = Path(__file__).parent.parent / "templates"
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
@@ -3892,6 +3956,29 @@ def internal_product_page(request: Request, range: str = "30"):
                 for e in recent_raw
             ]
 
+            # Error log (last 50 errors, any time range)
+            error_raw = (
+                db.query(ProductEvent)
+                .filter(ProductEvent.event_type == "error")
+                .order_by(ProductEvent.created_at.desc())
+                .limit(50)
+                .all()
+            )
+            error_log = []
+            for e in error_raw:
+                props = {}
+                try:
+                    props = json.loads(e.properties or "{}")
+                except Exception:
+                    pass
+                error_log.append({
+                    "created_at": e.created_at.strftime("%-m/%-d %H:%M") if e.created_at else "—",
+                    "page": e.page or "—",
+                    "error_type": e.event_name or "Exception",
+                    "message": props.get("message", "")[:120],
+                    "traceback": props.get("traceback", "")[-800:],
+                })
+
         except Exception:
             # ProductEvent table may not exist yet
             total_events = total_page_views = unique_sessions = avg_events_per_session = 0
@@ -3900,6 +3987,7 @@ def internal_product_page(request: Request, range: str = "30"):
             feature_engagement = []
             funnel_steps = []
             recent_events = []
+            error_log = []
 
     return templates.TemplateResponse("internal_product.html", {
         "request": request,
@@ -3918,6 +4006,7 @@ def internal_product_page(request: Request, range: str = "30"):
         "feature_engagement": feature_engagement,
         "funnel_steps": funnel_steps,
         "recent_events": recent_events,
+        "error_log": error_log,
     })
 
 

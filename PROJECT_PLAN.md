@@ -21,7 +21,7 @@
 ## Current Status
 
 - **Active Phase:** Phase 6b — Booking Confirmation Detection + Calendar Write-back
-- **State:** Phase 6 core complete. Response classifier live, booking proposals auto-drafted to Meetings Queue, Google Calendar reads available slots, one-click dashboard actions, search everywhere. Email threading, reply detection, and agent UX all fixed in 2026-03-12 session. Next: Phase 6b (booking confirmation detection) and Job 01 (Customer Analyzer OutreachLog fix). Phase 7 scoped: Customer Analytics + Product Analytics (see plans/).
+- **State:** Phase 7 complete (Analytics Dashboard + Internal Metrics). Conversation page redesigned with lazy loading, Schedule Appointment panel, post-booking notes capture, and error tracking. Email body normalization fixed. Next: Phase 6b (booking confirmation detection) and Job 01 (Customer Analyzer OutreachLog fix).
 - **Last Updated:** 2026-03-12
 - **Live URL:** https://web-production-3df3a.up.railway.app
 - **Repo:** https://github.com/avelayud/foreman
@@ -29,6 +29,19 @@
 ---
 
 ## Recently Completed
+
+### 2026-03-12 — Phase 7 (Analytics + Internal Metrics), Conversation Page, Error Tracking
+- Analytics Dashboard (`/analytics`): customer base composition, outreach funnel, revenue ROI, time-range filter (30d/90d/All), `core/analytics.py` with 7 server-side aggregation functions
+- Internal Metrics Dashboard (`/internal/product`): page views, draft behavior, feature engagement, navigation funnel, recent events log, **Error Log** section showing all captured 500s with traceback viewer
+- Error tracking: global `@app.exception_handler(Exception)` logs all unhandled errors to `ProductEvent` table (`event_type="error"`) — visible in Internal Metrics. Returns friendly retry page instead of blank 500.
+- Schedule Appointment panel on conversation page: mirrors Draft Message UX, creates Booking + GCal event + sends email in-thread without queue log (`POST /api/customer/{id}/book-and-invite`)
+- Post-booking notes capture: green confirmation state after booking, notes + estimated job value saved to Booking, propagated to OutreachLog for revenue attribution (`POST /api/booking/{id}/notes`)
+- Conversation page lazy timeline summaries: `_generate_timeline_summaries()` moved off render critical path to `GET /api/conversation/{id}/summaries`, fetched by JS after page load — fixes Railway 500s from 30s request timeout
+- Email body normalization: `_normalize_email_body()` strips Claude's hard line-breaks at Gmail send boundary — outbound emails render as natural paragraphs on recipient side
+- Nav reorganization: Workspace section (dashboard, analytics, customers, conversations, calendar), Queues section (outreach, meetings), Agents section (all agents only), Internal section (dev tools, internal metrics)
+- Timeline badges extended to outbound messages: `booking_confirmed` → "Calendar Invite", `booking_intent` → "Booking Inquiry"
+- `ProductEvent` model + `core/product_analytics.py`: session tracking, page view logging, event ingestion (`POST /api/events`)
+- `POST /api/customer/{id}/booking-draft`: Claude Haiku generates confirmation email subject+body given slot + service type
 
 ### 2026-03-12 — Email Threading, Reply Detection, Agent UX Fixes
 - Email threading (recipient side): `OutreachLog.rfc_message_id` now stored at reply detection time; `send_email()` accepts explicit `in_reply_to` param and uses it as `In-Reply-To`, overriding the last-message-in-thread heuristic — so follow-ups land in the correct thread on the recipient's client

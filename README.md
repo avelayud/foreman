@@ -30,8 +30,8 @@ Foreman identifies dormant customers, scores them by rebooking probability, reac
 
 ## Product State (2026-03-12)
 
-> **Open bugs:** email body line break formatting on recipient side, stale customer profiles after reseed. See `PROJECT_PLAN.md` backlog for details.
-> **Recently fixed:** email threading RFC headers (In-Reply-To / References now use customer's own reply Message-ID), reply detection blind spots (per-message dedup, secondary inbox scan, `"replied"` status now included), Run Now buttons now synchronous with auto-reload.
+> **Open bugs:** stale customer profiles after reseed. See `PROJECT_PLAN.md` backlog for details.
+> **Recently completed:** Analytics Dashboard (`/analytics`), Internal Metrics Dashboard (`/internal/product`), error tracking log (all 500s captured to DB), Schedule Appointment panel on conversation page, post-booking notes & revenue capture, email body line-break normalization fix, conversation page redesign (lazy timeline summaries), nav reorganization.
 
 ## Feature Status
 
@@ -70,12 +70,16 @@ Foreman identifies dormant customers, scores them by rebooking probability, reac
 | Internal dev tools page (reseed DB, run all agents) | ✅ |
 | Railway deploy with Postgres | ✅ |
 | UTC timestamp storage + EDT/EST display | ✅ |
-| **BUG: Email body line breaks on recipient side** | 🔴 Open |
+| Schedule Appointment panel on conversation page | ✅ |
+| Post-booking notes + revenue capture on conversation page | ✅ |
+| Email body line-break normalization (outbound Gmail) | ✅ Fixed |
+| Customer Analytics page (`/analytics`) — funnel, ROI, composition | ✅ Phase 7 (Job 03) |
+| Product Analytics instrumentation + internal dashboard | ✅ Phase 7 (Job 04) |
+| Error tracking log (all 500s captured, visible in Internal Metrics) | ✅ |
+| Lazy timeline summaries (conversation page loads without Claude block) | ✅ |
 | **BUG: Stale customer profiles after reseed** | 🔴 Open |
 | Booking confirmation detection + job record creation | ⬜ Phase 6b (Job 02) |
 | Calendar write-back (create Google Calendar event on booking) | ⬜ Phase 6b (Job 02) |
-| Customer Analytics page (`/analytics`) — funnel, ROI, composition | ⬜ Phase 7 (Job 03) |
-| Product Analytics instrumentation + internal dashboard | ⬜ Phase 7 (Job 04) |
 | Outreach composer redesign (dedicated page, not customer detail) | ⬜ Phase 8 |
 | SMS channel (Twilio) | ⬜ Phase 9 |
 | Service interval prediction | ⬜ Phase 10 |
@@ -107,8 +111,8 @@ plans/
 ├── README.md                     # How to use the system
 ├── job_01_customer_analyzer/     # 🔵 Active
 ├── job_02_booking_confirmation/  # ⬜ Backlog (Phase 6b)
-├── job_03_customer_analytics/    # ⬜ Backlog (Phase 7)
-└── job_04_product_analytics/     # ⬜ Backlog (Phase 7, run before Job 03)
+├── job_03_customer_analytics/    # ✅ Complete
+└── job_04_product_analytics/     # ✅ Complete
 ```
 
 **Execution order:** Job 01 → Job 04 → Job 03 (Job 02 is independent).
@@ -133,7 +137,9 @@ foreman/
 │   ├── config.py
 │   ├── database.py               # SCHEMA_PATCHES, get_db(), init_db()
 │   ├── models.py
-│   └── scoring.py                # Rules-based 0–100 scorer, APScheduler job
+│   ├── scoring.py                # Rules-based 0–100 scorer, APScheduler job
+│   ├── analytics.py              # Server-side aggregations for /analytics
+│   └── product_analytics.py     # ProductEvent logging, session tracking
 ├── integrations/
 │   ├── gmail.py                  # Send, read threads, search correspondence
 │   └── calendar.py               # Phase 6 — Google Calendar read/write
@@ -143,11 +149,13 @@ foreman/
 │   ├── customers.html            # Full searchable customer list
 │   ├── customer.html             # Customer detail + score breakdown
 │   ├── conversations.html        # Active threads with search
-│   ├── conversation_detail.html
+│   ├── conversation_detail.html  # Workspace: draft + schedule + timeline
 │   ├── outreach.html             # Needs Approval + Send Pending sections
 │   ├── meetings.html             # Booking proposals queue
 │   ├── calendar.html             # Agenda view, color-coded by service type
-│   └── agents.html               # All agents with Run Now buttons
+│   ├── agents.html               # All agents with Run Now buttons
+│   ├── analytics.html            # Customer analytics: funnel, ROI, composition
+│   └── internal_product.html     # Internal metrics: events, drafts, error log
 ├── data/
 │   ├── README.md                 # Reseed docs: how to run, add emails, add scenarios
 │   ├── reseed.py                 # Full wipe + reseed: 200 customers, rich conversations
@@ -181,6 +189,8 @@ foreman/
 | `/meetings` | Meetings queue: booking proposals, proposed slots panel, search |
 | `/calendar` | Calendar view: agenda by month, color-coded by service type |
 | `/agents` | Agent catalog: status, last run, Run Now buttons for all agents |
+| `/analytics` | Analytics: customer base composition, outreach funnel, revenue ROI |
+| `/internal/product` | Internal metrics: page views, draft behavior, error log |
 
 ---
 
