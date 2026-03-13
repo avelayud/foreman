@@ -324,10 +324,15 @@ def _normalize_email_body(body: str) -> str:
     In text/plain these appear as mid-sentence line breaks in the recipient's
     inbox even though Gmail's web UI reflows them for the sender.
 
+    Also normalizes Windows-style CRLF line endings from browser textarea
+    submission, which would otherwise prevent correct paragraph splitting.
+
     Strategy: split on blank lines (paragraph breaks), then within each
     paragraph join lines that don't end with punctuation that signals an
     intentional break (colon, em-dash, bullet, numbered list).
     """
+    # Normalize Windows CRLF and lone CR to LF before any processing
+    body = body.replace('\r\n', '\n').replace('\r', '\n')
     paragraphs = re.split(r'\n{2,}', body.strip())
     cleaned = []
     for para in paragraphs:
@@ -1887,6 +1892,159 @@ def calendar_view(request: Request, month: str = ""):
     })
 
 
+@app.get("/updates", response_class=HTMLResponse)
+def updates_page(request: Request):
+    """Operator inbox — recent inbound replies, conversations needing attention, overdue follow-ups."""
+    if (guard := _db_starting_response()):
+        return guard
+
+    now = datetime.utcnow()
+    seven_days_ago = now - timedelta(days=7)
+    three_days_ahead = now + timedelta(days=3)
+
+    with get_db() as db:
+        op = db.query(Operator).filter_by(id=OPERATOR_ID).first()
+        operator_data = _operator_data(op)
+        queue_count = _get_queue_count(db)
+        meetings_queue_count = _get_meetings_queue_count(db)
+        conversations_attention_count = _get_conversations_attention_count(db)
+        log_page_view(db, request, "updates", operator_id=OPERATOR_ID)
+
+        # Recent inbound replies (last 7 days)
+        recent_inbound_raw = (
+            db.query(OutreachLog)
+            .filter(
+                OutreachLog.operator_id == OPERATOR_ID,
+                OutreachLog.direction == "inbound",
+                OutreachLog.dry_run == False,
+                OutreachLog.sent_at >= seven_days_ago,
+            )
+            .order_by(OutreachLog.sent_at.desc())
+            .limit(30)
+            .all()
+        )
+
+        # Get customer names for recent inbound
+        inbound_customer_ids = list({l.customer_id for l in recent_inbound_raw})
+        customers_by_id = {}
+        if inbound_customer_ids:
+            custs = db.query(Customer.id, Customer.name, Customer.email, Customer.reactivation_status).filter(
+                Customer.id.in_(inbound_customer_ids)
+            ).all()
+            customers_by_id = {c.id: c for c in custs}
+
+        recent_replies = []
+        for log in recent_inbound_raw:
+            cust = customers_by_id.get(log.customer_id)
+            recent_replies.append({
+                "customer_id": log.customer_id,
+                "customer_name": cust.name if cust else "Unknown",
+                "classification": log.response_classification or "unclear",
+                "preview": (log.content or "")[:200],
+                "sent_at": log.sent_at,
+                "subject": log.subject or "(no subject)",
+            })
+
+        # Build conversations needing attention
+        active_statuses = set(FOLLOW_UP_DUE_DAYS.keys()) | {"replied"}
+        all_active_customers = (
+            db.query(Customer)
+            .filter(
+                Customer.operator_id == OPERATOR_ID,
+                Customer.reactivation_status.in_(active_statuses | {"unsubscribed"}),
+            )
+            .all()
+        )
+
+        needs_response = []
+        follow_up_overdue = []
+        follow_up_upcoming = []
+
+        for cust in all_active_customers:
+            logs = (
+                db.query(OutreachLog.direction, OutreachLog.sent_at, OutreachLog.created_at)
+                .filter_by(operator_id=OPERATOR_ID, customer_id=cust.id, dry_run=False)
+                .all()
+            )
+            if not logs:
+                continue
+
+            outbound = [l for l in logs if l.direction == "outbound"]
+            inbound = [l for l in logs if l.direction == "inbound"]
+            last_outbound_at = max((_l.sent_at or _l.created_at for _l in outbound), default=None)
+            last_inbound_at = max((_l.sent_at or _l.created_at for _l in inbound), default=None)
+
+            effective = cust.reactivation_status
+            if inbound and effective not in ("booked", "sequence_complete", "unsubscribed", "replied"):
+                effective = "replied"
+            health = _conversation_health(effective, last_outbound_at, last_inbound_at)
+
+            # Most recent inbound classification
+            latest_inbound_log = None
+            if inbound:
+                latest_inbound_log = (
+                    db.query(OutreachLog.response_classification, OutreachLog.sent_at)
+                    .filter(
+                        OutreachLog.customer_id == cust.id,
+                        OutreachLog.operator_id == OPERATOR_ID,
+                        OutreachLog.direction == "inbound",
+                        OutreachLog.dry_run == False,
+                    )
+                    .order_by(OutreachLog.sent_at.desc())
+                    .first()
+                )
+
+            classification = latest_inbound_log.response_classification if latest_inbound_log else None
+
+            if health["needs_response"]:
+                needs_response.append({
+                    "customer_id": cust.id,
+                    "customer_name": cust.name,
+                    "last_inbound_at": last_inbound_at,
+                    "classification": classification or "unclear",
+                    "hours_waiting": round((now - last_inbound_at).total_seconds() / 3600) if last_inbound_at else None,
+                })
+            elif health["needs_follow_up"]:
+                due_days = FOLLOW_UP_DUE_DAYS.get(effective, 3)
+                days_since_out = days_since(last_outbound_at) if last_outbound_at else 0
+                days_overdue = days_since_out - due_days
+                follow_up_overdue.append({
+                    "customer_id": cust.id,
+                    "customer_name": cust.name,
+                    "last_outbound_at": last_outbound_at,
+                    "days_overdue": days_overdue,
+                    "sequence_step": effective,
+                })
+            elif health["key"] == "awaiting_reply" and last_outbound_at:
+                due_days = FOLLOW_UP_DUE_DAYS.get(effective, 3)
+                days_until_due = due_days - days_since(last_outbound_at)
+                if 0 <= days_until_due <= 3:
+                    follow_up_upcoming.append({
+                        "customer_id": cust.id,
+                        "customer_name": cust.name,
+                        "last_outbound_at": last_outbound_at,
+                        "days_until_due": max(0, days_until_due),
+                        "sequence_step": effective,
+                    })
+
+        needs_response.sort(key=lambda x: x["hours_waiting"] or 0, reverse=True)
+        follow_up_overdue.sort(key=lambda x: x["days_overdue"], reverse=True)
+        follow_up_upcoming.sort(key=lambda x: x["days_until_due"])
+
+    return templates.TemplateResponse("updates.html", {
+        "request": request,
+        "active": "updates",
+        "operator": operator_data,
+        "queue_count": queue_count,
+        "meetings_queue_count": meetings_queue_count,
+        "conversations_attention_count": conversations_attention_count,
+        "recent_replies": recent_replies,
+        "needs_response": needs_response,
+        "follow_up_overdue": follow_up_overdue,
+        "follow_up_upcoming": follow_up_upcoming,
+    })
+
+
 @app.get("/conversations", response_class=HTMLResponse)
 def conversations(request: Request):
     if (guard := _db_starting_response()):
@@ -2558,6 +2716,15 @@ def generate_conversation_draft(customer_id: int):
         _paras = [' '.join(p.split('\n')) for p in _paras if p.strip()]
         draft["body"] = '\n\n'.join(_paras)
     draft["draft_type"] = "reply" if is_reply else "follow_up"
+    # Track draft generation
+    try:
+        with get_db() as _tdb:
+            log_event(_tdb, session_id="server", event_type="draft", event_name="draft_generated",
+                      page=f"conversations/{customer_id}",
+                      properties={"draft_type": draft["draft_type"], "customer_id": customer_id},
+                      operator_id=OPERATOR_ID)
+    except Exception:
+        pass
     return draft
 
 
@@ -2600,6 +2767,15 @@ def queue_conversation_draft(customer_id: int, req: QueueDraftRequest):
             sequence_step=req.sequence_step,
         )
         db.add(log)
+    # Track draft queued
+    try:
+        with get_db() as _tdb:
+            log_event(_tdb, session_id="server", event_type="draft", event_name="draft_queued",
+                      page=f"conversations/{customer_id}",
+                      properties={"customer_id": customer_id, "sequence_step": req.sequence_step},
+                      operator_id=OPERATOR_ID)
+    except Exception:
+        pass
     return {"status": "queued", "customer_id": customer_id}
 
 
@@ -2799,6 +2975,15 @@ def approve_send(log_id: int, req: ApproveSendRequest):
             },
         )
 
+    # Track outreach sent
+    try:
+        with get_db() as _tdb:
+            log_event(_tdb, session_id="server", event_type="outreach", event_name="outreach_sent",
+                      page="outreach",
+                      properties={"log_id": log_id, "mode": mode},
+                      operator_id=OPERATOR_ID)
+    except Exception:
+        pass
     result = {"status": "sent", "log_id": log_id, "mode": mode}
     if thread_id:
         result["gmail_thread_id"] = thread_id
@@ -3938,6 +4123,8 @@ async def api_track_event(request: Request):
                 event_type = "conversion"
             elif event_name.startswith("agent"):
                 event_type = "agent"
+            elif event_name.startswith("nav_to_"):
+                event_type = "navigation"  # explicit nav events stay as navigation
         props = {k: v for k, v in body.items() if k not in ("event_name", "event_type", "page")}
         with get_db() as db:
             log_event(
@@ -4039,15 +4226,55 @@ def internal_product_page(request: Request, range: str = "30"):
                 "avg_edit_pct": avg_edit_pct,
             }
 
-            # Feature engagement
-            nav_events = [e for e in all_events if e.event_type == "navigation"]
+            # Feature engagement — all non-page_view, non-error events
+            _EXCLUDE_FEAT_TYPES = {"page_view", "error"}
+            _EXCLUDE_FEAT_NAMES = {"unknown"}
             feat_counts: dict[str, int] = {}
-            for e in nav_events:
-                feat_counts[e.event_name] = feat_counts.get(e.event_name, 0) + 1
+            for e in all_events:
+                if e.event_type in _EXCLUDE_FEAT_TYPES:
+                    continue
+                name = e.event_name or "unknown"
+                if name in _EXCLUDE_FEAT_NAMES:
+                    continue
+                feat_counts[name] = feat_counts.get(name, 0) + 1
             feature_engagement = sorted(
                 [{"name": k, "count": v} for k, v in feat_counts.items()],
                 key=lambda x: -x["count"],
             )[:20]
+
+            # Per-page event breakdown (for expandable sections in internal metrics)
+            page_event_breakdown: dict[str, list] = {}
+            for e in all_events:
+                if e.event_type in ("page_view", "error"):
+                    continue
+                pg = e.page or "unknown"
+                if pg not in page_event_breakdown:
+                    page_event_breakdown[pg] = {}
+                name = e.event_name or "unknown"
+                page_event_breakdown[pg][name] = page_event_breakdown[pg].get(name, 0) + 1
+            # Convert to sorted list format
+            page_event_data = {
+                pg: sorted([{"name": k, "count": v} for k, v in evts.items()], key=lambda x: -x["count"])
+                for pg, evts in page_event_breakdown.items()
+            }
+            # Aggregate all conversations/{id} events into a single "conversations_detail" key
+            convo_detail_agg: dict[str, int] = {}
+            convo_detail_pv = 0
+            for pg, evts_list in page_event_data.items():
+                if pg.startswith("conversations/"):
+                    for evt in evts_list:
+                        convo_detail_agg[evt["name"]] = convo_detail_agg.get(evt["name"], 0) + evt["count"]
+            # Also aggregate page views for conversations/id
+            for e in page_view_events:
+                if e.page and e.page.startswith("conversations/"):
+                    convo_detail_pv += 1
+            if convo_detail_agg or convo_detail_pv:
+                page_event_data["conversations_detail"] = sorted(
+                    [{"name": k, "count": v} for k, v in convo_detail_agg.items()],
+                    key=lambda x: -x["count"]
+                )
+            # Store convo_detail_pv for template
+            _convo_detail_pv = convo_detail_pv
 
             # Navigation funnel — session counts at each step
             dashboard_sessions = {e.session_id for e in page_view_events if e.page == "dashboard"}
@@ -4110,6 +4337,8 @@ def internal_product_page(request: Request, range: str = "30"):
             funnel_steps = []
             recent_events = []
             error_log = []
+            page_event_data = {}
+            _convo_detail_pv = 0
 
     return templates.TemplateResponse("internal_product.html", {
         "request": request,
@@ -4129,6 +4358,8 @@ def internal_product_page(request: Request, range: str = "30"):
         "funnel_steps": funnel_steps,
         "recent_events": recent_events,
         "error_log": error_log,
+        "page_event_data": page_event_data,
+        "convo_detail_pv": _convo_detail_pv,
     })
 
 

@@ -1,0 +1,152 @@
+{% extends "base.html" %}
+{% block page_title %}Updates{% endblock %}
+
+{% block extra_styles %}
+<style>
+  .updates-section{margin-bottom:32px}
+  .updates-section-title{font-size:10px;font-family:'IBM Plex Mono',monospace;letter-spacing:1.8px;text-transform:uppercase;color:var(--text-3);margin-bottom:12px;padding-bottom:8px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between}
+  .updates-section-title .badge{font-size:9.5px;background:var(--navy);color:#fff;border-radius:20px;padding:1px 8px;font-family:'IBM Plex Mono',monospace;font-weight:600}
+  .updates-section-title .badge-red{background:var(--red)}
+  .updates-section-title .badge-amber{background:var(--amber)}
+  .updates-section-title .badge-blue{background:var(--blue)}
+  .updates-section-title .badge-green{background:var(--green)}
+
+  .update-card{background:var(--surface);border:1px solid var(--border);border-left-width:4px;border-radius:var(--radius);box-shadow:var(--shadow-sm);padding:14px 16px;margin-bottom:8px;display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+  .update-card.urgent{border-left-color:var(--red)}
+  .update-card.warning{border-left-color:var(--amber)}
+  .update-card.info{border-left-color:var(--blue)}
+  .update-card.neutral{border-left-color:var(--border)}
+  .update-name{font-size:14px;font-family:'Playfair Display',serif;font-weight:700;color:var(--navy);margin-bottom:3px}
+  .update-meta{font-size:11px;font-family:'IBM Plex Mono',monospace;color:var(--text-3);margin-bottom:4px}
+  .update-preview{font-size:12px;color:var(--text-2);line-height:1.5;max-width:560px}
+  .cls-pill{display:inline-flex;align-items:center;gap:3px;font-size:10px;font-family:'IBM Plex Mono',monospace;padding:2px 8px;border-radius:10px;border:1px solid;margin-right:6px;font-weight:600}
+  .cls-booking_intent{background:#d1fae5;color:#065f46;border-color:#6ee7b7}
+  .cls-booking_confirmed{background:#d1fae5;color:#065f46;border-color:#6ee7b7}
+  .cls-price_inquiry{background:#fef3c7;color:#92400e;border-color:#fcd34d}
+  .cls-callback_request{background:var(--blue-pale);color:var(--blue);border-color:#93c5fd}
+  .cls-not_interested{background:#fee2e2;color:#991b1b;border-color:#fca5a5}
+  .cls-unclear{background:#f1f5f9;color:var(--text-3);border-color:var(--border)}
+
+  .time-label{font-size:11px;font-family:'IBM Plex Mono',monospace;color:var(--text-3);white-space:nowrap;flex-shrink:0}
+  .empty-state{padding:28px 20px;text-align:center;font-size:12.5px;color:var(--text-4);background:var(--surface);border:1px solid var(--border);border-radius:var(--radius)}
+</style>
+{% endblock %}
+
+{% block content %}
+
+<div style="display:flex;align-items:flex-end;justify-content:space-between;margin-bottom:24px;flex-wrap:wrap;gap:12px">
+  <div>
+    <div style="font-size:10.5px;font-family:'IBM Plex Mono',monospace;letter-spacing:1.5px;text-transform:uppercase;color:var(--text-3);margin-bottom:6px">Operator Inbox</div>
+    <h1 style="font-family:'Playfair Display',serif;font-size:28px;font-weight:700;color:var(--navy);line-height:1.2">Updates</h1>
+  </div>
+  <div style="font-size:12px;color:var(--text-3);font-family:'IBM Plex Mono',monospace">What needs attention right now</div>
+</div>
+
+{# ── Needs Response ── #}
+<div class="updates-section">
+  <div class="updates-section-title">
+    <span>Needs Response</span>
+    {% if needs_response %}<span class="badge badge-red">{{ needs_response|length }}</span>{% endif %}
+  </div>
+  {% if needs_response %}
+    {% for item in needs_response %}
+    <div class="update-card urgent">
+      <div>
+        <div class="update-name">
+          <span class="cls-pill cls-{{ item.classification }}">{{ item.classification|replace('_', ' ') }}</span>
+          <a href="/conversations/{{ item.customer_id }}" style="text-decoration:none;color:var(--navy)">{{ item.customer_name }}</a>
+        </div>
+        <div class="update-meta">
+          Customer replied
+          {% if item.hours_waiting is not none and item.hours_waiting < 48 %}· {{ item.hours_waiting }}h ago{% elif item.last_inbound_at %}· {{ item.last_inbound_at | est }}{% endif %}
+        </div>
+        <div class="update-preview" style="color:var(--red);font-size:11.5px;font-weight:500">Waiting for your reply</div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end">
+        <a href="/conversations/{{ item.customer_id }}" class="btn-primary" style="text-decoration:none;font-size:12px;padding:7px 14px">Reply →</a>
+      </div>
+    </div>
+    {% endfor %}
+  {% else %}
+  <div class="empty-state">No conversations waiting on a reply. You're all caught up.</div>
+  {% endif %}
+</div>
+
+{# ── Follow-ups Overdue ── #}
+<div class="updates-section">
+  <div class="updates-section-title">
+    <span>Follow-ups Overdue</span>
+    {% if follow_up_overdue %}<span class="badge badge-amber">{{ follow_up_overdue|length }}</span>{% endif %}
+  </div>
+  {% if follow_up_overdue %}
+    {% for item in follow_up_overdue %}
+    <div class="update-card warning">
+      <div>
+        <div class="update-name">
+          <a href="/conversations/{{ item.customer_id }}" style="text-decoration:none;color:var(--navy)">{{ item.customer_name }}</a>
+        </div>
+        <div class="update-meta">
+          Last outreach · {{ item.last_outbound_at | est if item.last_outbound_at else '—' }}
+        </div>
+        <div class="update-preview" style="color:var(--amber);font-size:11.5px;font-weight:500">{{ item.days_overdue }} day{% if item.days_overdue != 1 %}s{% endif %} overdue for follow-up</div>
+      </div>
+      <a href="/conversations/{{ item.customer_id }}" class="btn-ghost" style="text-decoration:none;font-size:12px;flex-shrink:0">Open →</a>
+    </div>
+    {% endfor %}
+  {% else %}
+  <div class="empty-state">No follow-ups overdue.</div>
+  {% endif %}
+</div>
+
+{# ── Recent Inbound Replies ── #}
+<div class="updates-section">
+  <div class="updates-section-title">
+    <span>Inbound Replies — Last 7 Days</span>
+    {% if recent_replies %}<span class="badge badge-blue">{{ recent_replies|length }}</span>{% endif %}
+  </div>
+  {% if recent_replies %}
+    {% for item in recent_replies %}
+    <div class="update-card info">
+      <div style="flex:1;min-width:0">
+        <div class="update-name" style="margin-bottom:4px">
+          <span class="cls-pill cls-{{ item.classification }}">{{ item.classification|replace('_', ' ') }}</span>
+          <a href="/conversations/{{ item.customer_id }}" style="text-decoration:none;color:var(--navy)">{{ item.customer_name }}</a>
+        </div>
+        <div class="update-meta">{{ item.subject }} · {{ item.sent_at | est }}</div>
+        {% if item.preview %}
+        <div class="update-preview">{{ item.preview }}</div>
+        {% endif %}
+      </div>
+      <div style="flex-shrink:0">
+        <a href="/conversations/{{ item.customer_id }}" class="btn-ghost" style="text-decoration:none;font-size:12px">Open →</a>
+      </div>
+    </div>
+    {% endfor %}
+  {% else %}
+  <div class="empty-state">No inbound replies in the last 7 days.</div>
+  {% endif %}
+</div>
+
+{# ── Follow-ups Coming Up ── #}
+{% if follow_up_upcoming %}
+<div class="updates-section">
+  <div class="updates-section-title">
+    <span>Follow-ups Coming Up (Next 3 Days)</span>
+    <span class="badge badge-green">{{ follow_up_upcoming|length }}</span>
+  </div>
+  {% for item in follow_up_upcoming %}
+  <div class="update-card neutral">
+    <div>
+      <div class="update-name"><a href="/conversations/{{ item.customer_id }}" style="text-decoration:none;color:var(--navy)">{{ item.customer_name }}</a></div>
+      <div class="update-meta">Last outreach · {{ item.last_outbound_at | est if item.last_outbound_at else '—' }}</div>
+      <div class="update-preview" style="color:var(--text-3);font-size:11.5px">
+        {% if item.days_until_due == 0 %}Follow-up due today{% else %}Follow-up due in {{ item.days_until_due }} day{% if item.days_until_due != 1 %}s{% endif %}{% endif %}
+      </div>
+    </div>
+    <a href="/conversations/{{ item.customer_id }}" class="btn-ghost" style="text-decoration:none;font-size:12px;flex-shrink:0">Open →</a>
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
+{% endblock %}

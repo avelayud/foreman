@@ -178,11 +178,10 @@ def classify_reply(operator_id: int, inbound_log_id: int, verbose: bool = True) 
             log.response_classification = result["classification"]
             log.classified_at = datetime.now(timezone.utc).replace(tzinfo=None)
 
-            # If not_interested → mark customer unsubscribed
-            if result["classification"] == "not_interested":
-                customer = db.query(Customer).filter_by(id=log.customer_id).first()
-                if customer:
-                    customer.reactivation_status = "unsubscribed"
+            # Note: we intentionally do NOT auto-unsubscribe on "not_interested".
+            # A decline is not the same as an unsubscribe request — the customer
+            # may still have questions or become interested later.
+            # The operator can manually close the conversation from the conversation page.
 
     if verbose:
         print(

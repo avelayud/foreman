@@ -569,6 +569,7 @@
       document.getElementById('draft-body').value = draft.body || '';
       loading.style.display = 'none';
       form.style.display = 'block';
+      trackEvent('draft_generated', {page: `conversations/${CUSTOMER_ID}`, draft_type: draft.draft_type || 'unknown'});
     } catch (e) {
       loading.style.display = 'none';
       errorEl.textContent = `Failed to generate draft: ${e.message}`;
@@ -605,6 +606,7 @@
       statusEl.style.color = 'var(--green)';
       statusEl.textContent = '✓ Added to outreach queue';
       btn.textContent = 'Queued ✓';
+      trackEvent('draft_queued', {page: `conversations/${CUSTOMER_ID}`});
     } catch (e) {
       statusEl.style.color = 'var(--red)';
       statusEl.textContent = `Failed: ${e.message}`;
