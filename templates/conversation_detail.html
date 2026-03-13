@@ -410,6 +410,24 @@
   const CUSTOMER_ID = {{ customer.id }};
   let selectedIndex = -1;
 
+  // Lazy-load AI summaries after page render so they don't block initial load
+  (async function loadSummaries() {
+    try {
+      const res = await fetch(`/api/conversation/${CUSTOMER_ID}/summaries`);
+      if (!res.ok) return;
+      const data = await res.json();
+      const summaries = data.summaries || {};
+      // Update timeline event data and visible text
+      TIMELINE_EVENTS.forEach(ev => {
+        if (summaries[ev.id]) {
+          ev.summary = summaries[ev.id];
+          const card = document.querySelector(`.vtl-event[data-index="${TIMELINE_EVENTS.indexOf(ev)}"] .vtl-summary`);
+          if (card) card.textContent = ev.summary;
+        }
+      });
+    } catch (e) { /* silent — summaries are purely cosmetic */ }
+  })();
+
   function toggleSection(id) {
     document.getElementById(id).classList.toggle('open');
   }

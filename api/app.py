@@ -1894,11 +1894,8 @@ def conversation_detail(request: Request, customer_id: int):
 
     timeline_events.sort(key=_timeline_date_key, reverse=True)
 
-    # Enrich timeline summaries with one-sentence AI descriptions
-    ai_summaries = _generate_timeline_summaries(log_entries)
-    for event in timeline_events:
-        if event["id"] in ai_summaries:
-            event["summary"] = ai_summaries[event["id"]]
+    # AI summaries are loaded lazily via /api/conversation/{id}/summaries
+    # to avoid blocking the page render with a Claude call.
 
     timeline_events_json = [
         {
@@ -2364,6 +2361,37 @@ def queue_conversation_draft(customer_id: int, req: QueueDraftRequest):
         )
         db.add(log)
     return {"status": "queued", "customer_id": customer_id}
+
+
+@app.get("/api/conversation/{customer_id}/summaries")
+def get_conversation_summaries(customer_id: int):
+    """
+    Lazy-load one-sentence AI summaries for timeline events.
+    Called by the conversation page after render to avoid blocking page load.
+    Returns {log_id: summary_string}.
+    """
+    with get_db() as db:
+        customer = db.query(Customer).filter_by(id=customer_id, operator_id=OPERATOR_ID).first()
+        if not customer:
+            raise HTTPException(status_code=404, detail="Customer not found")
+        logs = (
+            db.query(OutreachLog)
+            .filter_by(operator_id=OPERATOR_ID, customer_id=customer_id, dry_run=False)
+            .order_by(OutreachLog.sent_at.desc(), OutreachLog.created_at.desc())
+            .all()
+        )
+        log_entries = [
+            {
+                "id": log.id,
+                "direction": log.direction,
+                "subject": log.subject or "(no subject)",
+                "content": log.content or "",
+                "summary": _compact_summary(log.content or "", 170),
+            }
+            for log in logs
+        ]
+    summaries = _generate_timeline_summaries(log_entries)
+    return {"summaries": summaries}
 
 
 def _generate_reactivation_draft(customer_id: int, voice_id: str = None) -> dict:
