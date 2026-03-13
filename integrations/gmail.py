@@ -321,6 +321,9 @@ def send_email(
     """
     service = _get_gmail_service()
 
+    # Diagnostic: log what we're about to encode so we can confirm line endings
+    print(f"[gmail.send_email] body repr (first 300): {repr(body[:300])}")
+
     msg = MIMEText(body, "plain", "utf-8")
     msg["to"] = to
     msg["subject"] = subject

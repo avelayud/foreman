@@ -368,8 +368,14 @@ def _gmail_send_message(to: str, subject: str, body: str, thread_id: str = None,
     """Send a message through Gmail and return thread ID."""
     from integrations.gmail import send_email as gmail_send
 
+    normalized = _normalize_email_body(body)
+
+    # Diagnostic logging — helps identify email formatting issues
+    print(f"[email_body_debug] RAW ({len(body)} chars):\n{repr(body[:500])}")
+    print(f"[email_body_debug] NORMALIZED ({len(normalized)} chars):\n{repr(normalized[:500])}")
+
     _, returned_thread_id = gmail_send(
-        to=to, subject=subject, body=_normalize_email_body(body),
+        to=to, subject=subject, body=normalized,
         thread_id=thread_id, in_reply_to=in_reply_to
     )
     return returned_thread_id
@@ -3604,15 +3610,48 @@ def action_book_call(customer_id: int):
 
 @app.post("/api/outreach/{log_id}/regenerate")
 def regenerate_outreach(log_id: int):
-    """Delete the existing draft and regenerate a fresh one for the same customer."""
+    """Delete the existing draft and regenerate a fresh one for the same customer.
+
+    If the draft is a conversation reply (has response_classification), it re-runs
+    the conversation agent with the same classification so the regenerated draft
+    reflects the actual conversation state rather than cold outreach.
+    """
     with get_db() as db:
         log = db.query(OutreachLog).filter_by(id=log_id, operator_id=OPERATOR_ID, dry_run=True).first()
         if not log:
             raise HTTPException(status_code=404, detail="Draft not found")
         customer_id = log.customer_id
+        classification = log.response_classification  # may be None for cold outreach
+
+        # Find the most recent inbound log for this customer to pass as context
+        latest_inbound = (
+            db.query(OutreachLog)
+            .filter(
+                OutreachLog.customer_id == customer_id,
+                OutreachLog.operator_id == OPERATOR_ID,
+                OutreachLog.direction == "inbound",
+            )
+            .order_by(OutreachLog.sent_at.desc(), OutreachLog.created_at.desc())
+            .first()
+        )
+        inbound_log_id = latest_inbound.id if latest_inbound else None
         db.delete(log)
 
-    # Regenerate
+    # Route to conversation agent if this is a reply draft, else cold reactivation
+    if classification and classification not in ("", "unsubscribe_request"):
+        from agents.conversation_agent import generate_response
+        new_id = generate_response(
+            operator_id=OPERATOR_ID,
+            customer_id=customer_id,
+            classification=classification,
+            inbound_log_id=inbound_log_id,
+            verbose=True,
+        )
+        if not new_id:
+            raise HTTPException(status_code=500, detail="Failed to regenerate reply draft")
+        return {"status": "regenerated", "draft_id": new_id}
+
+    # Cold outreach — use the reactivation draft generator
     draft = _generate_reactivation_draft(customer_id)
     with get_db() as db:
         new_log = OutreachLog(

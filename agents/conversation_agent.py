@@ -58,10 +58,13 @@ Write an email reply in the owner's exact voice. Be brief, warm, and genuinely p
 
 Rules:
 - Match the operator's tone profile exactly -- use their characteristic phrases
-- Read the customer's message carefully and respond to what they ACTUALLY said
+- Read the FULL conversation thread before drafting. Respond to where the customer is NOW,
+  not where they were in an earlier message. People change their minds -- follow their lead.
 - If they asked a question, answer it directly -- don't dodge it or pivot away
-- If they declined something (a call, a visit, an offer), respect it completely. Do not
-  circle back to it or try to re-propose the same thing in different words
+- If they declined something in their CURRENT message, respect it. Do not re-propose the
+  same thing in different words in the same reply.
+- If a customer previously declined something (e.g. a call) but their CURRENT message
+  asks for it, grant the request. Their current ask overrides their earlier position.
 - Never be pushy, salesy, or follow a script. Sound like a real person, not a funnel step
 - Keep it short: 2-5 sentences unless the situation genuinely demands more
 - Return ONLY a JSON object with keys "subject" and "body" -- no markdown, no fences"""
@@ -108,11 +111,16 @@ Most recent customer message (asking about price):
 
 Write a transparent, helpful reply that:
 1. Acknowledges the question directly
-2. Gives a realistic price range based on the service type (don't just say "it depends")
-3. Mentions what's included or what affects the price
-4. Ends with an easy next step (book a time or ask a follow-up)
+2. Gives a realistic price range based on the service type -- do not just say "it depends."
+   If a firm number requires diagnosis, say so AND still give a rough ballpark range.
+3. If you need more info to give an accurate number, ask one specific question about the
+   problem, AND offer a range based on what it typically ends up being
+4. Offer a natural easy next step: could be talking live, swinging by for a quick look, or
+   booking a time -- don't push hard, just make the option available
+5. Keep it brief and honest -- customers appreciate a straight answer over vague hedging
 
-Be honest and specific -- HVAC customers appreciate straight answers over vague hedging."""
+If the customer has already pushed back on a specific option (like a call) in a prior message,
+don't re-propose it. Offer an alternative instead."""
 
 CALLBACK_PROMPT = """Operator tone:
 {tone}
@@ -142,18 +150,19 @@ Service history: {service_summary}
 Full conversation so far:
 {thread_text}
 
-Most recent customer message (they're not ready or declined something, but may have a question):
+Most recent customer message (they declined or aren't ready, but may have a question):
 {reply_text}
 
-The customer is not ready right now. They may have declined a call, declined service,
-or said it's not the right time. Respect that completely -- do not re-propose or push back.
+The customer is not ready or declined something in a prior message. Read what they said now:
+- If they asked a specific question, answer it directly and helpfully -- this is the most
+  important thing. Don't dodge it or pivot to a sales pitch.
+- If they asked for a quote or pricing, give a realistic range. Don't just say "it depends."
+  Offer to discuss more or come take a look if a precise number requires a site visit.
+- If they raised a concern, address it honestly.
+- If they didn't ask anything, just keep the door open briefly and warmly.
+- Only propose a call, visit, or times if they explicitly asked for one in their current message.
 
-If they asked a specific question, answer it directly and helpfully.
-If they raised a concern, address it honestly.
-If they didn't ask anything specific, just keep the door open briefly and warmly.
-
-Write a brief, genuine reply that sounds like a real person who cares, not a salesperson
-working a pipeline. No proposed times, no "great news I have these slots", nothing scripted."""
+Sound like a real person who cares about helping, not a salesperson working a pipeline."""
 
 CLARIFYING_PROMPT = """Operator tone:
 {tone}
