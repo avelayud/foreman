@@ -19,11 +19,11 @@ Usage:
 
 import argparse
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from core.config import config
 from core.database import get_db
-from core.models import Customer, OutreachLog
+from core.models import Booking, Customer, OutreachLog
 
 try:
     from integrations.gmail import get_inbox_replies, search_inbox_by_sender
@@ -56,6 +56,96 @@ def _already_logged_rfc_ids(customer_id: int) -> set[str]:
             if thread_id:
                 ids.add(f"thread:{thread_id}")
         return ids
+
+
+def _auto_create_booking(operator_id: int, customer_id: int, inbound_log_id: int | None):
+    """
+    Called when classifier returns booking_confirmed.
+    1. Reads extracted slot times from the queued confirmation draft.
+    2. Creates a Booking record (source=ai_outreach, status=confirmed).
+    3. Flips Customer.reactivation_status → booked.
+    4. Marks the inbound log as converted.
+    5. Creates a Google Calendar event and stores the event ID.
+    """
+    with get_db() as db:
+        # The conversation_agent._generate_booking_confirmation already queued a draft
+        # with booking_slot_start/end extracted from the customer's reply.
+        draft = (
+            db.query(OutreachLog)
+            .filter(
+                OutreachLog.customer_id == customer_id,
+                OutreachLog.operator_id == operator_id,
+                OutreachLog.response_classification == "booking_confirmed",
+                OutreachLog.direction == "outbound",
+                OutreachLog.dry_run == True,
+                OutreachLog.booking_slot_start != None,
+            )
+            .order_by(OutreachLog.created_at.desc())
+            .first()
+        )
+        slot_start = draft.booking_slot_start if draft else None
+        slot_end = draft.booking_slot_end if draft else None
+
+        customer = db.query(Customer).filter_by(id=customer_id).first()
+        cust_email = customer.email if customer else None
+        cust_name = customer.name if customer else ""
+        service_type = (customer.last_service_type or "HVAC Service") if customer else "HVAC Service"
+
+    if not slot_start:
+        print(f"  [reply_detector] booking_confirmed — no slot extracted, skipping auto-booking for customer {customer_id}")
+        return
+
+    if not slot_end:
+        slot_end = slot_start + timedelta(hours=2)
+
+    # Create Booking record
+    now_utc = datetime.utcnow()
+    with get_db() as db:
+        booking = Booking(
+            operator_id=operator_id,
+            customer_id=customer_id,
+            slot_start=slot_start,
+            slot_end=slot_end,
+            status="confirmed",
+            source="ai_outreach",
+            service_type=service_type,
+        )
+        db.add(booking)
+        db.flush()
+        booking_id = booking.id
+
+        # Flip customer to booked
+        customer = db.query(Customer).filter_by(id=customer_id).first()
+        if customer:
+            customer.reactivation_status = "booked"
+
+        # Mark inbound log converted
+        if inbound_log_id:
+            log = db.query(OutreachLog).filter_by(id=inbound_log_id).first()
+            if log:
+                log.converted_to_job = True
+                log.converted_at = now_utc
+
+    print(f"  [reply_detector] Booking created: id={booking_id}, slot={slot_start}")
+
+    # Try to create GCal event (graceful fallback if calendar scope not available)
+    try:
+        from integrations.calendar import create_calendar_event
+        event = create_calendar_event(
+            summary=f"{service_type} — {cust_name}",
+            start_dt=slot_start,
+            end_dt=slot_end,
+            customer_email=cust_email,
+            description="Booked via Foreman AI outreach",
+        )
+        gcal_id = event.get("id", "")
+        with get_db() as db:
+            b = db.query(Booking).filter_by(id=booking_id).first()
+            if b:
+                b.google_cal_event_id = gcal_id
+        print(f"  [reply_detector] GCal event created: {gcal_id}")
+    except Exception as e:
+        print(f"  [reply_detector] GCal event failed (booking still saved): {e}")
 
 
 def _log_and_process_reply(operator_id: int, customer_id: int, customer_name: str,
@@ -98,10 +188,10 @@ def _log_and_process_reply(operator_id: int, customer_id: int, customer_name: st
         if customer:
             customer.reactivation_status = "replied"
 
-    # Update customer profile with reply context
+    # Update customer profile with reply context (force=True so new reply data is included)
     try:
         from agents.customer_analyzer import analyze_customer
-        analyze_customer(operator_id, customer_id, verbose=False)
+        analyze_customer(operator_id, customer_id, verbose=False, force=True)
     except Exception as e:
         print(f"  [reply_detector] Profile update failed: {e}")
 
@@ -137,6 +227,13 @@ def _log_and_process_reply(operator_id: int, customer_id: int, customer_name: st
             )
         except Exception as e:
             print(f"  [reply_detector] Response generation failed: {e}")
+
+    # Auto-create booking when customer confirms a specific time slot
+    if classification == "booking_confirmed":
+        try:
+            _auto_create_booking(operator_id, customer_id, inbound_log_id)
+        except Exception as e:
+            print(f"  [reply_detector] Auto-booking failed: {e}")
 
     return True
 
