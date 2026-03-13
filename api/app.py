@@ -370,10 +370,6 @@ def _gmail_send_message(to: str, subject: str, body: str, thread_id: str = None,
 
     normalized = _normalize_email_body(body)
 
-    # Diagnostic logging — helps identify email formatting issues
-    print(f"[email_body_debug] RAW ({len(body)} chars):\n{repr(body[:500])}")
-    print(f"[email_body_debug] NORMALIZED ({len(normalized)} chars):\n{repr(normalized[:500])}")
-
     _, returned_thread_id = gmail_send(
         to=to, subject=subject, body=normalized,
         thread_id=thread_id, in_reply_to=in_reply_to

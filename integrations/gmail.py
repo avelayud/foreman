@@ -19,10 +19,12 @@ Usage (CLI test):
 
 import base64
 import email as emaillib
+import html as _html_module
 import json
 import os
 import re
 from datetime import datetime
+from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from pathlib import Path
 
@@ -293,6 +295,29 @@ def get_inbox_replies(thread_ids: list[str]) -> dict[str, list[dict]]:
 
 # ── Send ──────────────────────────────────────────────────────────────────────
 
+def _plain_to_html(body: str) -> str:
+    """Convert paragraph-separated plain text to simple inline HTML.
+
+    Splits on blank lines → <p> tags. Single newlines within a paragraph
+    become <br>. HTML special characters are escaped.
+    Sending as HTML prevents email clients (Gmail in particular) from
+    misinterpreting quoted-printable soft-wrap markers as hard line breaks.
+    """
+    paragraphs = re.split(r'\n{2,}', body.strip())
+    parts = []
+    for para in paragraphs:
+        para = para.strip()
+        if para:
+            escaped = _html_module.escape(para)
+            escaped = escaped.replace('\n', '<br>')
+            parts.append(f'<p style="margin:0 0 1em 0;line-height:1.5">{escaped}</p>')
+    return (
+        '<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#000000">'
+        + ''.join(parts)
+        + '</div>'
+    )
+
+
 def send_email(
     to: str,
     subject: str,
@@ -321,12 +346,14 @@ def send_email(
     """
     service = _get_gmail_service()
 
-    # Diagnostic: log what we're about to encode so we can confirm line endings
-    print(f"[gmail.send_email] body repr (first 300): {repr(body[:300])}")
-
-    msg = MIMEText(body, "plain", "utf-8")
+    # Send as multipart/alternative (plain + HTML).
+    # HTML prevents Gmail from misinterpreting quoted-printable soft-wrap
+    # markers as hard line breaks on the recipient side.
+    msg = MIMEMultipart("alternative")
     msg["to"] = to
     msg["subject"] = subject
+    msg.attach(MIMEText(body, "plain", "utf-8"))
+    msg.attach(MIMEText(_plain_to_html(body), "html", "utf-8"))
 
     # When replying, set RFC 2822 threading headers so the recipient's mail
     # client groups this message in the same thread.
