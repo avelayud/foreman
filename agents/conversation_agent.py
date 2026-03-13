@@ -210,7 +210,7 @@ Write a brief, warm confirmation email that:
 Keep it 3-4 sentences. They've agreed; just confirm and close warmly."""
 
 DATETIME_EXTRACTOR_SYSTEM = """Extract appointment details from a customer's email reply.
-Today's date: {today}
+Today is {today_weekday}, {today}.
 
 Return ONLY a JSON object — no markdown:
 {{
@@ -221,10 +221,15 @@ Return ONLY a JSON object — no markdown:
 }}
 
 Rules:
-- Convert relative references ("Tuesday", "the 18th", "next week") to absolute dates based on today
+- Convert relative references to absolute dates. Use today's day-of-week to count forward correctly:
+  "this Tuesday" or "Tuesday" (when said mid-week) = the coming Tuesday
+  "next Tuesday" = the very next Tuesday from today, even if that is only a few days away
+  "the 18th" = the 18th of the current or next month, whichever is upcoming
+- Do NOT add extra days. If the customer says Tuesday, the slot_start must fall on a Tuesday.
+  Double-check: verify that the date you output actually falls on the stated day of the week.
 - Assume Eastern time / standard business context
 - slot_end = slot_start + 90 minutes if not specified
-- If no specific time mentioned, pick a reasonable morning slot (9:00 AM) for the date mentioned
+- "afternoon" = 2:00 PM if no specific time; "morning" = 9:00 AM; "evening" = 5:00 PM
 - service_type: pull from conversation context (e.g. "AC tune-up", "HVAC maintenance") or null"""
 
 
@@ -276,14 +281,16 @@ def _extract_confirmed_datetime(reply_text: str, thread_text: str) -> dict:
     Returns {"slot_start": datetime|None, "slot_end": datetime|None, "service_type": str|None}.
     """
     from datetime import date
-    today_str = date.today().isoformat()
+    today_dt = date.today()
+    today_str = today_dt.isoformat()
+    today_weekday = today_dt.strftime("%A")  # e.g. "Friday"
 
     client = anthropic.Anthropic(api_key=config.ANTHROPIC_API_KEY)
     try:
         msg = client.messages.create(
             model=config.CLAUDE_MODEL,
             max_tokens=200,
-            system=DATETIME_EXTRACTOR_SYSTEM.format(today=today_str),
+            system=DATETIME_EXTRACTOR_SYSTEM.format(today=today_str, today_weekday=today_weekday),
             messages=[{
                 "role": "user",
                 "content": (
@@ -515,7 +522,10 @@ def generate_response(
 
         cust_name = customer.name
         cust_email = customer.email
-        estimated_value = customer.estimated_job_value or 0.0
+        try:
+            estimated_value = float(customer.estimated_job_value or 0) or 0.0
+        except (TypeError, ValueError):
+            estimated_value = 0.0
         customer_profile = customer.customer_profile or {}
         gmail_thread_id = customer.gmail_thread_id if hasattr(customer, "gmail_thread_id") else None
 

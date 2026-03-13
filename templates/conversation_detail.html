@@ -162,7 +162,7 @@
               {% if event.type == 'inbound' %}
                 {# Customer reply tags #}
                 {% if event.response_classification == 'booking_confirmed' %}
-                  <span class="cls-badge cls-booking-confirmed">✓ Booking Confirmed</span>
+                  <span class="cls-badge cls-booking">📅 Customer Confirmed Time</span>
                 {% elif event.response_classification == 'booking_intent' %}
                   <span class="cls-badge cls-booking">📅 Booking Intent</span>
                 {% elif event.response_classification == 'price_inquiry' %}
@@ -225,7 +225,10 @@
     <div id="estimate-banner" style="background:#eff6ff;border:1px solid #93c5fd;border-radius:8px;padding:14px 16px;margin-bottom:2px">
       <div style="font-size:12px;font-weight:700;color:var(--blue);margin-bottom:4px">Booking created for {{ active_booking.slot_start.strftime('%a %b %-d') if active_booking.slot_start else 'upcoming date' }}. What's the estimated job value?</div>
       <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-        <input type="number" id="estimate-input" placeholder="e.g. 850" min="0" step="50" style="border:1px solid var(--border);border-radius:7px;padding:7px 10px;font-size:13px;width:130px;outline:none">
+        <div style="display:flex;align-items:center;gap:0;border:1px solid var(--border);border-radius:7px;overflow:hidden;background:#fff">
+          <span style="padding:7px 8px;font-size:13px;color:var(--text-3);background:var(--bg);border-right:1px solid var(--border)">$</span>
+          <input type="number" id="estimate-input" placeholder="850" min="0" step="50" style="border:none;padding:7px 10px;font-size:13px;width:110px;outline:none;background:#fff">
+        </div>
         <label style="font-size:12px;color:var(--text-3);display:flex;align-items:center;gap:5px"><input type="checkbox" id="estimate-unknown-cb" onchange="toggleEstimateUnknown()"> Value Unknown</label>
         <button onclick="saveEstimate({{ active_booking.id }})" class="btn-primary" style="font-size:12px;padding:7px 14px">Save</button>
         <span id="estimate-status" style="font-size:12px"></span>
@@ -270,7 +273,7 @@
     {# ── Recommended Action Banner ── #}
     {% if latest_classification and latest_classification != 'none' %}
     {% set ab_map = {
-      'booking_confirmed': ('ab-confirmed', '✓', 'Customer Confirmed a Time', 'Use the Schedule Appointment panel below to send the calendar invite and confirmation email.'),
+      'booking_confirmed': ('ab-confirmed', '📅', 'Customer Confirmed a Time', 'A confirmation draft is queued in the Meetings Queue. Use the Schedule Appointment panel below to send the invite — or go to the Meetings Queue to review the draft first.'),
       'booking_intent': ('ab-booking', '📅', 'Booking Intent Detected', 'This customer wants to schedule. A slot proposal draft has been queued — review and send it from the Meetings Queue.'),
       'price_inquiry':  ('ab-price',   '💰', 'Price Inquiry', 'Customer is asking about cost. A pricing response draft has been queued in the Outreach Queue.'),
       'callback_request': ('ab-callback', '📞', 'Callback Requested', 'Customer prefers to talk. A response draft has been queued — or call them directly.'),
@@ -345,47 +348,81 @@
     <div class="panel" id="schedule-panel">
       <div class="panel-head">
         <span class="panel-title" style="display:flex;align-items:center;gap:6px">
-          <span style="color:var(--green)">📅</span>
-          {% if active_booking %}Appointment Booked{% else %}Schedule Appointment{% endif %}
+          <span style="color:{% if active_booking and active_booking.status == 'confirmed' %}var(--green){% elif active_booking and active_booking.status == 'tentative' %}var(--amber){% else %}var(--navy){% endif %}">📅</span>
+          {% if active_booking and active_booking.status == 'confirmed' %}Appointment Confirmed
+          {% elif active_booking and active_booking.status == 'tentative' %}Pending — Invite Not Sent
+          {% else %}Schedule Appointment{% endif %}
         </span>
-        <button class="btn-ghost" onclick="resetSchedulePanel()" id="schedule-reset-btn" style="font-size:11px;padding:5px 11px;{% if active_booking %}display:none{% else %}display:none{% endif %}">↺ New Booking</button>
+        <button class="btn-ghost" onclick="resetSchedulePanel()" id="schedule-reset-btn" style="font-size:11px;padding:5px 11px;display:none">↺ New Booking</button>
       </div>
       <div class="panel-body">
 
         {# Idle state — only shown when no booking exists yet #}
         <div id="schedule-prompt" {% if active_booking %}style="display:none"{% endif %}>
+          {% if pending_booking_log_id %}
+          {# There's a booking_confirmed draft in the Meetings Queue — show inline confirmation #}
+          <div style="background:var(--blue-pale);border:1px solid #bfdbfe;border-radius:8px;padding:12px 14px;margin-bottom:12px">
+            <div style="font-size:11px;font-family:'IBM Plex Mono',monospace;letter-spacing:1px;text-transform:uppercase;color:var(--blue);margin-bottom:6px">Draft Invite Queued</div>
+            <div style="font-size:12.5px;color:var(--navy);font-weight:600;margin-bottom:2px">
+              {% if pending_booking_slot_start %}{{ pending_booking_slot_start.strftime('%a %b %-d · %-I:%M %p') }}{% else %}Time extracted from reply{% endif %}
+            </div>
+            <div style="font-size:11.5px;color:var(--text-3);margin-bottom:10px">A confirmation draft is waiting in the Meetings Queue. Confirm the time below and send — or go to Meetings Queue to edit the email first.</div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap">
+              <button class="btn-primary" onclick="showScheduleForm(true)" style="font-size:12px;padding:6px 14px">Send Invite from Here</button>
+              <a href="/meetings" class="btn-ghost" style="text-decoration:none;font-size:12px;padding:6px 14px">Review in Meetings Queue →</a>
+            </div>
+          </div>
+          {% else %}
           <div style="font-size:13px;color:var(--text-3);margin-bottom:12px">Book a time, create a Google Calendar event, and send a confirmation email — all in one click.</div>
-          <button class="btn-primary" onclick="showScheduleForm()" style="font-size:13px;padding:8px 20px;background:var(--green)">Set Up Appointment</button>
+          <button class="btn-primary" onclick="showScheduleForm(false)" style="font-size:13px;padding:8px 20px;background:var(--green)">Set Up Appointment</button>
+          {% endif %}
         </div>
 
         {# Form state #}
         <div id="schedule-form" style="display:none">
           <div class="booking-grid">
             <div class="booking-field">
-              <label>Start time</label>
-              <input type="datetime-local" id="book-slot-start">
+              <label>Day</label>
+              <select id="book-slot-date" onchange="loadBookingSlots()" style="width:100%"></select>
             </div>
             <div class="booking-field">
-              <label>End time</label>
-              <input type="datetime-local" id="book-slot-end">
+              <label>Time</label>
+              <select id="book-slot-time" style="width:100%"></select>
+            </div>
+            <div class="booking-field">
+              <label>Duration</label>
+              <select id="book-slot-duration" onchange="loadBookingSlots()" style="width:100%">
+                <option value="30">30 min</option>
+                <option value="60" selected>1 hr</option>
+                <option value="90">1.5 hr</option>
+                <option value="120">2 hr</option>
+                <option value="180">3 hr</option>
+              </select>
             </div>
             <div class="booking-field">
               <label>Service type</label>
               <input type="text" id="book-service-type" value="{{ customer.last_service_type or 'Service' }}">
             </div>
-            <div class="booking-field">
-              <label>Internal notes (optional)</label>
-              <input type="text" id="book-notes" placeholder="e.g. bring extra filters">
-            </div>
+          </div>
+          <div id="booking-slot-suggestions" style="display:none;margin-bottom:12px">
+            <div style="font-size:10px;font-family:'IBM Plex Mono',monospace;letter-spacing:1px;text-transform:uppercase;color:var(--text-3);margin-bottom:6px">Available Slots</div>
+            <div id="booking-slot-btns" style="display:flex;flex-wrap:wrap;gap:6px"></div>
+          </div>
+          <div class="booking-field" style="margin-bottom:10px">
+            <label>Internal notes (optional)</label>
+            <input type="text" id="book-notes" placeholder="e.g. bring extra filters">
           </div>
           <div class="booking-field" style="margin-bottom:10px">
             <label>Email subject</label>
             <input type="text" id="book-subject" placeholder="Your appointment is confirmed">
           </div>
           <div class="booking-field" style="margin-bottom:10px">
-            <label>Estimated job value ($) <span style="color:var(--red)">*</span></label>
+            <label>Estimated job value <span style="color:var(--red)">*</span></label>
             <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-              <input type="number" id="book-estimated-value" placeholder="e.g. 850" min="0" step="50" style="max-width:160px" onchange="toggleEstimateUnknownBook()">
+              <div style="display:flex;align-items:center;gap:0;border:1px solid var(--border);border-radius:7px;overflow:hidden;background:#fff">
+                <span style="padding:7px 8px;font-size:13px;color:var(--text-3);background:var(--bg);border-right:1px solid var(--border)">$</span>
+                <input type="number" id="book-estimated-value" placeholder="850" min="0" step="50" style="border:none;padding:7px 10px;font-size:13px;max-width:130px;outline:none;background:#fff" onchange="toggleEstimateUnknownBook()">
+              </div>
               <label style="font-size:12px;color:var(--text-3);display:flex;align-items:center;gap:5px;margin-top:0"><input type="checkbox" id="book-estimate-unknown" onchange="toggleEstimateUnknownBook()"> Value Unknown</label>
             </div>
           </div>
@@ -402,55 +439,99 @@
           </div>
         </div>
 
-        {# Booked state — shown on page load if booking exists, or after sending invite #}
-        <div id="schedule-notes" {% if not active_booking %}style="display:none"{% endif %}>
+        {# Tentative booking state — booking exists but invite not sent #}
+        {% if active_booking and active_booking.status == 'tentative' %}
+        <div id="schedule-notes" style="display:block">
+          <div style="background:var(--amber-pale);border:1px solid #fde68a;border-radius:8px;padding:11px 13px;margin-bottom:14px">
+            <div style="font-size:12px;font-weight:700;color:var(--amber);margin-bottom:4px">⏳ Booking saved — confirmation invite not yet sent</div>
+            <div style="font-size:12px;color:var(--text-2);margin-bottom:10px">
+              {{ active_booking.slot_start.strftime('%a %b %-d, %Y · %-I:%M %p') if active_booking.slot_start else 'Time TBD' }}
+              — {{ active_booking.service_type or 'Service' }}
+            </div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap">
+              <button onclick="showScheduleForm(false)" class="btn-primary" style="font-size:12px;padding:6px 14px">Send Invite Now</button>
+              <button onclick="cancelBooking({{ active_booking.id }})" class="btn-ghost" style="font-size:12px;color:var(--red);border-color:#fecaca">Cancel Booking</button>
+            </div>
+          </div>
+          <div class="booking-field" style="margin-bottom:12px">
+            <label>Job notes</label>
+            <textarea id="post-notes" placeholder="Scope of work, what was discussed, access info…" style="min-height:80px">{{ active_booking.notes }}</textarea>
+          </div>
+          <div class="booking-field" style="margin-bottom:16px">
+            <label>Opportunity value</label>
+            <div style="display:flex;align-items:center;gap:0;border:1px solid var(--border);border-radius:7px;overflow:hidden;background:#fff;max-width:180px">
+              <span style="padding:7px 8px;font-size:13px;color:var(--text-3);background:var(--bg);border-right:1px solid var(--border)">$</span>
+              <input type="number" id="post-value" placeholder="850" min="0" step="50" style="border:none;padding:7px 10px;font-size:13px;width:140px;outline:none;background:#fff" value="{{ active_booking.estimated_value or '' }}">
+            </div>
+          </div>
+          <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+            <button class="book-send-btn" id="save-notes-btn" onclick="saveBookingNotes()">Save Notes</button>
+            <span id="notes-status" style="font-size:12px"></span>
+          </div>
+        </div>
 
-          {% if active_booking %}
-          {# Pre-existing booking header #}
+        {# Confirmed booking state — invite sent #}
+        {% elif active_booking and active_booking.status == 'confirmed' %}
+        <div id="schedule-notes" style="display:block">
           <div style="display:flex;align-items:flex-start;gap:10px;margin-bottom:14px;padding:11px 13px;background:var(--green-pale);border:1px solid #a7f3d0;border-radius:8px">
-            <span style="font-size:16px;line-height:1.2;flex-shrink:0">📅</span>
+            <span style="font-size:16px;line-height:1.2;flex-shrink:0">✓</span>
             <div>
               <div style="font-size:12.5px;font-weight:700;color:var(--green);margin-bottom:2px">
                 {{ active_booking.slot_start.strftime('%a %b %-d, %Y · %-I:%M %p') if active_booking.slot_start else 'Time TBD' }}
                 {% if active_booking.slot_end %} – {{ active_booking.slot_end.strftime('%-I:%M %p') }}{% endif %}
               </div>
               <div style="font-size:11.5px;color:var(--text-2)">
-                {{ active_booking.service_type or 'Service' }} ·
-                <span style="text-transform:capitalize">{{ active_booking.status }}</span>
+                {{ active_booking.service_type or 'Service' }} · Invite sent
                 {% if active_booking.estimated_value %} · <strong style="color:var(--green)">${{ "{:,.0f}".format(active_booking.estimated_value) }}</strong>{% endif %}
               </div>
             </div>
           </div>
-          {% else %}
-          {# Post-send confirmation (JS sets this) #}
+          <div style="font-size:12.5px;color:var(--text-2);margin-bottom:14px;line-height:1.5">Capture the opportunity value and any scope notes to track revenue from this outreach.</div>
+          <div class="booking-field" style="margin-bottom:12px">
+            <label>Job notes</label>
+            <textarea id="post-notes" placeholder="Scope of work, what was discussed, access info…" style="min-height:80px">{{ active_booking.notes }}</textarea>
+          </div>
+          <div class="booking-field" style="margin-bottom:16px">
+            <label>Opportunity value</label>
+            <div style="display:flex;align-items:center;gap:0;border:1px solid var(--border);border-radius:7px;overflow:hidden;background:#fff;max-width:180px">
+              <span style="padding:7px 8px;font-size:13px;color:var(--text-3);background:var(--bg);border-right:1px solid var(--border)">$</span>
+              <input type="number" id="post-value" placeholder="850" min="0" step="50" style="border:none;padding:7px 10px;font-size:13px;width:140px;outline:none;background:#fff" value="{{ active_booking.estimated_value or '' }}">
+            </div>
+          </div>
+          <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+            <button class="book-send-btn" id="save-notes-btn" onclick="saveBookingNotes()">Update Value</button>
+            <span id="notes-status" style="font-size:12px"></span>
+          </div>
+        </div>
+
+        {# No booking — idle + post-send JS target #}
+        {% else %}
+        <div id="schedule-notes" style="display:none">
           <div id="booking-confirm-banner" style="display:flex;align-items:center;gap:8px;margin-bottom:14px;padding:10px 12px;background:var(--green-pale);border:1px solid #a7f3d0;border-radius:8px">
             <span style="font-size:15px">✓</span>
             <span id="booking-confirm-msg" style="font-size:12.5px;font-weight:600;color:var(--green)"></span>
           </div>
-          {% endif %}
-
-          <div style="font-size:12.5px;color:var(--text-2);margin-bottom:14px;line-height:1.5">Capture the opportunity value and any scope notes to track revenue from this outreach.</div>
           <div class="booking-field" style="margin-bottom:12px">
             <label>Job notes</label>
-            <textarea id="post-notes" placeholder="Scope of work, what was discussed, access info…" style="min-height:80px">{{ active_booking.notes if active_booking else '' }}</textarea>
+            <textarea id="post-notes" placeholder="Scope of work, what was discussed, access info…" style="min-height:80px"></textarea>
           </div>
           <div class="booking-field" style="margin-bottom:16px">
-            <label>Opportunity value ($)</label>
-            <input type="number" id="post-value" placeholder="e.g. 850" min="0" step="50" style="max-width:180px" value="{{ active_booking.estimated_value if active_booking and active_booking.estimated_value else '' }}">
+            <label>Opportunity value</label>
+            <div style="display:flex;align-items:center;gap:0;border:1px solid var(--border);border-radius:7px;overflow:hidden;background:#fff;max-width:180px">
+              <span style="padding:7px 8px;font-size:13px;color:var(--text-3);background:var(--bg);border-right:1px solid var(--border)">$</span>
+              <input type="number" id="post-value" placeholder="850" min="0" step="50" style="border:none;padding:7px 10px;font-size:13px;width:140px;outline:none;background:#fff">
+            </div>
           </div>
           <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
-            <button class="book-send-btn" id="save-notes-btn" onclick="saveBookingNotes()">{% if active_booking %}Update Value{% else %}Save Notes{% endif %}</button>
-            {% if not active_booking %}
+            <button class="book-send-btn" id="save-notes-btn" onclick="saveBookingNotes()">Save Notes</button>
             <button onclick="window.location.reload()" style="all:unset;cursor:pointer;font-size:12px;color:var(--text-3);font-family:'IBM Plex Mono',monospace">skip →</button>
-            {% endif %}
             <span id="notes-status" style="font-size:12px"></span>
           </div>
-          {% if not active_booking %}
           <div style="margin-top:10px">
             <button onclick="showNewBookingForm()" style="all:unset;cursor:pointer;font-size:11.5px;color:var(--text-3);font-family:'IBM Plex Mono',monospace;text-decoration:underline">Book a different time →</button>
           </div>
-          {% endif %}
         </div>
+        {% endif %}
 
       </div>
     </div>
@@ -715,17 +796,113 @@
 
   // Pre-seed booking id if one already exists on page load
   let _bookingId = {{ active_booking.id if active_booking else 'null' }};
+  const _pendingBookingLogId = {{ pending_booking_log_id or 'null' }};
+  const _pendingBookingSubject = {{ ('"' + pending_booking_subject|replace('"','\\\"') + '"') if pending_booking_subject else 'null' }};
+  const _pendingBookingBody = {{ ('"' + pending_booking_body|replace('"','\\\"')|replace('\n','\\n') + '"') if pending_booking_body else 'null' }};
 
-  function showScheduleForm() {
+  function _pad2(n) { return String(n).padStart(2, '0'); }
+
+  function _initBookingDateSelects(preselectIso) {
+    const dayNames = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+    const dateSelect = document.getElementById('book-slot-date');
+    const timeSelect = document.getElementById('book-slot-time');
+    if (!dateSelect || !timeSelect) return;
+    dateSelect.innerHTML = '';
+    timeSelect.innerHTML = '';
+    const preselectDate = preselectIso ? preselectIso.substring(0, 10) : '';
+    const preselectTime = preselectIso ? preselectIso.substring(11, 16) : '';
+    const today = new Date(); today.setHours(0,0,0,0);
+    for (let i = 0; i <= 21; i++) {
+      const d = new Date(today); d.setDate(today.getDate() + i);
+      const val = `${d.getFullYear()}-${_pad2(d.getMonth()+1)}-${_pad2(d.getDate())}`;
+      const label = `${dayNames[d.getDay()]} ${d.getMonth()+1}/${d.getDate()}/${String(d.getFullYear()).slice(2)}`;
+      const opt = new Option(label, val, false, val === preselectDate);
+      dateSelect.add(opt);
+    }
+    // Default time slots until calendar loads
+    for (let h = 7; h <= 20; h++) {
+      for (let m = 0; m < 60; m += 30) {
+        const val = `${_pad2(h)}:${_pad2(m)}`;
+        const ampm = h < 12 ? 'AM' : 'PM'; const h12 = h % 12 || 12;
+        const isDefault = !preselectTime && h === 9 && m === 0;
+        const opt = new Option(`${h12}:${_pad2(m)} ${ampm}`, val, false, val === preselectTime || isDefault);
+        timeSelect.add(opt);
+      }
+    }
+    loadBookingSlots();
+  }
+
+  async function loadBookingSlots() {
+    const dateVal = document.getElementById('book-slot-date')?.value;
+    const duration = document.getElementById('book-slot-duration')?.value || '60';
+    const suggestionsDiv = document.getElementById('booking-slot-suggestions');
+    const btnsDiv = document.getElementById('booking-slot-btns');
+    if (!dateVal || !suggestionsDiv || !btnsDiv) return;
+    btnsDiv.innerHTML = '<span style="font-size:11px;color:var(--text-3)">Loading…</span>';
+    suggestionsDiv.style.display = 'block';
+    try {
+      const res = await fetch(`/api/calendar/slots?date=${dateVal}&duration=${duration}`);
+      const data = await res.json().catch(() => ({}));
+      const slots = data.slots || [];
+      btnsDiv.innerHTML = '';
+      if (slots.length === 0) {
+        btnsDiv.innerHTML = '<span style="font-size:11px;color:var(--text-3)">No available slots found for this day.</span>';
+      } else {
+        const timeSelect = document.getElementById('book-slot-time');
+        slots.forEach(slot => {
+          const btn = document.createElement('button');
+          btn.textContent = slot.label;
+          btn.style.cssText = 'all:unset;cursor:pointer;font-size:11.5px;font-family:"IBM Plex Mono",monospace;padding:4px 10px;border:1px solid var(--blue);border-radius:20px;color:var(--blue);background:var(--blue-pale);white-space:nowrap';
+          btn.onclick = () => {
+            if (timeSelect) {
+              // Find or add the matching time option
+              let found = false;
+              for (let opt of timeSelect.options) {
+                if (opt.value === slot.time) { opt.selected = true; found = true; break; }
+              }
+              if (!found) {
+                const opt = new Option(slot.label, slot.time, true, true);
+                timeSelect.add(opt);
+              }
+            }
+            // Highlight selected
+            btnsDiv.querySelectorAll('button').forEach(b => b.style.background = 'var(--blue-pale)');
+            btn.style.background = 'var(--blue)';
+            btn.style.color = '#fff';
+          };
+          btnsDiv.appendChild(btn);
+        });
+      }
+    } catch (e) {
+      btnsDiv.innerHTML = '<span style="font-size:11px;color:var(--text-3)">Calendar unavailable.</span>';
+    }
+  }
+
+  function showScheduleForm(fromQueue) {
     document.getElementById('schedule-prompt').style.display = 'none';
     document.getElementById('schedule-form').style.display = 'block';
     document.getElementById('schedule-reset-btn').style.display = 'inline-flex';
+    // Pre-fill subject/body from queued draft if available
+    const subjectEl = document.getElementById('book-subject');
+    const bodyEl = document.getElementById('book-body');
+    if (fromQueue && _pendingBookingLogId) {
+      if (_pendingBookingSubject && subjectEl && !subjectEl.value) subjectEl.value = _pendingBookingSubject;
+      if (_pendingBookingBody && bodyEl && !bodyEl.value) bodyEl.value = _pendingBookingBody;
+    }
+    // Pre-fill date/time from extracted slot if available (from pending booking_confirmed draft)
+    {% if pending_booking_slot_start %}
+    const preIso = '{{ pending_booking_slot_start.strftime("%Y-%m-%dT%H:%M:%S") if pending_booking_slot_start else "" }}';
+    _initBookingDateSelects(preIso);
+    {% else %}
+    _initBookingDateSelects(null);
+    {% endif %}
   }
 
   function showNewBookingForm() {
     document.getElementById('schedule-notes').style.display = 'none';
     document.getElementById('schedule-form').style.display = 'block';
     document.getElementById('schedule-reset-btn').style.display = 'inline-flex';
+    _initBookingDateSelects(null);
   }
 
   function resetSchedulePanel() {
@@ -740,11 +917,25 @@
     _bookingId = null;
   }
 
+  async function cancelBooking(bookingId) {
+    if (!confirm('Cancel this booking? The appointment will be removed and the customer status will reset. This cannot be undone.')) return;
+    try {
+      const res = await fetch(`/api/booking/${bookingId}/cancel`, { method: 'POST' });
+      if (res.ok) { window.location.reload(); }
+      else {
+        const d = await res.json().catch(() => ({}));
+        alert('Could not cancel: ' + (d.detail || 'Server error'));
+      }
+    } catch (e) { alert('Could not cancel: ' + e.message); }
+  }
+
   async function generateBookingEmail() {
     const btn = document.getElementById('gen-email-btn');
     const bodyEl = document.getElementById('book-body');
     const subjectEl = document.getElementById('book-subject');
-    const start = document.getElementById('book-slot-start').value;
+    const dateVal = document.getElementById('book-slot-date')?.value || '';
+    const timeVal = document.getElementById('book-slot-time')?.value || '';
+    const start = dateVal && timeVal ? `${dateVal}T${timeVal}:00` : '';
     const serviceType = document.getElementById('book-service-type').value || 'service';
     btn.textContent = '…';
     btn.style.pointerEvents = 'none';
@@ -766,15 +957,25 @@
     }
   }
 
+  function _computeBookingSlots() {
+    const dateVal = document.getElementById('book-slot-date')?.value;
+    const timeVal = document.getElementById('book-slot-time')?.value;
+    const duration = parseInt(document.getElementById('book-slot-duration')?.value || '60');
+    if (!dateVal || !timeVal) return { slotStart: null, slotEnd: null };
+    const start = new Date(`${dateVal}T${timeVal}:00`);
+    const end = new Date(start.getTime() + duration * 60000);
+    const fmt = d => `${d.getFullYear()}-${_pad2(d.getMonth()+1)}-${_pad2(d.getDate())}T${_pad2(d.getHours())}:${_pad2(d.getMinutes())}:00`;
+    return { slotStart: fmt(start), slotEnd: fmt(end) };
+  }
+
   async function sendBookingInvite() {
     const btn = document.getElementById('book-send-btn');
     const statusEl = document.getElementById('book-status');
-    const slotStart = document.getElementById('book-slot-start').value;
-    const slotEnd = document.getElementById('book-slot-end').value;
+    const { slotStart, slotEnd } = _computeBookingSlots();
 
     if (!slotStart || !slotEnd) {
       statusEl.style.color = 'var(--red)';
-      statusEl.textContent = '⚠ Set a start and end time first.';
+      statusEl.textContent = '⚠ Select a day and time first.';
       return;
     }
 
@@ -812,23 +1013,11 @@
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.detail || 'Server error');
 
-      let msg = 'Booking confirmed!';
-      if (data.gcal_event_id) msg += ' Calendar invite sent.';
-      if (data.email_sent) msg += ' Confirmation email sent.';
-      if (data.gcal_error) msg += ` (Calendar warning: ${data.gcal_error})`;
-      if (data.mode !== 'production') msg = 'Booking created (dry run — switch to Production to send email + invite).';
-
-      // Transition to notes capture state
-      _bookingId = data.booking_id;
-      document.getElementById('schedule-form').style.display = 'none';
-      const confirmBanner = document.getElementById('booking-confirm-banner');
-      const confirmMsg = document.getElementById('booking-confirm-msg');
-      if (confirmBanner) confirmBanner.style.display = 'flex';
-      if (confirmMsg) confirmMsg.textContent = msg;
-      const saveBtn = document.getElementById('save-notes-btn');
-      if (saveBtn) saveBtn.textContent = 'Save Notes';
-      document.getElementById('schedule-notes').style.display = 'block';
-      document.getElementById('schedule-panel').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      // Reload page to show correct confirmed/tentative state
+      btn.textContent = data.email_sent ? 'Sent ✓' : 'Saved ✓';
+      statusEl.style.color = 'var(--green)';
+      statusEl.textContent = data.email_sent ? 'Invite sent!' : 'Booking saved (dry-run — switch to Production to send email).';
+      setTimeout(() => window.location.reload(), 1000);
     } catch (e) {
       statusEl.style.color = 'var(--red)';
       statusEl.textContent = '⚠ ' + e.message;

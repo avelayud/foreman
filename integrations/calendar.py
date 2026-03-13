@@ -172,6 +172,78 @@ def get_available_slots(
     return slots[:max_slots]
 
 
+def get_available_slots_for_date(
+    date_str: str,
+    duration_minutes: int = 60,
+    working_hours: tuple = (8, 17),
+) -> list[dict]:
+    """
+    Return available appointment slots for a specific date (YYYY-MM-DD).
+
+    Generates candidates at 30-min increments within working hours, removes
+    any that overlap with busy calendar events.
+
+    Each slot dict:
+        {"start_iso": "2026-03-18T10:00:00", "time": "10:00", "label": "10:00 AM"}
+    """
+    try:
+        import zoneinfo
+        eastern = zoneinfo.ZoneInfo("America/New_York")
+    except ImportError:
+        import pytz
+        eastern = pytz.timezone("America/New_York")
+
+    try:
+        target = datetime.strptime(date_str, "%Y-%m-%d")
+    except ValueError:
+        return []
+
+    target_start = target.replace(hour=working_hours[0], minute=0, second=0, microsecond=0)
+    target_end = target.replace(hour=working_hours[1], minute=0, second=0, microsecond=0)
+
+    # Fetch busy periods from Google Calendar
+    busy = []
+    try:
+        ts = target_start.replace(tzinfo=eastern)
+        te = target_end.replace(tzinfo=eastern)
+        service = _get_calendar_service()
+        result = service.freebusy().query(body={
+            "timeMin": ts.isoformat(),
+            "timeMax": te.isoformat(),
+            "items": [{"id": "primary"}],
+        }).execute()
+        for period in result["calendars"]["primary"]["busy"]:
+            b_start = datetime.fromisoformat(period["start"])
+            b_end = datetime.fromisoformat(period["end"])
+            if b_start.tzinfo is not None:
+                b_start = b_start.astimezone(eastern).replace(tzinfo=None)
+            if b_end.tzinfo is not None:
+                b_end = b_end.astimezone(eastern).replace(tzinfo=None)
+            busy.append((b_start, b_end))
+        busy.sort()
+    except Exception:
+        pass  # If calendar unavailable, return all slots as free
+
+    # Generate candidates at 30-min steps, skip any that overlap busy blocks
+    slots = []
+    cursor = target_start
+    step = timedelta(minutes=30)
+    while cursor + timedelta(minutes=duration_minutes) <= target_end:
+        slot_end = cursor + timedelta(minutes=duration_minutes)
+        if not any(b_start < slot_end and b_end > cursor for b_start, b_end in busy):
+            h, m = cursor.hour, cursor.minute
+            ampm = "AM" if h < 12 else "PM"
+            h12 = h % 12 or 12
+            slots.append({
+                "start_iso": cursor.strftime("%Y-%m-%dT%H:%M:%S"),
+                "time": cursor.strftime("%H:%M"),
+                "label": f"{h12}:{m:02d} {ampm}",
+            })
+        cursor += step
+
+    return slots
+
+
 def create_calendar_event(
     summary: str,
     start_dt: datetime,

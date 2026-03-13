@@ -136,17 +136,32 @@
       <div class="queue-left">
         <div class="confirm-panel">
           <div class="confirm-panel-title">Appointment Details</div>
-          <div class="confirm-grid">
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px">
             <div class="field-block" style="margin-bottom:0">
-              <label class="field-label">Start Time</label>
-              <input id="slot-start-{{ item.log_id }}" type="datetime-local" class="field-input send-at-compact"
-                     value="{{ item.booking_slot_start_input }}" />
+              <label class="field-label">Day</label>
+              <select id="slot-date-{{ item.log_id }}" class="field-input send-at-compact"
+                      data-preselect="{{ item.booking_slot_start_input or '' }}"
+                      onchange="loadMeetingSlots({{ item.log_id }})"></select>
             </div>
             <div class="field-block" style="margin-bottom:0">
-              <label class="field-label">End Time</label>
-              <input id="slot-end-{{ item.log_id }}" type="datetime-local" class="field-input send-at-compact"
-                     value="{{ item.booking_slot_end_input }}" />
+              <label class="field-label">Time</label>
+              <select id="slot-time-{{ item.log_id }}" class="field-input send-at-compact"
+                      data-preselect="{{ item.booking_slot_start_input or '' }}"></select>
             </div>
+            <div class="field-block" style="margin-bottom:0">
+              <label class="field-label">Duration</label>
+              <select id="slot-duration-{{ item.log_id }}" class="field-input send-at-compact">
+                <option value="30">30 min</option>
+                <option value="60" selected>1 hr</option>
+                <option value="90">1.5 hr</option>
+                <option value="120">2 hr</option>
+                <option value="180">3 hr</option>
+              </select>
+            </div>
+          </div>
+          <div id="meeting-slots-{{ item.log_id }}" style="display:none;margin-top:8px;margin-bottom:0">
+            <div style="font-size:9px;font-family:'IBM Plex Mono',monospace;letter-spacing:1px;text-transform:uppercase;color:var(--text-3);margin-bottom:5px">Available Slots</div>
+            <div id="meeting-slot-btns-{{ item.log_id }}" style="display:flex;flex-wrap:wrap;gap:5px"></div>
           </div>
           <div class="field-block" style="margin-top:10px;margin-bottom:0">
             <label class="field-label">Service Type</label>
@@ -414,15 +429,108 @@
     }
   }
 
+  function _pad2(n) { return String(n).padStart(2, '0'); }
+
+  function _computeSlots(logId) {
+    const dateVal = document.getElementById('slot-date-' + logId)?.value;
+    const timeVal = document.getElementById('slot-time-' + logId)?.value;
+    const duration = parseInt(document.getElementById('slot-duration-' + logId)?.value || '60');
+    if (!dateVal || !timeVal) return { slotStart: null, slotEnd: null };
+    const start = new Date(`${dateVal}T${timeVal}:00`);
+    const end = new Date(start.getTime() + duration * 60000);
+    const fmt = d => `${d.getFullYear()}-${_pad2(d.getMonth()+1)}-${_pad2(d.getDate())}T${_pad2(d.getHours())}:${_pad2(d.getMinutes())}:00`;
+    return { slotStart: fmt(start), slotEnd: fmt(end) };
+  }
+
+  function populateSlotSelects() {
+    const dayNames = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+    document.querySelectorAll('[id^="slot-date-"]').forEach(dateSelect => {
+      const logId = dateSelect.id.replace('slot-date-', '');
+      const preselect = dateSelect.dataset.preselect || '';
+      const preselectDate = preselect ? preselect.substring(0, 10) : '';
+      const preselectTime = preselect ? preselect.substring(11, 16) : '';
+
+      const today = new Date(); today.setHours(0, 0, 0, 0);
+      for (let i = 0; i <= 21; i++) {
+        const d = new Date(today); d.setDate(today.getDate() + i);
+        const val = `${d.getFullYear()}-${_pad2(d.getMonth()+1)}-${_pad2(d.getDate())}`;
+        const label = `${dayNames[d.getDay()]} ${d.getMonth()+1}/${d.getDate()}/${String(d.getFullYear()).slice(2)}`;
+        const opt = new Option(label, val, false, val === preselectDate);
+        dateSelect.add(opt);
+      }
+
+      const timeSelect = document.getElementById('slot-time-' + logId);
+      if (timeSelect) {
+        for (let h = 7; h <= 20; h++) {
+          for (let m = 0; m < 60; m += 30) {
+            const val = `${_pad2(h)}:${_pad2(m)}`;
+            const ampm = h < 12 ? 'AM' : 'PM';
+            const h12 = h % 12 || 12;
+            const label = `${h12}:${_pad2(m)} ${ampm}`;
+            const isDefault = !preselectTime && h === 9 && m === 0;
+            const opt = new Option(label, val, false, val === preselectTime || isDefault);
+            timeSelect.add(opt);
+          }
+        }
+      }
+    });
+  }
+
+  async function loadMeetingSlots(logId) {
+    const dateVal = document.getElementById('slot-date-' + logId)?.value;
+    const duration = document.getElementById('slot-duration-' + logId)?.value || '60';
+    const slotDiv = document.getElementById('meeting-slots-' + logId);
+    const btnsDiv = document.getElementById('meeting-slot-btns-' + logId);
+    if (!dateVal || !slotDiv || !btnsDiv) return;
+    btnsDiv.innerHTML = '<span style="font-size:10px;color:var(--text-3)">Loading…</span>';
+    slotDiv.style.display = 'block';
+    try {
+      const res = await fetch(`/api/calendar/slots?date=${dateVal}&duration=${duration}`);
+      const data = await res.json().catch(() => ({}));
+      const slots = data.slots || [];
+      btnsDiv.innerHTML = '';
+      if (slots.length === 0) {
+        btnsDiv.innerHTML = '<span style="font-size:10px;color:var(--text-3)">No open slots.</span>';
+      } else {
+        const timeSelect = document.getElementById('slot-time-' + logId);
+        slots.forEach(slot => {
+          const btn = document.createElement('button');
+          btn.textContent = slot.label;
+          btn.style.cssText = 'all:unset;cursor:pointer;font-size:10.5px;font-family:"IBM Plex Mono",monospace;padding:3px 9px;border:1px solid var(--blue);border-radius:20px;color:var(--blue);background:var(--blue-pale);white-space:nowrap';
+          btn.onclick = () => {
+            if (timeSelect) {
+              let found = false;
+              for (let opt of timeSelect.options) { if (opt.value === slot.time) { opt.selected = true; found = true; break; } }
+              if (!found) { const opt = new Option(slot.label, slot.time, true, true); timeSelect.add(opt); }
+            }
+            btnsDiv.querySelectorAll('button').forEach(b => { b.style.background = 'var(--blue-pale)'; b.style.color = 'var(--blue)'; });
+            btn.style.background = 'var(--blue)'; btn.style.color = '#fff';
+          };
+          btnsDiv.appendChild(btn);
+        });
+      }
+    } catch (e) {
+      btnsDiv.innerHTML = '<span style="font-size:10px;color:var(--text-3)">Calendar unavailable.</span>';
+    }
+  }
+
+  document.addEventListener('DOMContentLoaded', () => {
+    populateSlotSelects();
+    // Load initial slots for each confirm card
+    document.querySelectorAll('[id^="slot-date-"]').forEach(sel => {
+      const logId = sel.id.replace('slot-date-', '');
+      loadMeetingSlots(logId);
+    });
+  });
+
   async function confirmBooking(logId) {
     const btn = document.getElementById('confirm-btn-' + logId);
     const label = document.getElementById('action-label-' + logId);
     const errEl = document.getElementById('action-error-' + logId);
 
-    const slotStart = document.getElementById('slot-start-' + logId)?.value;
-    const slotEnd = document.getElementById('slot-end-' + logId)?.value;
+    const { slotStart, slotEnd } = _computeSlots(logId);
     if (!slotStart || !slotEnd) {
-      errEl.textContent = '⚠ Please set a start and end time before confirming.';
+      errEl.textContent = '⚠ Please select a day and time before confirming.';
       errEl.style.display = 'inline';
       return;
     }

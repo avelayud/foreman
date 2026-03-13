@@ -133,10 +133,13 @@ _scheduled_sender_started = False
 _scheduled_sender_lock = threading.Lock()
 _reply_detector_started = False
 _reply_detector_lock = threading.Lock()
+_response_generator_started = False
+_response_generator_lock = threading.Lock()
 _db_ready = False
 _db_init_error: Exception | None = None
 
 REPLY_POLL_SECONDS = 900  # 15 minutes
+RESPONSE_GEN_POLL_SECONDS = 300  # 5 minutes — runs more frequently than reply_detector
 _scoring_scheduler: BackgroundScheduler | None = None
 _last_analyzer_run: datetime | None = None
 
@@ -149,6 +152,7 @@ _agent_last_run: dict[str, datetime | None] = {
     "scoring": None,
     "customer_analyzer": None,
     "reply_detector": None,
+    "response_generator": None,
     "follow_up": None,
 }
 
@@ -583,6 +587,38 @@ def _start_reply_detector():
         worker.start()
         _reply_detector_started = True
         print(f"✅ Reply detector started (poll: {REPLY_POLL_SECONDS}s / 15 min)", flush=True)
+
+
+def _response_generator_loop():
+    """Process classified inbound replies and generate drafts every RESPONSE_GEN_POLL_SECONDS."""
+    global _agent_last_run
+    # Delay first run by 60s to let reply_detector's initial pass complete first
+    time.sleep(60)
+    while True:
+        try:
+            from agents.response_generator import run as run_response_generator
+            count = run_response_generator(operator_id=OPERATOR_ID)
+            _agent_last_run["response_generator"] = datetime.utcnow()
+            if count:
+                print(f"[response_generator] {count} draft(s) generated", flush=True)
+        except Exception as exc:
+            print(f"[response_generator] loop error: {exc}", flush=True)
+        time.sleep(RESPONSE_GEN_POLL_SECONDS)
+
+
+def _start_response_generator():
+    global _response_generator_started
+    with _response_generator_lock:
+        if _response_generator_started:
+            return
+        worker = threading.Thread(
+            target=_response_generator_loop,
+            daemon=True,
+            name="response-generator",
+        )
+        worker.start()
+        _response_generator_started = True
+        print(f"✅ Response generator started (poll: {RESPONSE_GEN_POLL_SECONDS}s / 5 min)", flush=True)
 
 
 def _run_scoring_job():
@@ -1290,6 +1326,7 @@ def _init_db_background():
             print("✅ Database ready.", flush=True, file=sys.stderr)
             _start_scheduled_sender()
             _start_reply_detector()
+            _start_response_generator()
             _start_scoring_scheduler()
             return
         except Exception as exc:
@@ -2219,9 +2256,10 @@ def conversation_detail(request: Request, customer_id: int):
             .first()
         )
         has_pending_draft = pending_draft_log is not None
+        _meetings_cls = ("booking_intent", "booking_confirmed")
         pending_draft_queue = (
             "meetings"
-            if pending_draft_log and pending_draft_log.response_classification == "booking_intent"
+            if pending_draft_log and pending_draft_log.response_classification in _meetings_cls
             else "outreach"
         )
         pending_draft_summary = _compact_summary(pending_draft_log.content or "", 120) if pending_draft_log else ""
@@ -2233,8 +2271,19 @@ def conversation_detail(request: Request, customer_id: int):
         pending_draft_subject_raw = _pdf.subject if _pdf else None
         pending_draft_content_raw = _pdf.content if _pdf else None
         pending_draft_seq_raw = _pdf.sequence_step if _pdf else None
+        # Separate: pending booking_confirmed draft (to inline confirm from conversation page)
+        _pbcd = next(
+            (l for l in [pending_draft_log] if l and l.response_classification == "booking_confirmed"),
+            None,
+        )
+        pending_booking_log_id = _pbcd.id if _pbcd else None
+        pending_booking_slot_start = _pbcd.booking_slot_start if _pbcd else None
+        pending_booking_slot_end = _pbcd.booking_slot_end if _pbcd else None
+        pending_booking_subject = _pbcd.subject if _pbcd else None
+        pending_booking_body = _pbcd.content if _pbcd else None
         operator_data = _operator_data(operator)
         queue_count = _get_queue_count(db)
+        meetings_queue_count = _get_meetings_queue_count(db)
         conversations_attention_count = _get_conversations_attention_count(db)
         customer_data = add_segment(enrich(customer))
         customer_data["customer_profile"] = _normalize_customer_profile(customer.customer_profile)
@@ -2392,6 +2441,7 @@ def conversation_detail(request: Request, customer_id: int):
         "active": "conversations",
         "operator": operator_data,
         "queue_count": queue_count,
+        "meetings_queue_count": meetings_queue_count,
         "conversations_attention_count": conversations_attention_count,
         "customer": customer_data,
         "stage": stage,
@@ -2411,6 +2461,11 @@ def conversation_detail(request: Request, customer_id: int):
         "pending_draft_created_at": pending_draft_created_at,
         "active_booking": active_booking,
         "customer_needs_post_visit": customer_needs_post_visit,
+        "pending_booking_log_id": pending_booking_log_id,
+        "pending_booking_slot_start": pending_booking_slot_start,
+        "pending_booking_slot_end": pending_booking_slot_end,
+        "pending_booking_subject": pending_booking_subject,
+        "pending_booking_body": pending_booking_body,
     })
 
 
@@ -2425,7 +2480,24 @@ def delete_outreach(log_id: int):
             raise HTTPException(status_code=404, detail="Draft not found")
         if log.approval_status not in ("pending", "failed"):
             raise HTTPException(status_code=400, detail="Only pending or failed drafts can be removed")
+        customer_id = log.customer_id
+        classification = log.response_classification
         db.delete(log)
+        # If this was a booking_confirmed draft, cancel any associated tentative booking
+        if classification == "booking_confirmed":
+            tentative = (
+                db.query(Booking)
+                .filter(
+                    Booking.customer_id == customer_id,
+                    Booking.operator_id == OPERATOR_ID,
+                    Booking.status == "tentative",
+                    Booking.source == "ai_outreach",
+                )
+                .order_by(Booking.created_at.desc())
+                .first()
+            )
+            if tentative:
+                tentative.status = "cancelled"
     return {"status": "deleted"}
 
 
@@ -3309,14 +3381,14 @@ def confirm_booking(log_id: int, req: ConfirmBookingRequest):
         email_body = req.email_body or log.content or ""
         existing_thread_id = _get_customer_thread_id(log_id)
 
-    # Create Booking record
+    # Create Booking record as tentative — promoted to confirmed only after email is sent
     with get_db() as db:
         booking = Booking(
             operator_id=OPERATOR_ID,
             customer_id=customer_id,
             slot_start=slot_start,
             slot_end=slot_end,
-            status="confirmed",
+            status="tentative",
             source="ai_outreach",
             service_type=req.service_type,
             notes=req.notes,
@@ -3324,11 +3396,9 @@ def confirm_booking(log_id: int, req: ConfirmBookingRequest):
         db.add(booking)
         db.flush()
         booking_id = booking.id
-        c = db.query(Customer).filter_by(id=customer_id).first()
-        if c:
-            c.reactivation_status = "booked"
+        # Do NOT set reactivation_status = "booked" yet — only after email is sent
 
-    # Create Google Calendar event
+    # Create Google Calendar event (fires regardless of mode — adds to operator's calendar)
     gcal_event_id = None
     gcal_error = None
     try:
@@ -3354,7 +3424,7 @@ def confirm_booking(log_id: int, req: ConfirmBookingRequest):
         gcal_error = str(e)
         print(f"[confirm_booking] GCal event creation failed: {e}")
 
-    # Send confirmation email
+    # Send confirmation email — only in production mode
     email_sent = False
     send_error = None
     if mode == "production" and customer_email:
@@ -3376,10 +3446,17 @@ def confirm_booking(log_id: int, req: ConfirmBookingRequest):
                     log.sent_at = datetime.utcnow()
                     if thread_id:
                         log.gmail_thread_id = thread_id
+                # Promote booking to confirmed + mark customer as booked now that email is sent
+                b = db.query(Booking).filter_by(id=booking_id).first()
+                if b:
+                    b.status = "confirmed"
+                c = db.query(Customer).filter_by(id=customer_id).first()
+                if c:
+                    c.reactivation_status = "booked"
         except Exception as e:
             send_error = str(e)
     else:
-        # Dry run mode — mark as scheduled (operator can send later)
+        # Dry run mode — log stays in queue as scheduled, booking stays tentative
         with get_db() as db:
             log = db.query(OutreachLog).filter_by(id=log_id).first()
             if log:
@@ -3387,7 +3464,7 @@ def confirm_booking(log_id: int, req: ConfirmBookingRequest):
                 log.scheduled_send_at = _next_business_send_time()
 
     return {
-        "status": "confirmed",
+        "status": "confirmed" if email_sent else "tentative",
         "booking_id": booking_id,
         "gcal_event_id": gcal_event_id,
         "gcal_error": gcal_error,
@@ -3395,6 +3472,31 @@ def confirm_booking(log_id: int, req: ConfirmBookingRequest):
         "send_error": send_error,
         "mode": mode,
     }
+
+
+@app.post("/api/booking/{booking_id}/cancel")
+def cancel_booking(booking_id: int):
+    """Cancel a tentative booking from the conversation page."""
+    with get_db() as db:
+        booking = db.query(Booking).filter_by(id=booking_id, operator_id=OPERATOR_ID).first()
+        if not booking:
+            raise HTTPException(status_code=404, detail="Booking not found")
+        if booking.status not in ("tentative", "confirmed"):
+            raise HTTPException(status_code=400, detail="Booking cannot be cancelled")
+        booking.status = "cancelled"
+    return {"status": "cancelled"}
+
+
+@app.get("/api/calendar/slots")
+def calendar_slots_for_date(date: str, duration: int = 60):
+    """Return available appointment time slots for a given date (YYYY-MM-DD)."""
+    try:
+        from integrations.calendar import get_available_slots_for_date
+        slots = get_available_slots_for_date(date_str=date, duration_minutes=duration)
+        return {"slots": slots, "date": date}
+    except Exception as e:
+        print(f"[calendar_slots] Error for {date}: {e}")
+        return {"slots": [], "date": date, "error": str(e)}
 
 
 class BookingDraftRequest(BaseModel):
@@ -3495,14 +3597,14 @@ def book_and_invite(customer_id: int, req: ConfirmBookingRequest):
         )
         existing_thread_id = existing_thread[0] if existing_thread else None
 
-    # Create Booking record
+    # Create Booking record as tentative — only promoted after confirmation email is sent
     with get_db() as db:
         booking = Booking(
             operator_id=OPERATOR_ID,
             customer_id=customer_id,
             slot_start=slot_start,
             slot_end=slot_end,
-            status="confirmed",
+            status="tentative",
             source="ai_outreach",
             service_type=req.service_type,
             notes=req.notes,
@@ -3512,11 +3614,9 @@ def book_and_invite(customer_id: int, req: ConfirmBookingRequest):
         db.add(booking)
         db.flush()
         booking_id = booking.id
-        c = db.query(Customer).filter_by(id=customer_id).first()
-        if c:
-            c.reactivation_status = "booked"
+        # Do NOT mark as "booked" yet — only after email is sent
 
-    # Create Google Calendar event
+    # Create Google Calendar event (fires regardless of mode)
     gcal_event_id = None
     gcal_error = None
     try:
@@ -3542,7 +3642,7 @@ def book_and_invite(customer_id: int, req: ConfirmBookingRequest):
         gcal_error = str(e)
         print(f"[book_and_invite] GCal event creation failed: {e}")
 
-    # Send confirmation email
+    # Send confirmation email — only in production mode
     email_sent = False
     send_error = None
     email_subject = req.email_subject or f"Your appointment is confirmed — {req.service_type}"
@@ -3558,8 +3658,8 @@ def book_and_invite(customer_id: int, req: ConfirmBookingRequest):
                 in_reply_to=inbound_rfc_id,
             )
             email_sent = bool(thread_id)
-            # Log the confirmation email
             with get_db() as db:
+                # Log the confirmation email
                 log = OutreachLog(
                     operator_id=OPERATOR_ID,
                     customer_id=customer_id,
@@ -3575,13 +3675,19 @@ def book_and_invite(customer_id: int, req: ConfirmBookingRequest):
                     response_classification="booking_confirmed",
                 )
                 db.add(log)
+                # Promote booking to confirmed + mark customer as booked
+                b = db.query(Booking).filter_by(id=booking_id).first()
+                if b:
+                    b.status = "confirmed"
+                c = db.query(Customer).filter_by(id=customer_id).first()
+                if c:
+                    c.reactivation_status = "booked"
         except Exception as e:
             send_error = str(e)
-    else:
-        email_sent = False  # dry run — booking still created, GCal still fires
+    # Dry run: booking stays tentative, customer stays replied, no email sent
 
     return {
-        "status": "confirmed",
+        "status": "confirmed" if email_sent else "tentative",
         "booking_id": booking_id,
         "gcal_event_id": gcal_event_id,
         "gcal_error": gcal_error,
@@ -3700,6 +3806,16 @@ def run_agent_reply_detector():
     count = run_reply_detector(operator_id=OPERATOR_ID)
     _agent_last_run["reply_detector"] = datetime.utcnow()
     return {"status": "ok", "replies_detected": count or 0}
+
+
+@app.post("/api/agent/run-response-generator")
+def run_agent_response_generator():
+    """Run response generator synchronously — generates drafts for all classified unprocessed replies."""
+    global _agent_last_run
+    from agents.response_generator import run as run_response_generator
+    count = run_response_generator(operator_id=OPERATOR_ID)
+    _agent_last_run["response_generator"] = datetime.utcnow()
+    return {"status": "ok", "drafts_generated": count or 0}
 
 
 @app.post("/api/agent/run-follow-up")

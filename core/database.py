@@ -82,6 +82,7 @@ SCHEMA_PATCHES = {
         "rfc_message_id": "VARCHAR",
         "booking_slot_start": "TIMESTAMP",
         "booking_slot_end": "TIMESTAMP",
+        "draft_queued": "BOOLEAN",
     },
 }
 

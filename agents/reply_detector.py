@@ -106,7 +106,7 @@ def _auto_create_booking(operator_id: int, customer_id: int, inbound_log_id: int
             customer_id=customer_id,
             slot_start=slot_start,
             slot_end=slot_end,
-            status="confirmed",
+            status="tentative",
             source="ai_outreach",
             service_type=service_type,
             awaiting_estimate=True,  # prompt operator to capture job value
@@ -152,7 +152,8 @@ def _auto_create_booking(operator_id: int, customer_id: int, inbound_log_id: int
 def _log_and_process_reply(operator_id: int, customer_id: int, customer_name: str,
                             reply: dict, thread_id: str) -> bool:
     """
-    Log a single inbound reply, run profile update, classify, and generate draft.
+    Log a single inbound reply, update profile, and classify.
+    Response generation is handled separately by response_generator.py.
     Returns True if the reply was newly logged, False if it was a duplicate.
     """
     rfc_id = reply.get("rfc_message_id") or ""
@@ -183,6 +184,7 @@ def _log_and_process_reply(operator_id: int, customer_id: int, customer_name: st
             sequence_step=0,
             gmail_thread_id=thread_id,
             rfc_message_id=rfc_id,
+            draft_queued=False,
         )
         db.add(log)
         customer = db.query(Customer).filter_by(id=customer_id).first()
@@ -196,9 +198,7 @@ def _log_and_process_reply(operator_id: int, customer_id: int, customer_name: st
     except Exception as e:
         print(f"  [reply_detector] Profile update failed: {e}")
 
-    # Classify the reply
-    classification = "unclear"
-    inbound_log_id = None
+    # Classify the reply — response_generator will pick it up from here
     try:
         from agents.response_classifier import classify_reply
         with get_db() as _db:
@@ -210,31 +210,9 @@ def _log_and_process_reply(operator_id: int, customer_id: int, customer_name: st
             )
             inbound_log_id = inbound_log.id if inbound_log else None
         if inbound_log_id:
-            result = classify_reply(operator_id, inbound_log_id, verbose=True)
-            classification = result.get("classification", "unclear")
+            classify_reply(operator_id, inbound_log_id, verbose=True)
     except Exception as e:
         print(f"  [reply_detector] Classification failed: {e}")
-
-    # Generate bespoke response draft (skip only on explicit unsubscribe requests)
-    if classification != "unsubscribe_request":
-        try:
-            from agents.conversation_agent import generate_response
-            generate_response(
-                operator_id=operator_id,
-                customer_id=customer_id,
-                classification=classification,
-                inbound_log_id=inbound_log_id,
-                verbose=True,
-            )
-        except Exception as e:
-            print(f"  [reply_detector] Response generation failed: {e}")
-
-    # Auto-create booking when customer confirms a specific time slot
-    if classification == "booking_confirmed":
-        try:
-            _auto_create_booking(operator_id, customer_id, inbound_log_id)
-        except Exception as e:
-            print(f"  [reply_detector] Auto-booking failed: {e}")
 
     return True
 
