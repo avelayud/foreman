@@ -28,9 +28,10 @@ Foreman identifies dormant customers, scores them by rebooking probability, reac
 
 ---
 
-## Product State (2026-03-12) — Open Bugs
+## Product State (2026-03-12)
 
-> **Active bugs:** email threading (recipient sees new thread), reply detection lag, email body line break formatting, stale customer profiles after reseed. See `PROJECT_PLAN.md` backlog for full details + fix plans.
+> **Open bugs:** email body line break formatting on recipient side, stale customer profiles after reseed. See `PROJECT_PLAN.md` backlog for details.
+> **Recently fixed:** email threading RFC headers (In-Reply-To / References now use customer's own reply Message-ID), reply detection blind spots (per-message dedup, secondary inbox scan, `"replied"` status now included), Run Now buttons now synchronous with auto-reload.
 
 ## Feature Status
 
@@ -60,14 +61,17 @@ Foreman identifies dormant customers, scores them by rebooking probability, reac
 | Google Calendar OAuth + availability reading | ✅ |
 | Booking proposal flow (booking_intent → auto-draft → Meetings Queue) | ✅ |
 | Calendar view (agenda-style, color-coded by service type) | ✅ |
-| Email thread continuity (In-Reply-To + References RFC headers) | 🔴 Partial — still broken on recipient side |
+| Email thread continuity (In-Reply-To + References RFC headers) | ✅ Fixed — In-Reply-To uses customer's own reply RFC Message-ID |
+| Dual-pass reply detection (thread scan + inbox address scan fallback) | ✅ |
+| Active Conversation banner on customer detail page | ✅ |
+| Run Now buttons synchronous with auto-reload + last-run tracking | ✅ |
+| Follow-up Sequencer added to daily APScheduler | ✅ |
+| Plans scaffold (`plans/` — plan.md + tasks/ per job) | ✅ |
 | Internal dev tools page (reseed DB, run all agents) | ✅ |
 | Railway deploy with Postgres | ✅ |
 | UTC timestamp storage + EDT/EST display | ✅ |
-| **BUG: Reply detection lag + Run Now no page refresh** | 🔴 Open |
 | **BUG: Email body line breaks on recipient side** | 🔴 Open |
 | **BUG: Stale customer profiles after reseed** | 🔴 Open |
-| **BUG: Agent run-order / scheduling not documented** | 🔴 Open |
 | Booking confirmation detection + job record creation | ⬜ Phase 6b (Job 02) |
 | Calendar write-back (create Google Calendar event on booking) | ⬜ Phase 6b (Job 02) |
 | Customer Analytics page (`/analytics`) — funnel, ROI, composition | ⬜ Phase 7 (Job 03) |

@@ -279,7 +279,14 @@ def _get_customer_inbound_rfc_id(customer_id: int) -> str | None:
 
 
 def _get_customer_thread_id(log_id: int) -> str | None:
-    """Look up the existing gmail_thread_id for the customer associated with this log."""
+    """
+    Return the gmail_thread_id to use when replying to a customer.
+
+    MUST filter to outbound-only. Inbound logs (customer replies detected via
+    Pass 2 inbox scan) may carry a different thread_id — one that lives in the
+    customer's mailbox, not ours. Passing that thread_id to Gmail send() causes
+    the reply to appear as a new thread on the recipient's side.
+    """
     with get_db() as db:
         log = db.query(OutreachLog).filter_by(id=log_id, operator_id=OPERATOR_ID).first()
         if not log:
@@ -291,6 +298,7 @@ def _get_customer_thread_id(log_id: int) -> str | None:
                 OutreachLog.customer_id == customer_id,
                 OutreachLog.operator_id == OPERATOR_ID,
                 OutreachLog.gmail_thread_id != None,
+                OutreachLog.direction == "outbound",   # ← critical: never use inbound thread_id
                 OutreachLog.dry_run == False,
             )
             .order_by(OutreachLog.sent_at.desc())

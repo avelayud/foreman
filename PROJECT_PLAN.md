@@ -21,7 +21,7 @@
 ## Current Status
 
 - **Active Phase:** Phase 6b — Booking Confirmation Detection + Calendar Write-back
-- **State:** Phase 6 core complete. Response classifier live, booking proposals auto-drafted to Meetings Queue, Google Calendar reads available slots, one-click dashboard actions, email threading fixed, search added everywhere. Next: detect confirmation replies and create Booking records automatically. Phase 7 scoped: Customer Analytics page + Product Analytics instrumentation (see plans/).
+- **State:** Phase 6 core complete. Response classifier live, booking proposals auto-drafted to Meetings Queue, Google Calendar reads available slots, one-click dashboard actions, search everywhere. Email threading, reply detection, and agent UX all fixed in 2026-03-12 session. Next: Phase 6b (booking confirmation detection) and Job 01 (Customer Analyzer OutreachLog fix). Phase 7 scoped: Customer Analytics + Product Analytics (see plans/).
 - **Last Updated:** 2026-03-12
 - **Live URL:** https://web-production-3df3a.up.railway.app
 - **Repo:** https://github.com/avelayud/foreman
@@ -29,6 +29,20 @@
 ---
 
 ## Recently Completed
+
+### 2026-03-12 — Email Threading, Reply Detection, Agent UX Fixes
+- Email threading (recipient side): `OutreachLog.rfc_message_id` now stored at reply detection time; `send_email()` accepts explicit `in_reply_to` param and uses it as `In-Reply-To`, overriding the last-message-in-thread heuristic — so follow-ups land in the correct thread on the recipient's client
+- Schema auto-migrated: `SCHEMA_PATCHES` adds `rfc_message_id VARCHAR` to `outreach_logs` on startup
+- Dual-pass reply detection: Pass 1 = thread-based scan (stored `gmail_thread_id`); Pass 2 = email-address inbox scan (`search_inbox_by_sender()`) catches orphaned replies on different threads
+- Reply detection dedup: `_already_logged_rfc_ids()` per-message dedup replaces the broken "any inbound ever?" check — future replies from the same customer no longer get skipped
+- `"replied"` status added to `ACTIVE_STATUSES` scan set — customers who already replied were previously invisible to the detector
+- Active Conversation banner on `/customer/{id}`: shows reply count, thread count, amber warning if `unique_threads > 1`, link to conversation workspace
+- Run Now buttons now synchronous: all agent run endpoints block until completion, JS auto-reloads page on success with 120s AbortController timeout
+- `_agent_last_run` in-memory dict: all agents (manual + scheduled) update this on completion; agents page shows accurate last-run timestamps
+- Follow-up Sequencer added to APScheduler daily schedule (was manual-only)
+- Conversation page draft UX: removed auto-draft on page load — draft only generated on explicit user click. Three states: pending draft notice → generate button → draft form
+- Queued drafts shown in conversation timeline as dashed-blue entries with "View in Queue →" link
+- Plans scaffold: `plans/` directory created with `README.md`, job folders for Jobs 01–04, each with `plan.md` + `tasks/` subfolder
 
 ### Phase 6 — Booking Conversion Flow + Google Calendar (✅ Core Complete)
 - `agents/response_classifier.py`: Claude classifier, 5 categories (booking_intent / callback_request / price_inquiry / not_interested / unclear)
@@ -168,18 +182,11 @@ All aggregations server-side in new `core/analytics.py`. Chart.js via CDN. Time-
 - **Fix plan:** After reseed, Customer Analyzer should re-analyze and overwrite the profile. Verify `_customer_profile` is null on freshly seeded rows. Add `--force` flag to customer_analyzer to overwrite all profiles unconditionally. Consider displaying `analyzed_at` timestamp on the customer profile UI so staleness is visible.
 - **Files:** `agents/customer_analyzer.py`, `data/reseed.py`, `core/models.py`
 
-### BUG — Reply Detection Lag / Run Now Not Refreshing (PRIORITY)
-- **Symptom:** Operator receives a real customer reply in Gmail. Even after manually pressing "Run Now" on the Agents page (reply detector), the reply does not appear on the site for some time. Unclear whether the agent is actually running, what it found, or whether a page refresh is needed after it completes.
-- **Issues to investigate:**
-  1. Run Now buttons fire agents in background threads and return immediately — the UI shows "started" but the page never refreshes. Operator has to manually reload.
-  2. Reply Detector only checks threads that have a `gmail_thread_id` stored in `OutreachLog`. If the initial outreach email was sent but the thread ID wasn't persisted (e.g. dry_run records, or a bug at send time), the reply will never be detected.
-  3. After reply is detected, classifier + draft generation also run sequentially in the same thread — total pipeline could take 15–30s. No feedback to operator.
-- **Fix plan:**
-  - Run Now button should poll for completion or at minimum auto-reload the page after a fixed delay (e.g. 5 seconds after click).
-  - Add a "Last checked" timestamp to the Reply Detector card on Agents page so operator can see when it last ran.
-  - Audit: verify `gmail_thread_id` is stored on all non-dry-run outbound OutreachLog records.
-  - Log number of threads checked + number of replies found to the agent status output.
-- **Files:** `agents/reply_detector.py`, `api/app.py`, `templates/agents.html`
+### ~~BUG — Reply Detection Lag / Run Now Not Refreshing~~ ✅ Fixed (2026-03-12)
+- Run Now buttons are now synchronous (no background threading) — HTTP response returns only after agent completes
+- JS auto-reloads page on success with 120s AbortController timeout
+- `_agent_last_run` dict updated after every run (manual + scheduled) — agents page shows accurate last-run timestamps
+- Reply Detector dual-pass: Pass 1 thread scan + Pass 2 inbox address scan; per-message RFC dedup; `"replied"` status included
 
 ### BUG — Email Body Line Breaks / Formatting on Recipient Side
 - **Symptom:** Customer receives an email where the body has hard line breaks that look exactly like how the draft appeared in the site's text box — with visible enter/return characters creating a broken layout. The same email looks fine in the operator's Gmail inbox.
@@ -191,37 +198,22 @@ All aggregations server-side in new `core/analytics.py`. Chart.js via CDN. Time-
   - Or: send multipart/alternative with both plain and HTML parts.
 - **Files:** `integrations/gmail.py` (`send_email()`), `agents/conversation_agent.py` (where body is generated)
 
-### BUG — Email Threading Still Creating New Thread on Second Reply (PRIORITY)
-- **Symptom:** Same as before — when sending a second email in a conversation (e.g. a meeting proposal after an initial reply), the recipient sees it as a new separate email thread. The operator's inbox shows it correctly in the same thread.
-- **Context:** A fix was applied (Phase 6) to use `format="minimal"` + per-message `messages().get(format="metadata", metadataHeaders=["Message-ID"])` to reliably fetch `Message-ID` headers and set `In-Reply-To` + `References`. The asymmetry (correct on sender, broken on recipient) persists.
-- **Remaining hypotheses:**
-  1. The `thread_id` being looked up may be from the first outbound message, but the customer's reply has a *different* Gmail thread ID on their side. When we fetch the thread by our `threadId`, we get our internal representation — not necessarily the RFC message IDs the recipient's client knows about.
-  2. The `In-Reply-To` value may be the RFC Message-ID of *our* sent message, but the recipient's email client expects it to reference *their sent* message (i.e., the reply they sent us).
-  3. The `References` chain may be incomplete — missing the customer's reply RFC Message-ID, so the recipient's client can't connect the chain.
-- **Fix plan:**
-  - At reply time, look up the inbound `OutreachLog` record for the customer's reply and retrieve its `rfc_message_id` (the Message-ID from the customer's email). Store this on the inbound log at detection time.
-  - Set `In-Reply-To` = customer's reply RFC Message-ID (not just the last outbound).
-  - Set `References` = full chain including both outbound and inbound RFC Message-IDs in order.
-  - Add logging to print the exact `In-Reply-To` and `References` headers being set before each send.
-- **Files:** `integrations/gmail.py`, `agents/reply_detector.py` (store `rfc_message_id` on inbound logs), `api/app.py` (`_deliver_outreach_log`)
+### ~~BUG — Email Threading Still Creating New Thread on Second Reply~~ ✅ Fixed (2026-03-12)
+- Root cause confirmed: `In-Reply-To` was referencing our last outbound RFC Message-ID, not the customer's reply — recipient's client couldn't connect the chain
+- Fix: `rfc_message_id` stored on inbound `OutreachLog` at detection time; `send_email()` accepts explicit `in_reply_to` param; `_deliver_outreach_log()` looks up `_get_customer_inbound_rfc_id()` and passes it through
+- `OutreachLog.rfc_message_id` column added via `SCHEMA_PATCHES` (auto-migrates on startup)
 
-### IMPROVEMENT — Agent Orchestration & Run-Order Documentation
-- **Problem:** It's unclear when each agent runs, what order they run in, what triggers them, and what the expected lag is between an event (e.g. customer replies) and the system reacting to it. This causes confusion about whether something is broken or just delayed.
-- **Current state (best known):**
+### IMPROVEMENT — Agent Orchestration & Run-Order Documentation (Partially Fixed)
+- **Current state (as of 2026-03-12):**
   - Tone Profiler: manual only
   - Reactivation Analyzer: manual only
   - Priority Scorer: startup + daily (APScheduler)
   - Customer Analyzer: startup + daily (APScheduler)
-  - Reply Detector: every 15 min (APScheduler background thread)
-  - Follow-up Sequencer: manual only (should be daily)
-  - Response Classifier: auto-triggered inside reply detector pipeline on each new reply
+  - Reply Detector: every 15 min (APScheduler background thread) + Run Now
+  - Follow-up Sequencer: ✅ now daily (APScheduler) + Run Now
+  - Response Classifier: auto-triggered inside reply detector pipeline
   - Conversation Agent: auto-triggered inside reply detector pipeline after classification
-- **Fix plan:**
-  - Document the full pipeline on the Agents page: show trigger type (manual / scheduled / auto), frequency, and what it produces.
-  - Add a pipeline diagram or ordered list showing: Reply comes in → Reply Detector picks it up (up to 15 min) → Classifier runs → Draft generated → appears in queue.
-  - Add `last_run_at` + `next_run_at` to scheduled agents on the Agents page so operator knows when the next automatic run is.
-  - Consider adding Follow-up Sequencer to the daily schedule so it doesn't require manual runs.
-- **Files:** `api/app.py`, `templates/agents.html`
+- **Remaining:** Agents page doesn't yet show trigger type or `next_run_at`. Pipeline timing not documented in UI. Durable scheduler (survive dyno restart) not yet implemented.
 
 ### Customer Analyzer — Read from OutreachLog (PRIORITY)
 - **Current problem:** Customer Analyzer calls `get_correspondence()` which searches Gmail API by email address. Synthetic seed emails (e.g. `patsimm@email.com`) don't exist in Gmail so profiles never populate.
@@ -287,12 +279,12 @@ Priority tiers: high ≥70, medium 40–69, low <40.
 
 ## Known Risks / Watch-outs
 
-- `reply_detector` + `follow_up` run as background threads (15-min poll); not backed by a durable scheduler — will miss cycles on dyno restart. Acceptable for now.
+- `reply_detector` + `follow_up` run as APScheduler background threads; not backed by a durable scheduler — will miss cycles on dyno restart. Acceptable for now.
 - Single-tenant: `OPERATOR_ID = 1` hardcoded throughout. Must audit before onboarding second operator.
-- Customer Analyzer currently calls `get_correspondence()` which searches Gmail API by email address — synthetic seed emails don't exist in Gmail so profiles don't populate. **Fix planned:** fall back to OutreachLog records in DB as primary source (see Backlog).
-- **Email threading (recipient side):** Second email to a customer still arrives as a new thread on the recipient's side despite `In-Reply-To` + `References` fix. Root cause still under investigation — likely the `References` chain is missing the customer's own reply RFC Message-ID. See Backlog for fix plan.
-- **Run Now buttons are fire-and-forget:** Agents start in background threads; UI shows "started" but never confirms completion. Operator must manually refresh to see results. Reply Detector in particular may take 15–30s for full classify + draft pipeline.
+- Customer Analyzer currently calls `get_correspondence()` which searches Gmail API by email address — synthetic seed emails don't exist in Gmail so profiles don't populate. **Fix planned (Job 01):** fall back to OutreachLog records in DB as primary source (see Backlog).
 - **Stale customer profiles after reseed:** Customer Analyzer re-reads from Gmail API which still has real email history — so profiles for live email addresses repopulate with old Gmail data even after a DB wipe. See Backlog for fix plan.
+- ~~Email threading broken on recipient side~~ — ✅ Fixed 2026-03-12
+- ~~Run Now buttons fire-and-forget~~ — ✅ Fixed 2026-03-12 (synchronous + auto-reload)
 
 ---
 
@@ -345,6 +337,11 @@ venv/bin/python -m agents.follow_up --operator-id 1 --limit 20
 | 2026-03-12 | Phase 7 execution order | Job 04 (product analytics) before Job 03 (analytics page) — so /analytics is instrumented from day one |
 | 2026-03-12 | `booking_confirmed` vs `booking_intent` | `booking_intent` = wants to book, no slot confirmed; `booking_confirmed` = specific time accepted. Only `booking_confirmed` triggers auto-Booking creation. |
 | 2026-03-12 | Plans scaffold | Feature work tracked in `plans/` — one folder per job, `plan.md` + `tasks/` with individual task files. Authored in Claude app, executed in Claude Code. |
+| 2026-03-12 | RFC threading fix | `In-Reply-To` must reference customer's reply RFC Message-ID (not our outbound) — stored as `rfc_message_id` on inbound OutreachLog at detection time; passed explicitly to `send_email()` |
+| 2026-03-12 | Dual-pass reply detection | Pass 1 = stored gmail_thread_id scan; Pass 2 = `search_inbox_by_sender()` email-address inbox scan catches orphaned threads. Per-message RFC dedup prevents double-logging. |
+| 2026-03-12 | Run Now synchronous | Agent run endpoints block until completion; JS auto-reloads. `_agent_last_run` dict updated by all agents for accurate last-run display. |
+| 2026-03-12 | Conversation draft on demand | Draft only generated on explicit user click — not on page load. Pending draft in queue shows notice + link to prevent duplicate drafts. |
+| 2026-03-12 | Active Conversation banner | Customer detail page shows conversation state (reply count, thread count, amber warning for orphaned threads) with link to workspace. |
 
 ---
 
@@ -360,29 +357,23 @@ Read PROJECT_PLAN.md and README.md first for full context, then look at any code
 Current state (2026-03-12): Phases 1–6 core complete. Phase 6b active.
 Live: https://web-production-3df3a.up.railway.app
 
-Completed recently:
-- Response classifier agent (auto-runs on every inbound reply)
-- Google Calendar OAuth + slot reading (integrations/calendar.py)
-- Booking proposals route to /meetings queue (separate from /outreach)
-- One-click dashboard actions: Draft Outreach / Draft Follow-up / Book Call
-- Email threading fix attempt (In-Reply-To + References headers) — still not fully working
-- Search on Conversations, Outreach Queue, Meetings Queue
-- Run Now buttons + /internal dev tools page (reseed + run all agents)
-- DB reseeded: 200 customers (8 live emails, 40 scenario conversations, 152 bulk)
+Completed recently (2026-03-12 session):
+- Email threading fix: rfc_message_id stored on inbound OutreachLog at detection; send_email() uses it as explicit In-Reply-To
+- Dual-pass reply detection: thread scan + inbox address scan fallback; per-message RFC dedup; "replied" status included in scan
+- Active Conversation banner on customer detail page (reply count, thread count, orphaned thread warning)
+- Run Now buttons now synchronous (block until done, auto-reload page); _agent_last_run dict for accurate last-run display
+- Follow-up Sequencer added to APScheduler daily schedule
+- Conversation page: draft only generated on explicit click (removed auto-load); pending draft notice if already in queue
+- Plans scaffold: plans/ directory with job_01–04 folders, plan.md + tasks/ per job
 
-Open bugs (see Backlog in PROJECT_PLAN.md for full details + fix plans):
-1. Email threading STILL broken: second email to recipient arrives as new thread despite In-Reply-To/References fix. Root cause: References chain missing customer's own reply RFC Message-ID.
-2. Reply detection lag: Run Now buttons fire-and-forget, no page refresh, operator can't tell if agent ran or found anything.
-3. Email body line breaks: Claude drafts sent as plain text have hard line breaks that render badly on recipient side.
-4. Stale customer profiles after reseed: Customer Analyzer re-reads Gmail API which still has old real emails — profile repopulates with stale data.
-5. Agent run order / orchestration unclear: needs documentation + scheduling audit.
+Open bugs:
+1. Email body line breaks: Claude drafts sent as plain text have hard line breaks that render badly on recipient side
+2. Stale customer profiles after reseed: Customer Analyzer re-reads Gmail API which has old real emails
 
 Next priorities:
-1. Fix email threading (see Backlog — store rfc_message_id on inbound OutreachLog, use it for In-Reply-To)
+1. Job 01 (plans/job_01_customer_analyzer/): fix Customer Analyzer to use OutreachLog as primary source — plan + tasks already written
 2. Fix email body line breaks (normalize body before MIMEText, or send as HTML)
-3. Customer Analyzer: fall back to OutreachLog records as primary source
-4. Reply Detector: auto-refresh UI after Run Now, add last-checked timestamp
-5. Booking confirmation detection → create Booking record automatically (Phase 6b)
+3. Phase 6b — booking confirmation detection → create Booking record automatically (plans/job_02_booking_confirmation/)
 
 Make code changes directly and summarize what changed.
 ```
