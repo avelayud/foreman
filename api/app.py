@@ -2986,8 +2986,36 @@ def approve_send(log_id: int, req: ApproveSendRequest):
 
         customer = db.query(Customer).filter_by(id=log.customer_id).first()
         customer_email = customer.email if customer else None
+
+        # Capture original content BEFORE overwrite for edit tracking
+        _orig_body = log.content or ""
+        _orig_subject = log.subject or ""
+        _orig_classification = log.response_classification or ""
         log.subject = req.subject
         log.content = req.body
+
+    # Compute edit stats and fire approval event (covers all delivery paths)
+    try:
+        import difflib as _difflib
+        _body_ratio = _difflib.SequenceMatcher(None, _orig_body, req.body).ratio()
+        _edit_pct = round((1 - _body_ratio) * 100)
+        _subject_changed = req.subject.strip() != _orig_subject.strip()
+        _queue = "meetings" if _orig_classification in _MEETINGS_CLASSIFICATIONS else "outreach"
+        _unchanged = _edit_pct <= 5 and not _subject_changed
+        _event_name = "draft_approved_unchanged" if _unchanged else "draft_edited_then_approved"
+        with get_db() as _tdb:
+            log_event(_tdb, session_id="server", event_type="draft", event_name=_event_name,
+                      page="outreach",
+                      properties={
+                          "log_id": log_id,
+                          "queue": _queue,
+                          "classification": _orig_classification,
+                          "edit_pct": _edit_pct,
+                          "subject_changed": _subject_changed,
+                      },
+                      operator_id=OPERATOR_ID)
+    except Exception:
+        pass
 
     if not req.send_now:
         scheduled_send_at = parsed_schedule or _next_business_send_time()
@@ -3756,6 +3784,13 @@ def action_draft_outreach(customer_id: int):
         db.add(new_log)
         db.flush()
         draft_id = new_log.id
+    try:
+        with get_db() as _tdb:
+            log_event(_tdb, session_id="server", event_type="draft", event_name="draft_generated",
+                      page="dashboard", properties={"draft_type": "cold_outreach", "queue": "outreach",
+                                                    "customer_id": customer_id}, operator_id=OPERATOR_ID)
+    except Exception:
+        pass
     return {"status": "generated", "draft_id": draft_id}
 
 
@@ -3786,6 +3821,13 @@ def action_draft_followup(customer_id: int):
     )
     if not draft_id:
         raise HTTPException(status_code=500, detail="Failed to generate follow-up draft")
+    try:
+        with get_db() as _tdb:
+            log_event(_tdb, session_id="server", event_type="draft", event_name="draft_generated",
+                      page="dashboard", properties={"draft_type": "follow_up", "queue": "outreach",
+                                                    "customer_id": customer_id}, operator_id=OPERATOR_ID)
+    except Exception:
+        pass
     return {"status": "generated", "draft_id": draft_id}
 
 
@@ -3821,6 +3863,13 @@ def action_book_call(customer_id: int):
         raise HTTPException(status_code=500, detail=f"generation error: {exc}")
     if not draft_id:
         raise HTTPException(status_code=500, detail="generate_response returned None — check server logs")
+    try:
+        with get_db() as _tdb:
+            log_event(_tdb, session_id="server", event_type="draft", event_name="draft_generated",
+                      page="dashboard", properties={"draft_type": "booking_proposal", "queue": "meetings",
+                                                    "customer_id": customer_id}, operator_id=OPERATOR_ID)
+    except Exception:
+        pass
     return {"status": "generated", "draft_id": draft_id}
 
 
@@ -3865,6 +3914,15 @@ def regenerate_outreach(log_id: int):
         )
         if not new_id:
             raise HTTPException(status_code=500, detail="Failed to regenerate reply draft")
+        try:
+            _rqueue = "meetings" if classification in _MEETINGS_CLASSIFICATIONS else "outreach"
+            with get_db() as _tdb:
+                log_event(_tdb, session_id="server", event_type="draft", event_name="draft_generated",
+                          page=_rqueue, properties={"draft_type": "regenerated", "queue": _rqueue,
+                                                    "classification": classification,
+                                                    "customer_id": customer_id}, operator_id=OPERATOR_ID)
+        except Exception:
+            pass
         return {"status": "regenerated", "draft_id": new_id}
 
     # Cold outreach — use the reactivation draft generator
@@ -3884,6 +3942,13 @@ def regenerate_outreach(log_id: int):
         db.add(new_log)
         db.flush()
         new_id = new_log.id
+    try:
+        with get_db() as _tdb:
+            log_event(_tdb, session_id="server", event_type="draft", event_name="draft_generated",
+                      page="outreach", properties={"draft_type": "regenerated_cold", "queue": "outreach",
+                                                   "customer_id": customer_id}, operator_id=OPERATOR_ID)
+    except Exception:
+        pass
     return {"status": "regenerated", "draft_id": new_id}
 
 
@@ -3906,6 +3971,13 @@ def regenerate_meeting(log_id: int):
     )
     if not draft_id:
         raise HTTPException(status_code=500, detail="Failed to regenerate booking proposal")
+    try:
+        with get_db() as _tdb:
+            log_event(_tdb, session_id="server", event_type="draft", event_name="draft_generated",
+                      page="meetings", properties={"draft_type": "regenerated_booking", "queue": "meetings",
+                                                   "customer_id": customer_id}, operator_id=OPERATOR_ID)
+    except Exception:
+        pass
     return {"status": "regenerated", "draft_id": draft_id}
 
 
@@ -4459,26 +4531,85 @@ def internal_product_page(request: Request, range: str = "30"):
             # Draft behavior
             draft_events = [e for e in all_events if e.event_type == "draft"]
             total_generated = sum(1 for e in draft_events if e.event_name == "draft_generated")
-            unchanged = sum(1 for e in draft_events if e.event_name == "draft_approved_unchanged")
-            edited = sum(1 for e in draft_events if e.event_name == "draft_edited_then_approved")
+
+            # Approval events — parse properties for queue, edit_pct, draft_type
+            approval_events = [e for e in draft_events
+                               if e.event_name in ("draft_approved_unchanged", "draft_edited_then_approved")]
+            total_approved = len(approval_events)
+            unchanged = sum(1 for e in approval_events if e.event_name == "draft_approved_unchanged")
+            edited = sum(1 for e in approval_events if e.event_name == "draft_edited_then_approved")
+
+            # Per-queue breakdowns
+            outreach_unchanged = outreach_edited = meetings_unchanged = meetings_edited = 0
             edit_pcts = []
-            for e in draft_events:
-                if e.event_name == "draft_edited_then_approved" and e.properties:
+            edit_pcts_outreach = []
+            edit_pcts_meetings = []
+            for e in approval_events:
+                props = {}
+                if e.properties:
                     try:
-                        p = json.loads(e.properties)
-                        ep = p.get("edit_pct", 0)
-                        if ep:
-                            edit_pcts.append(float(ep))
+                        props = json.loads(e.properties)
                     except Exception:
                         pass
-            pct_unchanged = round(unchanged / total_generated * 100) if total_generated else 0
-            pct_edited = round(edited / total_generated * 100) if total_generated else 0
-            avg_edit_pct = round(sum(edit_pcts) / len(edit_pcts), 1) if edit_pcts else 0
+                queue = props.get("queue", "outreach")
+                ep = float(props.get("edit_pct", 0) or 0)
+                is_edited = e.event_name == "draft_edited_then_approved"
+                if queue == "meetings":
+                    if is_edited:
+                        meetings_edited += 1
+                        edit_pcts_meetings.append(ep)
+                    else:
+                        meetings_unchanged += 1
+                else:
+                    if is_edited:
+                        outreach_edited += 1
+                        edit_pcts_outreach.append(ep)
+                    else:
+                        outreach_unchanged += 1
+                if is_edited and ep:
+                    edit_pcts.append(ep)
+
+            # Edit magnitude buckets (of edited drafts): minor <15%, moderate 15-40%, major >40%
+            minor = sum(1 for ep in edit_pcts if ep < 15)
+            moderate = sum(1 for ep in edit_pcts if 15 <= ep < 40)
+            major = sum(1 for ep in edit_pcts if ep >= 40)
+
+            # Generation breakdown by draft_type
+            type_counts: dict[str, int] = {}
+            for e in draft_events:
+                if e.event_name == "draft_generated" and e.properties:
+                    try:
+                        p = json.loads(e.properties)
+                        dt = p.get("draft_type", "unknown")
+                        type_counts[dt] = type_counts.get(dt, 0) + 1
+                    except Exception:
+                        pass
+
+            def _safe_pct(num, denom):
+                return round(num / denom * 100) if denom else 0
+
             draft_stats = {
                 "total_generated": total_generated,
-                "pct_unchanged": pct_unchanged,
-                "pct_edited": pct_edited,
-                "avg_edit_pct": avg_edit_pct,
+                "total_approved": total_approved,
+                # Overall send-as-is vs edited
+                "unchanged": unchanged,
+                "edited": edited,
+                "pct_unchanged": _safe_pct(unchanged, total_approved),
+                "pct_edited": _safe_pct(edited, total_approved),
+                "avg_edit_pct": round(sum(edit_pcts) / len(edit_pcts), 1) if edit_pcts else 0,
+                # Per-queue
+                "outreach_unchanged": outreach_unchanged,
+                "outreach_edited": outreach_edited,
+                "outreach_avg_edit_pct": round(sum(edit_pcts_outreach) / len(edit_pcts_outreach), 1) if edit_pcts_outreach else 0,
+                "meetings_unchanged": meetings_unchanged,
+                "meetings_edited": meetings_edited,
+                "meetings_avg_edit_pct": round(sum(edit_pcts_meetings) / len(edit_pcts_meetings), 1) if edit_pcts_meetings else 0,
+                # Edit magnitude
+                "edit_minor": minor,
+                "edit_moderate": moderate,
+                "edit_major": major,
+                # Generation by type
+                "by_type": sorted(type_counts.items(), key=lambda x: -x[1]),
             }
 
             # Feature engagement — all non-page_view, non-error events
