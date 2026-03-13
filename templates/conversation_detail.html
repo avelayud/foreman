@@ -150,7 +150,7 @@
           <div class="vtl-card {% if event.type == 'queued' %}" style="border-style:dashed;border-color:var(--blue);background:var(--blue-pale){% endif %}">
             <div class="vtl-dir {{ event.type }}">
               {% if event.type == 'inbound' %}↙ Customer
-              {% elif event.type == 'queued' %}⏳ Queued Draft
+              {% elif event.type == 'queued' %}{% if event.response_classification == 'booking_confirmed' %}📅 Meeting Invite · In Queue{% else %}⏳ Queued Draft{% endif %}
               {% else %}↗ You{% endif %}
             </div>
             <div class="vtl-summary">{{ event.summary }}</div>
@@ -220,8 +220,8 @@
     </div>
     {% endif %}
 
-    {# ── Awaiting Estimate Banner (auto-booking with no value captured yet) ── #}
-    {% if active_booking and active_booking.awaiting_estimate %}
+    {# ── Awaiting Estimate Banner (shown only after invite is sent, not while tentative) ── #}
+    {% if active_booking and active_booking.awaiting_estimate and active_booking.status == 'confirmed' %}
     <div id="estimate-banner" style="background:#eff6ff;border:1px solid #93c5fd;border-radius:8px;padding:14px 16px;margin-bottom:2px">
       <div style="font-size:12px;font-weight:700;color:var(--blue);margin-bottom:4px">Booking created for {{ active_booking.slot_start.strftime('%a %b %-d') if active_booking.slot_start else 'upcoming date' }}. What's the estimated job value?</div>
       <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
@@ -272,8 +272,28 @@
 
     {# ── Recommended Action Banner ── #}
     {% if latest_classification and latest_classification != 'none' %}
+    {% if latest_classification == 'booking_confirmed' %}
+      {% if pending_booking_log_id %}
+      <div class="action-banner ab-confirmed">
+        <span class="ab-icon">📅</span>
+        <div>
+          <div class="ab-title">Meeting Invite Queued for Review</div>
+          <div class="ab-desc">A confirmation draft is ready in the Meetings Queue. Review the time, add an estimate, then send the invite.</div>
+          <a href="/meetings" class="btn-primary" style="display:inline-block;text-decoration:none;font-size:11.5px;padding:5px 12px;margin-top:8px">View in Meetings Queue →</a>
+        </div>
+      </div>
+      {% elif not active_booking %}
+      <div class="action-banner" style="background:#fef2f2;border:1px solid #fca5a5">
+        <span class="ab-icon">⚠️</span>
+        <div>
+          <div class="ab-title" style="color:#991b1b">Action Required — Pending Scheduling</div>
+          <div class="ab-desc">Customer confirmed availability but the invite was not sent. Generate a new meeting invite draft to queue for review.</div>
+          <button onclick="showGeneratePanel()" class="btn-primary" style="font-size:11.5px;padding:5px 12px;margin-top:8px">Redraft Meeting Invite</button>
+        </div>
+      </div>
+      {% endif %}
+    {% else %}
     {% set ab_map = {
-      'booking_confirmed': ('ab-confirmed', '📅', 'Customer Confirmed a Time', 'A confirmation draft is queued in the Meetings Queue. Use the Schedule Appointment panel below to send the invite — or go to the Meetings Queue to review the draft first.'),
       'booking_intent': ('ab-booking', '📅', 'Booking Intent Detected', 'This customer wants to schedule. A slot proposal draft has been queued — review and send it from the Meetings Queue.'),
       'price_inquiry':  ('ab-price',   '💰', 'Price Inquiry', 'Customer is asking about cost. A pricing response draft has been queued in the Outreach Queue.'),
       'callback_request': ('ab-callback', '📞', 'Callback Requested', 'Customer prefers to talk. A response draft has been queued — or call them directly.'),
@@ -288,6 +308,7 @@
         <div class="ab-desc">{{ ab[3] }}</div>
       </div>
     </div>
+    {% endif %}
     {% endif %}
     {% endif %}
 
@@ -318,11 +339,14 @@
         {# State B: no draft — show generate button #}
         <div id="generate-prompt" {% if has_pending_draft %}style="display:none"{% endif %}>
           <div style="font-size:13px;color:var(--text-3);margin-bottom:12px">
-            {% if health.needs_response %}Customer replied — generate a response draft to review before queuing.
+            {% if latest_classification == 'booking_confirmed' and not active_booking %}Customer confirmed availability — generate a new meeting invite draft to queue for review in the Meetings Queue.
+            {% elif health.needs_response %}Customer replied — generate a response draft to review before queuing.
             {% elif health.needs_follow_up %}Follow-up is overdue. Generate a draft to review before queuing.
             {% else %}No reply yet. Generate a follow-up draft if you want to reach out before the agent's next scheduled run.{% endif %}
           </div>
-          <button class="btn-primary" onclick="showGeneratePanel()" style="font-size:13px;padding:8px 20px">Generate Draft</button>
+          <button class="btn-primary" onclick="showGeneratePanel()" style="font-size:13px;padding:8px 20px">
+            {% if latest_classification == 'booking_confirmed' and not active_booking %}Redraft Meeting Invite{% else %}Generate Draft{% endif %}
+          </button>
         </div>
 
         {# State C: loading / form #}
@@ -360,17 +384,22 @@
         {# Idle state — only shown when no booking exists yet #}
         <div id="schedule-prompt" {% if active_booking %}style="display:none"{% endif %}>
           {% if pending_booking_log_id %}
-          {# There's a booking_confirmed draft in the Meetings Queue — show inline confirmation #}
+          {# Draft invite is in the Meetings Queue — send from there #}
           <div style="background:var(--blue-pale);border:1px solid #bfdbfe;border-radius:8px;padding:12px 14px;margin-bottom:12px">
-            <div style="font-size:11px;font-family:'IBM Plex Mono',monospace;letter-spacing:1px;text-transform:uppercase;color:var(--blue);margin-bottom:6px">Draft Invite Queued</div>
+            <div style="font-size:11px;font-family:'IBM Plex Mono',monospace;letter-spacing:1px;text-transform:uppercase;color:var(--blue);margin-bottom:6px">📅 Draft Invite In Queue</div>
             <div style="font-size:12.5px;color:var(--navy);font-weight:600;margin-bottom:2px">
               {% if pending_booking_slot_start %}{{ pending_booking_slot_start.strftime('%a %b %-d · %-I:%M %p') }}{% else %}Time extracted from reply{% endif %}
             </div>
-            <div style="font-size:11.5px;color:var(--text-3);margin-bottom:10px">A confirmation draft is waiting in the Meetings Queue. Confirm the time below and send — or go to Meetings Queue to edit the email first.</div>
-            <div style="display:flex;gap:8px;flex-wrap:wrap">
-              <button class="btn-primary" onclick="showScheduleForm(true)" style="font-size:12px;padding:6px 14px">Send Invite from Here</button>
-              <a href="/meetings" class="btn-ghost" style="text-decoration:none;font-size:12px;padding:6px 14px">Review in Meetings Queue →</a>
-            </div>
+            <div style="font-size:11.5px;color:var(--text-3);margin-bottom:10px">Review the draft, add an estimate, and send from the Meetings Queue.</div>
+            <a href="/meetings" class="btn-primary" style="text-decoration:none;font-size:12px;padding:6px 14px;display:inline-block">View in Meetings Queue →</a>
+          </div>
+          {% elif latest_classification == 'booking_confirmed' %}
+          {# Draft was removed — needs to be redrafted before scheduling #}
+          <div style="background:#fef2f2;border:1px solid #fca5a5;border-radius:8px;padding:12px 14px;margin-bottom:12px">
+            <div style="font-size:11px;font-family:'IBM Plex Mono',monospace;letter-spacing:1px;text-transform:uppercase;color:var(--red);margin-bottom:6px">⚠ Pending Scheduling</div>
+            <div style="font-size:12.5px;color:var(--navy);font-weight:600;margin-bottom:4px">Customer confirmed availability</div>
+            <div style="font-size:11.5px;color:var(--text-3);margin-bottom:10px">The invite was not sent. Generate a new invite draft — it will go to the Meetings Queue for review before sending.</div>
+            <button class="btn-primary" onclick="showGeneratePanel()" style="font-size:12px;padding:6px 14px">Redraft Meeting Invite</button>
           </div>
           {% else %}
           <div style="font-size:13px;color:var(--text-3);margin-bottom:12px">Book a time, create a Google Calendar event, and send a confirmation email — all in one click.</div>
@@ -443,14 +472,15 @@
         {% if active_booking and active_booking.status == 'tentative' %}
         <div id="schedule-notes" style="display:block">
           <div style="background:var(--amber-pale);border:1px solid #fde68a;border-radius:8px;padding:11px 13px;margin-bottom:14px">
-            <div style="font-size:12px;font-weight:700;color:var(--amber);margin-bottom:4px">⏳ Booking saved — confirmation invite not yet sent</div>
-            <div style="font-size:12px;color:var(--text-2);margin-bottom:10px">
+            <div style="font-size:12px;font-weight:700;color:var(--amber);margin-bottom:4px">⏳ Invite pending review — not yet sent</div>
+            <div style="font-size:12px;color:var(--text-2);margin-bottom:3px">
               {{ active_booking.slot_start.strftime('%a %b %-d, %Y · %-I:%M %p') if active_booking.slot_start else 'Time TBD' }}
               — {{ active_booking.service_type or 'Service' }}
             </div>
+            <div style="font-size:11.5px;color:var(--text-3);margin-bottom:10px">Set the estimate and send from the Meetings Queue.</div>
             <div style="display:flex;gap:8px;flex-wrap:wrap">
-              <button onclick="showScheduleForm(false)" class="btn-primary" style="font-size:12px;padding:6px 14px">Send Invite Now</button>
-              <button onclick="cancelBooking({{ active_booking.id }})" class="btn-ghost" style="font-size:12px;color:var(--red);border-color:#fecaca">Cancel Booking</button>
+              <a href="/meetings" class="btn-primary" style="text-decoration:none;font-size:12px;padding:6px 14px">View in Meetings Queue →</a>
+              <button onclick="cancelBooking({{ active_booking.id }})" class="btn-ghost" style="font-size:12px;color:var(--red);border-color:#fecaca">Cancel</button>
             </div>
           </div>
           <div class="booking-field" style="margin-bottom:12px">

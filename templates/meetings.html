@@ -192,8 +192,23 @@
         <div class="action-panel" style="background:var(--green-pale);border-color:#a7f3d0">
           <div class="right-title" style="margin-bottom:8px;color:var(--green)">Confirm Booking</div>
           <div class="action-stack">
+            <div>
+              <label class="field-label" style="margin-bottom:4px">Estimated Job Value</label>
+              <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+                <div style="display:flex;align-items:center;border:1px solid var(--border);border-radius:7px;overflow:hidden;background:#fff">
+                  <span style="padding:6px 8px;font-size:13px;color:var(--text-3);background:var(--bg);border-right:1px solid var(--border)">$</span>
+                  <input type="number" id="estimate-value-{{ item.log_id }}" placeholder="850" min="0" step="50"
+                         style="border:none;padding:6px 9px;font-size:13px;width:100px;outline:none;background:#fff"
+                         onchange="document.getElementById('estimate-unknown-{{ item.log_id }}').checked = false">
+                </div>
+                <label style="font-size:11px;color:var(--text-3);display:flex;align-items:center;gap:4px;white-space:nowrap">
+                  <input type="checkbox" id="estimate-unknown-{{ item.log_id }}"
+                         onchange="document.getElementById('estimate-value-{{ item.log_id }}').disabled = this.checked"> Unknown
+                </label>
+              </div>
+            </div>
             <div style="font-size:11px;color:var(--text-3);line-height:1.5;font-family:'IBM Plex Mono',monospace">
-              Sends confirmation email + creates Google Calendar event. Customer receives an automatic .ics invite from Google Calendar.
+              Sends confirmation email + creates Google Calendar event. Customer receives an automatic .ics invite.
             </div>
             <button onclick="confirmBooking({{ item.log_id }})" class="confirm-btn" id="confirm-btn-{{ item.log_id }}"
                     {% if not operator.is_production_mode %}disabled title="Switch to Production mode to send real email"{% endif %}>
@@ -204,7 +219,8 @@
             {% endif %}
             <span id="action-label-{{ item.log_id }}" class="inline-status" style="display:none;color:var(--green)"></span>
             <span id="action-error-{{ item.log_id }}" class="inline-status" style="display:none;color:var(--red)"></span>
-            <button onclick="removeFromQueue({{ item.log_id }})" class="btn-ghost action-btn" style="color:var(--red);border-color:#fecaca;margin-top:4px" id="remove-btn-{{ item.log_id }}">
+            <button class="btn-ghost action-btn" style="color:var(--text-3);font-size:11px" onclick="regenerateMeeting({{ item.log_id }}, this)">&#8635; Regenerate Email</button>
+            <button onclick="removeFromQueue({{ item.log_id }})" class="btn-ghost action-btn" style="color:var(--red);border-color:#fecaca" id="remove-btn-{{ item.log_id }}">
               Discard
             </button>
           </div>
@@ -542,6 +558,11 @@
     errEl.style.display = 'none';
     label.style.display = 'none';
 
+    const estimateInput = document.getElementById('estimate-value-' + logId);
+    const estimateUnknown = document.getElementById('estimate-unknown-' + logId);
+    const estimatedValue = estimateInput && !estimateInput.disabled && estimateInput.value ? parseFloat(estimateInput.value) : null;
+    const unknownEstimate = estimateUnknown ? estimateUnknown.checked : false;
+
     try {
       const res = await fetch(`/api/outreach/${logId}/confirm-booking`, {
         method: 'POST',
@@ -553,6 +574,8 @@
           notes: document.getElementById('notes-' + logId)?.value || '',
           email_subject: document.getElementById('subject-' + logId)?.value || '',
           email_body: document.getElementById('body-' + logId)?.value || '',
+          estimated_value: estimatedValue,
+          estimate_unknown: unknownEstimate,
         }),
       });
       const data = await res.json().catch(() => ({}));

@@ -2484,6 +2484,7 @@ def delete_outreach(log_id: int):
         classification = log.response_classification
         db.delete(log)
         # If this was a booking_confirmed draft, cancel any associated tentative booking
+        # and reset the inbound log so a new draft can be generated
         if classification == "booking_confirmed":
             tentative = (
                 db.query(Booking)
@@ -2498,6 +2499,21 @@ def delete_outreach(log_id: int):
             )
             if tentative:
                 tentative.status = "cancelled"
+            # Reset inbound log's draft_queued so response_generator can re-queue a fresh draft
+            inbound_log = (
+                db.query(OutreachLog)
+                .filter(
+                    OutreachLog.customer_id == customer_id,
+                    OutreachLog.operator_id == OPERATOR_ID,
+                    OutreachLog.direction == "inbound",
+                    OutreachLog.response_classification == "booking_confirmed",
+                    OutreachLog.draft_queued == True,
+                )
+                .order_by(OutreachLog.created_at.desc())
+                .first()
+            )
+            if inbound_log:
+                inbound_log.draft_queued = False
     return {"status": "deleted"}
 
 
@@ -3392,6 +3408,8 @@ def confirm_booking(log_id: int, req: ConfirmBookingRequest):
             source="ai_outreach",
             service_type=req.service_type,
             notes=req.notes,
+            estimated_value=req.estimated_value if not req.estimate_unknown else None,
+            awaiting_estimate=req.estimate_unknown or (req.estimated_value is None),
         )
         db.add(booking)
         db.flush()
