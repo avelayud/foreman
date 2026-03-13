@@ -39,25 +39,33 @@ Categories:
                          Only use this when a concrete date/time was already proposed and the
                          customer is accepting it. Signals: "Tuesday works for me", "I'll take
                          the 10am slot", "that time works", "perfect, see you then".
-  booking_intent       — The customer clearly wants to book but hasn't confirmed a specific slot.
-                         Signals: "yes", "when can you come?", "book me in", "let's do it",
-                         asking for dates/times, saying "I need this done".
-  callback_request     — Customer wants a phone call before deciding or to discuss details.
-                         Signals: "call me", "give me a ring", "easier to talk", phone number given.
+  booking_intent       — The customer AFFIRMATIVELY and explicitly wants to schedule service.
+                         Requires clear positive intent — not just engagement or a question.
+                         Signals: "yes let's do it", "when can you come?", "book me in",
+                         "I'm ready to schedule", "let's set something up".
+                         IMPORTANT: Do NOT use if the customer declines a call/visit while asking a
+                         question. Asking a question alone is NOT booking intent.
+  callback_request     — Customer AFFIRMATIVELY requests a phone call or says it would be easier
+                         to talk. Signals: "call me", "give me a ring", "easier to talk on the phone",
+                         explicitly providing their number.
+                         IMPORTANT: Do NOT use if the customer says they DON'T want a call yet,
+                         even if they mention a call in a different context.
   price_inquiry        — Customer is asking about cost, pricing, or value before committing.
                          Signals: "how much", "what's the cost", "do you have a quote".
-  not_interested       — Customer declines this specific offer or says timing is wrong, but has NOT
-                         asked to be removed or permanently opted out. They may still be open to
-                         future contact or have questions. Signals: "not right now", "already handled",
-                         "not interested at the moment", "maybe later", declining while asking a
-                         question, or expressing mild disengagement. Use this when a "no" is soft,
-                         conditional, or paired with any engagement signal (e.g. a question).
+  not_interested       — Customer is not ready, declines the specific offer, declines a call/visit,
+                         or expresses hesitation — but has NOT asked to permanently opt out.
+                         Use this even when the customer also asks a question or shows mild engagement.
+                         This is the RIGHT category when someone says "I don't think I need a call
+                         just yet" or "not right now" or declines something but keeps the door open.
+                         Signals: "not right now", "not ready", "I don't think I need a call yet",
+                         "maybe later", "already taken care of", declining + asking a follow-up
+                         question, any soft or conditional no.
   unsubscribe_request  — Customer explicitly requests to stop receiving emails permanently.
                          ONLY use when the language is unambiguous and final.
                          Signals: "remove me from your list", "stop emailing me", "unsubscribe",
                          "don't contact me again", "please take me off your list".
-                         Do NOT use for a soft decline like "not right now" or "not interested".
-  unclear              — Reply is ambiguous, too short to classify, or doesn't fit other categories.
+                         Do NOT use for any soft decline.
+  unclear              — Reply is genuinely ambiguous or could reasonably fit multiple categories.
 
 Return ONLY a JSON object — no markdown, no explanation:
 {

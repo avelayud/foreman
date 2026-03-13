@@ -12,11 +12,13 @@ reactivation conversation. Every draft is informed by:
   - Real calendar availability (for booking proposals)
 
 Draft types (matched to response_classifier output):
-  booking_intent    -> BookingProposalDraft: proposes 3 real available slots
+  booking_intent    -> BookingProposalDraft: proposes 3 real available slots (Meetings Queue)
+  booking_confirmed -> BookingConfirmationDraft: confirms the agreed slot (Meetings Queue)
   callback_request  -> CallbackAckDraft: warm acknowledgement + best call window
   price_inquiry     -> PriceResponseDraft: transparent estimate using job history
-  unclear           -> ClarifyingDraft: gentle, open-ended clarification request
-  (not_interested is handled by the classifier -- marks unsubscribed, no draft)
+  not_interested    -> ConversationalDraft: answers their question, respects their position
+  unclear           -> ClarifyingDraft: answers any question, gently surfaces what they need
+  (unsubscribe_request → no draft generated)
 
 All drafts queue as dry_run=True in OutreachLog for operator review.
 This agent NEVER sends email directly.
@@ -52,13 +54,16 @@ except Exception:
 # -- Shared system prompt ------------------------------------------------------
 
 AGENT_SYSTEM = """You are a ghostwriter for a small field service business owner.
-Write an email reply in the owner's exact voice. Be brief, warm, and specific.
+Write an email reply in the owner's exact voice. Be brief, warm, and genuinely personal.
 
 Rules:
 - Match the operator's tone profile exactly -- use their characteristic phrases
-- Reference the customer's actual history naturally when relevant
-- Never be pushy or use sales language
-- Keep it short: 3-6 sentences unless the situation demands more
+- Read the customer's message carefully and respond to what they ACTUALLY said
+- If they asked a question, answer it directly -- don't dodge it or pivot away
+- If they declined something (a call, a visit, an offer), respect it completely. Do not
+  circle back to it or try to re-propose the same thing in different words
+- Never be pushy, salesy, or follow a script. Sound like a real person, not a funnel step
+- Keep it short: 2-5 sentences unless the situation genuinely demands more
 - Return ONLY a JSON object with keys "subject" and "body" -- no markdown, no fences"""
 
 
@@ -70,8 +75,8 @@ BOOKING_PROPOSAL_PROMPT = """Operator tone:
 {voice_section}{profile_section}Customer: {name}
 Service history: {service_summary}
 
-The customer has indicated they want to book service. Here are the operator's
-next available appointment slots:
+The customer has explicitly said they want to book or schedule service.
+Here are the operator's next available appointment slots:
 {slot_text}
 
 Full conversation so far:
@@ -81,13 +86,12 @@ Most recent customer message:
 {reply_text}
 
 Write a warm, direct reply that:
-1. Acknowledges their interest naturally (reference what they said)
-2. Proposes the 3 available times clearly
+1. Acknowledges what they said (reference the specific thing they mentioned)
+2. Proposes the available times clearly
 3. Makes it easy for them to pick one
-4. Mentions the service type if clear from context
-5. Signs off in the operator's voice
+4. Keeps it brief -- they've already said yes, don't oversell
 
-Subject line should reference the service or be a natural reply continuation."""
+Subject line should be a natural reply continuation."""
 
 PRICE_RESPONSE_PROMPT = """Operator tone:
 {tone}
@@ -129,22 +133,47 @@ Write a brief, warm reply that:
 
 Operator phone: {operator_phone}"""
 
-CLARIFYING_PROMPT = """Operator tone:
+NOT_INTERESTED_PROMPT = """Operator tone:
 {tone}
 
 {voice_section}{profile_section}Customer: {name}
+Service history: {service_summary}
 
 Full conversation so far:
 {thread_text}
 
-Most recent customer message (unclear intent):
+Most recent customer message (they're not ready or declined something, but may have a question):
 {reply_text}
 
-Write a brief, friendly reply that:
-1. Acknowledges their message warmly
-2. Asks one clear question to understand what they need
-3. Does NOT assume or project -- stay open-ended
-4. Feels natural, not like a form letter"""
+The customer is not ready right now. They may have declined a call, declined service,
+or said it's not the right time. Respect that completely -- do not re-propose or push back.
+
+If they asked a specific question, answer it directly and helpfully.
+If they raised a concern, address it honestly.
+If they didn't ask anything specific, just keep the door open briefly and warmly.
+
+Write a brief, genuine reply that sounds like a real person who cares, not a salesperson
+working a pipeline. No proposed times, no "great news I have these slots", nothing scripted."""
+
+CLARIFYING_PROMPT = """Operator tone:
+{tone}
+
+{voice_section}{profile_section}Customer: {name}
+Service history: {service_summary}
+
+Full conversation so far:
+{thread_text}
+
+Most recent customer message:
+{reply_text}
+
+Their message is a bit ambiguous. Read it carefully:
+- If they asked a question, answer it directly first
+- If the context makes their need fairly clear, address it
+- If you genuinely can't tell what they need, ask one specific question -- not a generic "how can I help"
+
+Write a brief, natural reply. Sound like a real person. Do not propose booking times unless
+they specifically asked for them."""
 
 BOOKING_CONFIRMATION_PROMPT = """Operator tone:
 {tone}
@@ -425,9 +454,9 @@ def generate_response(
 
     Returns the OutreachLog.id of the queued draft, or None on failure.
     """
-    if classification == "not_interested":
+    if classification == "unsubscribe_request":
         if verbose:
-            print(f"  [conversation_agent] Skipping draft -- customer marked not_interested")
+            print(f"  [conversation_agent] Skipping draft -- customer requested unsubscribe")
         return None
 
     if classification == "booking_confirmed":
@@ -593,6 +622,17 @@ def generate_response(
             reply_text=inbound_reply_text or "(see thread above)",
             operator_phone=op_phone,
         )
+    elif classification == "not_interested":
+        user_prompt = _fmt(
+            NOT_INTERESTED_PROMPT,
+            tone=op_tone,
+            voice_section=voice_section,
+            profile_section=profile_section,
+            name=cust_name,
+            service_summary=service_summary,
+            thread_text=thread_text,
+            reply_text=inbound_reply_text or "(see thread above)",
+        )
     else:  # unclear
         user_prompt = _fmt(
             CLARIFYING_PROMPT,
@@ -600,6 +640,7 @@ def generate_response(
             voice_section=voice_section,
             profile_section=profile_section,
             name=cust_name,
+            service_summary=service_summary,
             thread_text=thread_text,
             reply_text=inbound_reply_text or "(see thread above)",
         )
