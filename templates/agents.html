@@ -111,16 +111,20 @@
         <button class="btn-primary" id="runBtn-{{ agent.key }}" onclick="runAgent('reply_detector', '/api/agent/run-reply-detector')" style="font-size:11.5px;padding:7px 16px">
           Run Now
         </button>
+        {% elif agent.key == 'response_generator' %}
+        <button class="btn-primary" id="runBtn-{{ agent.key }}" onclick="runAgent('response_generator', '/api/agent/run-response-generator')" style="font-size:11.5px;padding:7px 16px">
+          Run Now
+        </button>
         {% elif agent.key == 'follow_up' %}
         <button class="btn-primary" id="runBtn-{{ agent.key }}" onclick="runAgent('follow_up', '/api/agent/run-follow-up')" style="font-size:11.5px;padding:7px 16px">
           Run Now
         </button>
         {% elif agent.key == 'response_classifier' %}
-        <button class="btn-secondary" style="font-size:11.5px;padding:7px 16px;cursor:not-allowed;opacity:0.7" disabled title="Runs automatically after each reply is detected">
+        <button class="btn-secondary" style="font-size:11.5px;padding:7px 16px;cursor:not-allowed;opacity:0.7" disabled title="Called automatically by Reply Detector after each reply is logged">
           Auto-triggered
         </button>
         {% elif agent.key == 'conversation_agent' %}
-        <button class="btn-secondary" style="font-size:11.5px;padding:7px 16px;cursor:not-allowed;opacity:0.7" disabled title="Runs automatically after classification">
+        <button class="btn-secondary" style="font-size:11.5px;padding:7px 16px;cursor:not-allowed;opacity:0.7" disabled title="Called automatically by Response Generator — use Run Now on Response Generator to trigger">
           Auto-triggered
         </button>
         {% endif %}

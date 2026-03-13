@@ -4314,6 +4314,27 @@ def agents_page(request: Request):
             .filter_by(operator_id=OPERATOR_ID, response_classification="booking_intent")
             .count()
         )
+        drafts_generated = (
+            db.query(OutreachLog)
+            .filter(
+                OutreachLog.operator_id == OPERATOR_ID,
+                OutreachLog.direction == "outbound",
+                OutreachLog.dry_run == True,
+                OutreachLog.response_classification != None,
+            )
+            .count()
+        )
+        pending_response_gen = (
+            db.query(OutreachLog)
+            .filter(
+                OutreachLog.operator_id == OPERATOR_ID,
+                OutreachLog.direction == "inbound",
+                OutreachLog.classified_at != None,
+                (OutreachLog.draft_queued == False) | (OutreachLog.draft_queued == None),
+                OutreachLog.response_classification != "unsubscribe_request",
+            )
+            .count()
+        )
         log_page_view(db, request, "agents", operator_id=OPERATOR_ID)
 
     return templates.TemplateResponse("agents.html", {
@@ -4381,7 +4402,7 @@ def agents_page(request: Request):
                 "key": "reply_detector",
                 "name": "Reply Detector",
                 "icon": "📬",
-                "description": "Checks Gmail inbox by thread ID, logs inbound replies, marks customers as replied, and refreshes customer profiles from new context.",
+                "description": "Polls Gmail inbox by thread ID every 15 minutes. Logs inbound replies, marks customers as replied, refreshes customer profiles, and classifies the reply. Response generation is handled by a separate agent.",
                 "status": "active" if tracked_threads > 0 else "needs_setup",
                 "status_label": "Active (15-min poll)" if tracked_threads > 0 else "Waiting for sent Gmail threads",
                 "last_run_at": _agent_last_run.get("reply_detector") or latest_reply_at,
@@ -4389,6 +4410,20 @@ def agents_page(request: Request):
                 "stat_value": str(replies_detected),
                 "stat_meta": f"{tracked_threads} tracked Gmail thread(s)",
                 "cli": "python -m agents.reply_detector --operator-id 1",
+                "phase": "Phase 4",
+            },
+            {
+                "key": "response_generator",
+                "name": "Response Generator",
+                "icon": "⚡",
+                "description": "Picks up classified inbound replies and generates bespoke draft responses via the Conversation Agent. Runs every 5 minutes. Marks each reply as processed so drafts are never duplicated.",
+                "status": "active",
+                "status_label": "Active (5-min poll)",
+                "last_run_at": _agent_last_run.get("response_generator"),
+                "stat_label": "Drafts generated",
+                "stat_value": str(drafts_generated),
+                "stat_meta": f"{pending_response_gen} awaiting generation" if pending_response_gen else "Queue empty",
+                "cli": "python -m agents.response_generator --operator-id 1",
                 "phase": "Phase 4",
             },
             {
@@ -4409,9 +4444,9 @@ def agents_page(request: Request):
                 "key": "response_classifier",
                 "name": "Response Classifier",
                 "icon": "🔍",
-                "description": "Reads every inbound customer reply and classifies it: booking intent, callback request, price inquiry, not interested, or unclear. Runs automatically after each reply is detected. Drives what happens next.",
+                "description": "Classifies every inbound customer reply: booking intent, callback request, price inquiry, not interested, or unclear. Called automatically by Reply Detector after each reply is logged. Classification drives what Response Generator does next.",
                 "status": "active",
-                "status_label": "Active (auto on reply)",
+                "status_label": "Auto (called by Reply Detector)",
                 "last_run_at": None,
                 "stat_label": "Replies classified",
                 "stat_value": str(classified_replies),
@@ -4423,12 +4458,12 @@ def agents_page(request: Request):
                 "key": "conversation_agent",
                 "name": "Conversation Agent",
                 "icon": "✍️",
-                "description": "Generates bespoke reply drafts matched to the conversation phase. Booking proposals pull real Google Calendar slots. Price responses use actual job history. All drafts land in the Outreach Queue for your review.",
+                "description": "Generates bespoke reply drafts matched to the conversation phase. Booking proposals pull real Google Calendar slots. Price responses use actual job history. Called by Response Generator — drafts land in the queue for review.",
                 "status": "active",
-                "status_label": "Active (auto on reply)",
+                "status_label": "Auto (called by Response Generator)",
                 "last_run_at": None,
                 "stat_label": "Drafts generated",
-                "stat_value": str(classified_replies),
+                "stat_value": str(drafts_generated),
                 "stat_meta": "One draft per classified reply",
                 "cli": None,
                 "phase": "Phase 6",
