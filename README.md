@@ -30,8 +30,7 @@ Foreman identifies dormant customers, scores them by rebooking probability, reac
 
 ## Product State (2026-03-13)
 
-> **Open bugs:** stale customer profiles after reseed. See `PROJECT_PLAN.md` backlog for details.
-> **Recently completed:** Email line-break formatting fixed (multipart/alternative HTML — root cause was Python QP encoding). Conversation agent over-restriction fixed (respects current message intent, not conversation history). Regenerate draft now context-aware (routes reply drafts to conversation agent). Signoff formatting enforced (name on its own line).
+> **All phases through 6b complete.** Customer Analyzer now reads from OutreachLog (DB-first, Gmail fallback) — profiles populate for all 200 customers. Booking confirmation auto-detected: `booking_confirmed` reply → Booking record + Google Calendar event created automatically. Email formatting fixed (multipart/alternative HTML). Conversation agent context-awareness fixed. Next: Phase 8 (Outreach Composer redesign).
 
 ## Feature Status
 
@@ -87,9 +86,9 @@ Foreman identifies dormant customers, scores them by rebooking probability, reac
 | Email body formatting (multipart/alternative HTML, natural reflow on recipient side) | ✅ Fixed |
 | Conversation agent context-awareness (respects current message, grants requests that were prev. declined) | ✅ Fixed |
 | Regenerate draft context routing (reply drafts re-run conversation agent, not cold reactivation) | ✅ Fixed |
-| **BUG: Stale customer profiles after reseed** | 🔴 Open |
-| Booking confirmation detection + job record creation | ⬜ Phase 6b (Job 02) |
-| Calendar write-back (create Google Calendar event on booking) | ⬜ Phase 6b (Job 02) |
+| Customer Analyzer DB-first (OutreachLog as primary source, Gmail fallback, --force flag) | ✅ Phase 6b |
+| Booking confirmation auto-detection (booking_confirmed → Booking record + status flip) | ✅ Phase 6b |
+| Calendar write-back (Google Calendar event on booking confirmation) | ✅ Phase 6b |
 | Outreach composer redesign (dedicated page, not customer detail) | ⬜ Phase 8 |
 | SMS channel (Twilio) | ⬜ Phase 9 |
 | Service interval prediction | ⬜ Phase 10 |
@@ -114,18 +113,13 @@ Foreman identifies dormant customers, scores them by rebooking probability, reac
 
 ## Plans System
 
-Feature work is tracked in `plans/` — one folder per job, each containing a `plan.md` and `tasks/` with individual task files. Plans are authored in Claude app and executed in Claude Code.
+Feature work is tracked in `plans/` — one folder per job, each containing a `plan.md` and `tasks/` with individual task files. Plans are authored in Claude app and executed in Claude Code. Completed job folders are removed; context lives in `PROJECT_PLAN.md`.
 
 ```
 plans/
-├── README.md                     # How to use the system
-├── job_01_customer_analyzer/     # 🔵 Active
-├── job_02_booking_confirmation/  # ⬜ Backlog (Phase 6b)
-├── job_03_customer_analytics/    # ✅ Complete
-└── job_04_product_analytics/     # ✅ Complete
+├── README.md                               # How to use the system
+└── backlog_conversation_queue_design.md    # Design notes for Phase 8
 ```
-
-**Execution order:** Job 01 → Job 04 → Job 03 (Job 02 is independent).
 
 ---
 

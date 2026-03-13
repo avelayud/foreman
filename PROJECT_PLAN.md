@@ -20,8 +20,8 @@
 
 ## Current Status
 
-- **Active Phase:** Phase 6b — Booking Confirmation Detection + Calendar Write-back
-- **State:** Phase 7 complete. Email formatting fixed (multipart/alternative HTML). Conversation agent over-restriction fixed (respects current message, not conversation history). Regenerate draft now context-aware (uses conversation agent for reply drafts). Next: Phase 6b and Job 01.
+- **Active Phase:** Phase 8 — Outreach Composer Redesign
+- **State:** Phases 1–7 and 6b all complete. Customer Analyzer reads from OutreachLog (DB-first, Gmail fallback). Booking confirmation auto-detection live. Email formatting fixed. Conversation agent context-awareness fixed. Next: Phase 8.
 - **Last Updated:** 2026-03-13
 - **Live URL:** https://web-production-3df3a.up.railway.app
 - **Repo:** https://github.com/avelayud/foreman
@@ -29,6 +29,11 @@
 ---
 
 ## Recently Completed
+
+### 2026-03-13 — Job 01 (Customer Analyzer) + Phase 6b (Booking Confirmation)
+
+- **Customer Analyzer DB-first (Job 01):** Added `_get_thread_from_db()` to `agents/customer_analyzer.py` — reads OutreachLog records (all directions, all dry_run states) as the primary data source, formatted as `[OUTBOUND date] Subject: ...` / `[INBOUND date]` thread strings. `analyze_customer()` now uses DB as primary source when ≥ 2 messages exist; falls back to Gmail API for thin/empty threads (covers 8 live email customers with no OutreachLog). Added skip logic (don't re-analyze if profile exists) and `--force` CLI flag to overwrite all profiles unconditionally. Reply detector passes `force=True` on post-reply profile refresh so new reply context is always incorporated.
+- **Booking confirmation auto-detection (Phase 6b):** `_auto_create_booking()` in `reply_detector.py` fires when classifier returns `booking_confirmed`. Reads extracted `booking_slot_start/end` from the queued confirmation draft (set by `conversation_agent._generate_booking_confirmation`), creates `Booking` record (`source=ai_outreach`, `status=confirmed`), flips `Customer.reactivation_status → booked`, marks `OutreachLog.converted_to_job = True`, and creates a Google Calendar event. GCal step has graceful fallback — booking is always saved even if calendar scope is unavailable. Conversation workspace already displays the booked state when `active_booking` exists — no UI changes needed.
 
 ### 2026-03-13 — Email Formatting Fix, Conversation Agent Improvements, Regenerate Draft Fix
 
@@ -127,9 +132,9 @@
 | 4 | Gmail Send + Follow-up Intelligence + Conversation UX | ✅ Complete | Fully operational |
 | 5 | Customer Scoring + Revenue Dashboard | ✅ Complete | Live |
 | 6 | Booking Conversion Flow + Google Calendar | ✅ Core complete | Classifier, calendar, meetings queue live |
-| 6b | Booking Confirmation Detection + Calendar Write-back | 🔵 Active | Job 02 in plans/ |
+| 6b | Booking Confirmation Detection + Calendar Write-back | ✅ Complete | Auto-booking on confirmed reply; GCal write-back |
 | 7 | Customer Analytics Page + Product Analytics | ✅ Complete | Jobs 03 + 04 done; per-page analytics + error tracking added 2026-03-13 |
-| 8 | Outreach Composer Redesign | ⬜ Planned | See backlog |
+| 8 | Outreach Composer Redesign | 🔵 Active | See backlog / plans/ |
 | 9 | SMS Channel (Twilio) | ⬜ Planned | |
 | 10 | Service Interval Prediction | ⬜ Planned | |
 | 11 | Jobber / HousecallPro Integration | ⬜ Planned | |
@@ -165,20 +170,15 @@
 - [x] Draft Follow-up: generates context-aware follow-up draft, redirects to /outreach
 - [x] Idempotent: checks for existing pending draft before generating new one
 
-## Phase 6b — Booking Confirmation Detection + Calendar Write-back (🔵 Active)
+## Phase 6b — Booking Confirmation Detection + Calendar Write-back (✅ Complete)
 
-### Booking Confirmation + Job Creation
-- [ ] Confirmation detection: classifier identifies confirmed slot in customer reply
-- [ ] On confirmation: create `Booking` record (date, time, customer_id, job_type)
-- [ ] Update Customer.reactivation_status → `booked`, OutreachLog.converted_to_job = True
-- [ ] Log estimated job value from Customer.estimated_job_value
-- [ ] Confirmation summary on conversation workspace: "Job booked for [date]"
-
-### Calendar Write-back
-- [ ] Add `calendar.events` write scope to OAuth token
-- [ ] Create Google Calendar event on booking confirmation
-- [ ] Event includes: customer name, address, job type, contact info
-- [ ] Link Google Calendar event ID on Booking record
+- [x] `booking_confirmed` classifier category (distinct from `booking_intent`)
+- [x] `_auto_create_booking()` in reply_detector: fires on `booking_confirmed`
+- [x] Creates `Booking` record (`source=ai_outreach`, `status=confirmed`) with slot times extracted by conversation_agent
+- [x] `Customer.reactivation_status → booked`, `OutreachLog.converted_to_job = True`
+- [x] Google Calendar event created via `integrations/calendar.create_calendar_event()` — customer added as attendee, GCal sends .ics invite automatically
+- [x] `Booking.google_cal_event_id` stored on success; graceful fallback if calendar scope unavailable
+- [x] Conversation workspace shows booked state (existing `active_booking` UI path)
 
 ---
 
@@ -392,6 +392,8 @@ venv/bin/python -m agents.follow_up --operator-id 1 --limit 20
 | 2026-03-13 | Conversation agent temporal awareness | AGENT_SYSTEM "respect their decision" rule scoped to current message only. If customer previously declined but now asks for it, grant the request. NOT_INTERESTED_PROMPT hard "no proposed times" ban removed — only skip if customer didn't ask. |
 | 2026-03-13 | Regenerate draft context routing | /api/outreach/{id}/regenerate reads response_classification from existing draft. If set, routes to conversation_agent.generate_response with latest inbound_log_id. Falls back to cold reactivation only when no classification. |
 | 2026-03-13 | Signoff formatting | AGENT_SYSTEM instructs agent to put name on its own line: "Best,\nArjuna" not "Best, Arjuna". |
+| 2026-03-13 | Customer Analyzer DB-first | OutreachLog is primary source (all dry_run states included so scenario customers work). Gmail fallback when DB has < 2 messages. Skip existing profiles unless force=True. reply_detector always passes force=True so new replies update the profile. |
+| 2026-03-13 | booking_confirmed auto-booking | _auto_create_booking() in reply_detector reads booking_slot_start/end from the queued confirmation draft, creates Booking (source=ai_outreach), flips customer to booked, marks converted_to_job=True, creates GCal event. GCal failure is non-fatal — booking always saved. |
 
 ---
 
@@ -404,26 +406,26 @@ I'm continuing work on Foreman — an AI reactivation system for HVAC & field se
 
 Read PROJECT_PLAN.md and README.md first for full context, then look at any code files attached.
 
-Current state (2026-03-13): Phases 1–7 complete. Phase 6b active.
+Current state (2026-03-13): Phases 1–7 + 6b all complete. Active: Phase 8.
 Live: https://web-production-3df3a.up.railway.app
 
 Completed recently (2026-03-13 session):
-- Email formatting fixed: send_email() now sends multipart/alternative (plain + HTML). Root cause was
-  Python MIMEText QP encoding wrapping at 76 chars; Gmail recipient stripped = markers → hard line breaks.
-  _plain_to_html() converts paragraphs to <p> tags for natural reflow.
-- Conversation agent context-awareness: AGENT_SYSTEM "respect decision" rule scoped to current message.
-  Agent grants requests even if customer declined same thing earlier in thread. NOT_INTERESTED_PROMPT
-  hard "no proposed times" ban removed. PRICE_RESPONSE_PROMPT gives ballpark ranges + alternatives.
-- Regenerate draft fixed: /api/outreach/{id}/regenerate now routes to conversation_agent for reply drafts
-  (uses stored response_classification + latest inbound_log_id). Cold outreach still uses reactivation agent.
-- Signoff formatting: AGENT_SYSTEM enforces "Best,\nArjuna" (name on own line).
-
-Open bugs:
-1. Stale customer profiles after reseed: Customer Analyzer re-reads Gmail API which has old real emails
+- Customer Analyzer (Job 01): _get_thread_from_db() reads OutreachLog as primary source. DB-first
+  (>=2 messages), Gmail fallback for thin threads. Skip logic + --force flag. reply_detector passes
+  force=True on post-reply refresh. Profiles now populate for all 200 customers.
+- Booking confirmation (Phase 6b): _auto_create_booking() in reply_detector fires on booking_confirmed.
+  Creates Booking record (source=ai_outreach), flips customer to booked, sets converted_to_job=True,
+  creates Google Calendar event. GCal graceful fallback if scope unavailable.
+- Email formatting: send_email() sends multipart/alternative (plain + HTML). _plain_to_html() converts
+  paragraphs to <p> tags. Root cause: Python MIMEText QP encoding wrapped at 76 chars.
+- Conversation agent: AGENT_SYSTEM scoped to current message. Agent grants requests even if customer
+  previously declined. NOT_INTERESTED_PROMPT allows calls/times if customer asks. PRICE_RESPONSE_PROMPT
+  gives ballpark ranges. Signoff: name on own line.
+- Regenerate draft: routes to conversation_agent for reply drafts (uses response_classification).
 
 Next priorities:
-1. Job 01 (plans/job_01_customer_analyzer/): fix Customer Analyzer to use OutreachLog as primary source — plan + tasks already written
-2. Phase 6b — booking confirmation detection → create Booking record automatically (plans/job_02_booking_confirmation/)
+1. Phase 8 — Outreach Composer redesign: dedicated composer page, separate cold vs reply flow
+   (design notes: plans/backlog_conversation_queue_design.md)
 
 Make code changes directly and summarize what changed.
 ```
