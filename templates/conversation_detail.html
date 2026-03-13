@@ -96,6 +96,17 @@
   .recap-summary{font-size:13px;color:var(--text-2);line-height:1.65;border:1px solid var(--border);background:var(--bg);border-radius:7px;padding:10px 11px;margin-bottom:8px}
   .talking-item{font-size:12.5px;color:var(--text);line-height:1.5;border:1px solid var(--border);background:var(--bg);border-radius:7px;padding:8px 10px;margin-bottom:6px}
 
+  /* Booking panel */
+  .booking-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px}
+  @media(max-width:600px){.booking-grid{grid-template-columns:1fr}}
+  .booking-field label{display:block;font-size:10px;font-family:'IBM Plex Mono',monospace;letter-spacing:1px;text-transform:uppercase;color:var(--text-3);margin-bottom:5px}
+  .booking-field input,.booking-field textarea,.booking-field select{width:100%;border:1px solid var(--border);border-radius:7px;padding:8px 10px;font-size:13px;font-family:'IBM Plex Sans',sans-serif;color:var(--text);background:var(--bg);outline:none;box-sizing:border-box;transition:border-color 0.15s}
+  .booking-field input:focus,.booking-field textarea:focus,.booking-field select:focus{border-color:var(--navy);background:var(--surface)}
+  .booking-field textarea{min-height:100px;resize:vertical;line-height:1.6}
+  .book-send-btn{background:var(--green);color:#fff;border:none;border-radius:8px;padding:10px 22px;font-size:13px;font-weight:600;cursor:pointer;transition:opacity 0.15s}
+  .book-send-btn:hover{opacity:0.88}
+  .book-send-btn:disabled{opacity:0.5;cursor:default}
+
   @media(max-width:860px){.conv-grid{grid-template-columns:1fr}}
 </style>
 {% endblock %}
@@ -114,6 +125,7 @@
     <span class="stage-chip stage-{{ health.chip_cls }}">{{ health.label }}</span>
     <a href="/customer/{{ customer.id }}" class="btn-ghost" style="text-decoration:none;font-size:12px;margin-left:4px">Customer Page</a>
     <a href="/conversations" class="btn-ghost" style="text-decoration:none;font-size:12px">All Conversations</a>
+    <button onclick="document.getElementById('booking-section').classList.add('open');document.getElementById('booking-section').scrollIntoView({behavior:'smooth',block:'start'})" class="btn-primary" style="font-size:12px;padding:6px 14px;background:var(--green)">📅 Schedule Appointment</button>
   </div>
 </div>
 
@@ -336,6 +348,60 @@
   </div>
 </div>
 
+{# ── SCHEDULE APPOINTMENT — full-width, collapsible ── #}
+<div class="collapsible" id="booking-section">
+  <div class="collapsible-head" onclick="toggleSection('booking-section')">
+    <div class="panel-title" style="display:flex;align-items:center;gap:8px">
+      <span style="color:var(--green)">📅</span> Schedule Appointment
+    </div>
+    <span class="collapsible-chevron">▾</span>
+  </div>
+  <div class="collapsible-body">
+    <div style="font-size:12.5px;color:var(--text-3);margin-bottom:16px;line-height:1.5">
+      Use this to book a time, create a Google Calendar event, and send a confirmation email — all in one click. The customer receives a calendar invite automatically via GCal.
+    </div>
+
+    <div class="booking-grid">
+      <div class="booking-field">
+        <label>Start time</label>
+        <input type="datetime-local" id="book-slot-start">
+      </div>
+      <div class="booking-field">
+        <label>End time</label>
+        <input type="datetime-local" id="book-slot-end">
+      </div>
+      <div class="booking-field">
+        <label>Service type</label>
+        <input type="text" id="book-service-type" value="{{ customer.last_service_type or 'Service' }}">
+      </div>
+      <div class="booking-field">
+        <label>Internal notes (optional)</label>
+        <input type="text" id="book-notes" placeholder="e.g. bring extra filters">
+      </div>
+    </div>
+
+    <div class="booking-field" style="margin-bottom:10px">
+      <label>Email subject</label>
+      <input type="text" id="book-subject" placeholder="Your appointment is confirmed">
+    </div>
+
+    <div class="booking-field" style="margin-bottom:16px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:5px">
+        <label style="margin-bottom:0">Confirmation email body</label>
+        <button onclick="generateBookingEmail()" id="gen-email-btn" style="all:unset;cursor:pointer;font-size:11px;color:var(--blue);font-family:'IBM Plex Mono',monospace;letter-spacing:0.3px">↺ Generate</button>
+      </div>
+      <textarea id="book-body" placeholder="Confirmation message…"></textarea>
+    </div>
+
+    <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+      <button class="book-send-btn" id="book-send-btn" onclick="sendBookingInvite()">
+        Send Invite + Confirmation Email
+      </button>
+      <span id="book-status" style="font-size:12.5px"></span>
+    </div>
+  </div>
+</div>
+
 {% endblock %}
 
 {% block scripts %}
@@ -454,6 +520,86 @@
       statusEl.style.color = 'var(--red)';
       statusEl.textContent = `Failed: ${e.message}`;
       btn.disabled = false;
+    }
+  }
+
+  // ── Booking panel ──────────────────────────────────────────────────────────
+
+  async function generateBookingEmail() {
+    const btn = document.getElementById('gen-email-btn');
+    const bodyEl = document.getElementById('book-body');
+    const subjectEl = document.getElementById('book-subject');
+    const start = document.getElementById('book-slot-start').value;
+    const serviceType = document.getElementById('book-service-type').value || 'service';
+    btn.textContent = '…';
+    btn.style.pointerEvents = 'none';
+    try {
+      const res = await fetch(`/api/customer/${CUSTOMER_ID}/booking-draft`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ slot_start: start, service_type: serviceType }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) {
+        if (data.subject) subjectEl.value = data.subject;
+        if (data.body) bodyEl.value = data.body;
+      }
+    } catch (e) { /* silent — operator can type manually */ }
+    finally {
+      btn.textContent = '↺ Generate';
+      btn.style.pointerEvents = '';
+    }
+  }
+
+  async function sendBookingInvite() {
+    const btn = document.getElementById('book-send-btn');
+    const statusEl = document.getElementById('book-status');
+    const slotStart = document.getElementById('book-slot-start').value;
+    const slotEnd = document.getElementById('book-slot-end').value;
+
+    if (!slotStart || !slotEnd) {
+      statusEl.style.color = 'var(--red)';
+      statusEl.textContent = '⚠ Set a start and end time first.';
+      return;
+    }
+
+    if (!window.confirm('Confirm this booking? This will:\n• Create a Google Calendar event\n• Auto-send a .ics invite to the customer\n• Send a confirmation email')) return;
+
+    btn.disabled = true;
+    btn.textContent = 'Sending…';
+    statusEl.textContent = '';
+
+    try {
+      const res = await fetch(`/api/customer/${CUSTOMER_ID}/book-and-invite`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          slot_start: slotStart,
+          slot_end: slotEnd,
+          service_type: document.getElementById('book-service-type').value || 'Service',
+          notes: document.getElementById('book-notes').value || '',
+          email_subject: document.getElementById('book-subject').value || '',
+          email_body: document.getElementById('book-body').value || '',
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.detail || 'Server error');
+
+      let msg = '✓ Booking confirmed!';
+      if (data.gcal_event_id) msg += ' Calendar invite sent.';
+      if (data.email_sent) msg += ' Confirmation email sent.';
+      if (data.gcal_error) msg += ` (Calendar warning: ${data.gcal_error})`;
+      if (data.mode !== 'production') msg = '✓ Booking created (dry run — switch to Production to send email + invite).';
+
+      statusEl.style.color = 'var(--green)';
+      statusEl.textContent = msg;
+      btn.textContent = 'Sent ✓';
+      setTimeout(() => window.location.reload(), 2000);
+    } catch (e) {
+      statusEl.style.color = 'var(--red)';
+      statusEl.textContent = '⚠ ' + e.message;
+      btn.disabled = false;
+      btn.textContent = 'Send Invite + Confirmation Email';
     }
   }
 

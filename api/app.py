@@ -2667,6 +2667,192 @@ def confirm_booking(log_id: int, req: ConfirmBookingRequest):
     }
 
 
+class BookingDraftRequest(BaseModel):
+    slot_start: str = ""
+    service_type: str = "Service"
+
+
+@app.post("/api/customer/{customer_id}/booking-draft")
+def generate_booking_draft(customer_id: int, req: BookingDraftRequest):
+    """Generate a confirmation email subject + body for the booking panel."""
+    with get_db() as db:
+        customer = db.query(Customer).filter_by(id=customer_id, operator_id=OPERATOR_ID).first()
+        if not customer:
+            raise HTTPException(status_code=404, detail="Customer not found")
+        operator = db.query(Operator).filter_by(id=OPERATOR_ID).first()
+        tone = operator.tone_profile or "" if operator else ""
+        customer_name = customer.name
+
+    slot_label = ""
+    if req.slot_start:
+        try:
+            dt = datetime.fromisoformat(req.slot_start)
+            slot_label = dt.strftime("%A, %B %-d at %-I:%M %p")
+        except ValueError:
+            slot_label = req.slot_start
+
+    prompt = (
+        f"Write a short, warm booking confirmation email.\n"
+        f"Customer name: {customer_name}\n"
+        f"Service: {req.service_type}\n"
+        f"Time: {slot_label or 'TBD'}\n"
+        f"Tone notes: {tone}\n\n"
+        f"Return JSON: {{\"subject\": \"...\", \"body\": \"...\"}}\n"
+        f"The body should be 3–5 sentences max. No fluff. Use the operator's tone."
+    )
+    try:
+        import anthropic
+        client = anthropic.Anthropic()
+        msg = client.messages.create(
+            model="claude-haiku-4-5-20251001",
+            max_tokens=400,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        import json as _json
+        raw = msg.content[0].text.strip()
+        # Strip markdown code block if present
+        if raw.startswith("```"):
+            raw = raw.split("```")[1]
+            if raw.startswith("json"):
+                raw = raw[4:]
+        data = _json.loads(raw.strip())
+        return {"subject": data.get("subject", ""), "body": data.get("body", "")}
+    except Exception as e:
+        # Fallback to a plain default
+        subject = f"Your appointment is confirmed — {req.service_type}"
+        body = f"Hi {customer_name},\n\nJust confirming your {req.service_type} appointment{' on ' + slot_label if slot_label else ''}.\n\nLet me know if you need to reschedule.\n\nBest,\nArjuna"
+        return {"subject": subject, "body": body}
+
+
+@app.post("/api/customer/{customer_id}/book-and-invite")
+def book_and_invite(customer_id: int, req: ConfirmBookingRequest):
+    """
+    Create a booking + GCal event + send confirmation email directly from the
+    conversation page — no outreach queue log required.
+    """
+    try:
+        slot_start = datetime.fromisoformat(req.slot_start)
+        slot_end = datetime.fromisoformat(req.slot_end)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid slot_start or slot_end — expected ISO datetime")
+
+    with get_db() as db:
+        customer = db.query(Customer).filter_by(id=customer_id, operator_id=OPERATOR_ID).first()
+        if not customer:
+            raise HTTPException(status_code=404, detail="Customer not found")
+        operator = db.query(Operator).filter_by(id=OPERATOR_ID).first()
+        mode = (operator.outreach_mode or "dry_run").strip().lower() if operator else "dry_run"
+        customer_email = customer.email
+        customer_name = customer.name
+        # Find outbound thread to reply in-thread
+        existing_thread = (
+            db.query(OutreachLog.gmail_thread_id)
+            .filter(
+                OutreachLog.customer_id == customer_id,
+                OutreachLog.operator_id == OPERATOR_ID,
+                OutreachLog.gmail_thread_id != None,
+                OutreachLog.direction == "outbound",
+                OutreachLog.dry_run == False,
+            )
+            .order_by(OutreachLog.sent_at.desc())
+            .first()
+        )
+        existing_thread_id = existing_thread[0] if existing_thread else None
+
+    # Create Booking record
+    with get_db() as db:
+        booking = Booking(
+            operator_id=OPERATOR_ID,
+            customer_id=customer_id,
+            slot_start=slot_start,
+            slot_end=slot_end,
+            status="confirmed",
+            source="ai_outreach",
+            service_type=req.service_type,
+            notes=req.notes,
+        )
+        db.add(booking)
+        db.flush()
+        booking_id = booking.id
+        c = db.query(Customer).filter_by(id=customer_id).first()
+        if c:
+            c.reactivation_status = "booked"
+
+    # Create Google Calendar event
+    gcal_event_id = None
+    gcal_error = None
+    try:
+        from integrations.calendar import create_calendar_event
+        event = create_calendar_event(
+            summary=f"{req.service_type} — {customer_name}",
+            start_dt=slot_start,
+            end_dt=slot_end,
+            customer_email=customer_email,
+            description=(
+                f"Booked via Foreman reactivation outreach.\n"
+                f"Customer: {customer_name}"
+                + (f"\nNotes: {req.notes}" if req.notes else "")
+            ),
+        )
+        gcal_event_id = event.get("id")
+        if gcal_event_id:
+            with get_db() as db:
+                b = db.query(Booking).filter_by(id=booking_id).first()
+                if b:
+                    b.google_cal_event_id = gcal_event_id
+    except Exception as e:
+        gcal_error = str(e)
+        print(f"[book_and_invite] GCal event creation failed: {e}")
+
+    # Send confirmation email
+    email_sent = False
+    send_error = None
+    email_subject = req.email_subject or f"Your appointment is confirmed — {req.service_type}"
+    email_body = req.email_body or f"Hi {customer_name},\n\nJust confirming your appointment for {req.service_type} on {slot_start.strftime('%A, %B %-d at %-I:%M %p')}.\n\nLet me know if you need to reschedule.\n\nBest,\nArjuna"
+    if mode == "production" and customer_email:
+        try:
+            inbound_rfc_id = _get_customer_inbound_rfc_id(customer_id)
+            thread_id = _gmail_send_message(
+                to=customer_email,
+                subject=email_subject,
+                body=email_body,
+                thread_id=existing_thread_id,
+                in_reply_to=inbound_rfc_id,
+            )
+            email_sent = bool(thread_id)
+            # Log the confirmation email
+            with get_db() as db:
+                log = OutreachLog(
+                    operator_id=OPERATOR_ID,
+                    customer_id=customer_id,
+                    channel="email",
+                    direction="outbound",
+                    subject=email_subject,
+                    content=email_body,
+                    sent_at=datetime.utcnow(),
+                    dry_run=False,
+                    approval_status="sent",
+                    sequence_step=0,
+                    gmail_thread_id=thread_id,
+                    response_classification="booking_confirmed",
+                )
+                db.add(log)
+        except Exception as e:
+            send_error = str(e)
+    else:
+        email_sent = False  # dry run — booking still created, GCal still fires
+
+    return {
+        "status": "confirmed",
+        "booking_id": booking_id,
+        "gcal_event_id": gcal_event_id,
+        "gcal_error": gcal_error,
+        "email_sent": email_sent,
+        "send_error": send_error,
+        "mode": mode,
+    }
+
+
 class ApproveRequest(BaseModel):
     subject: str
     body: str
