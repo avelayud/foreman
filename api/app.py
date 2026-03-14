@@ -1466,9 +1466,8 @@ def dashboard(request: Request):
 
     with get_db() as db:
         operator = db.query(Operator).filter_by(id=OPERATOR_ID).first()
-        queue_count = db.query(OutreachLog).filter_by(
-            operator_id=OPERATOR_ID, dry_run=True
-        ).count()
+        queue_count = _get_queue_count(db)
+        meetings_queue_count = _get_meetings_queue_count(db)
         conversations_attention_count = _get_conversations_attention_count(db)
         operator_data = _operator_data(operator)
         log_page_view(db, request, "dashboard", operator_id=OPERATOR_ID)
@@ -1575,6 +1574,7 @@ def dashboard(request: Request):
         "group_ripe": group_ripe,
         "group_declined": group_declined,
         "queue_count": queue_count,
+        "meetings_queue_count": meetings_queue_count,
         "conversations_attention_count": conversations_attention_count,
         "today_str": today_str,
     })
@@ -1587,7 +1587,8 @@ def customers_list(request: Request, search: str = "", group: str = "all"):
     with get_db() as db:
         op = db.query(Operator).filter_by(id=OPERATOR_ID).first()
         operator_data = _operator_data(op)
-        queue_count = db.query(OutreachLog).filter_by(operator_id=OPERATOR_ID, dry_run=True).count()
+        queue_count = _get_queue_count(db)
+        meetings_queue_count = _get_meetings_queue_count(db)
         conversations_attention_count = _get_conversations_attention_count(db)
         log_page_view(db, request, "customers", operator_id=OPERATOR_ID)
 
@@ -1599,6 +1600,7 @@ def customers_list(request: Request, search: str = "", group: str = "all"):
         "active": "customers",
         "operator": operator_data,
         "queue_count": queue_count,
+        "meetings_queue_count": meetings_queue_count,
         "conversations_attention_count": conversations_attention_count,
         "all_customers": all_customers,
         "search": search,
@@ -1620,6 +1622,7 @@ def customer_detail(request: Request, customer_id: int):
 
         operator_data = _operator_data(operator)
         queue_count = _get_queue_count(db)
+        meetings_queue_count = _get_meetings_queue_count(db)
         conversations_attention_count = _get_conversations_attention_count(db)
         customer_data = enrich(customer)
         customer_data = add_segment(customer_data)
@@ -1714,6 +1717,7 @@ def customer_detail(request: Request, customer_id: int):
         "active": "customers",
         "operator": operator_data,
         "queue_count": queue_count,
+        "meetings_queue_count": meetings_queue_count,
         "conversations_attention_count": conversations_attention_count,
         "customer": customer_data,
         "jobs": jobs,
@@ -2137,6 +2141,7 @@ def conversations(request: Request):
         operator = db.query(Operator).filter_by(id=OPERATOR_ID).first()
         operator_data = _operator_data(operator)
         queue_count = _get_queue_count(db)
+        meetings_queue_count = _get_meetings_queue_count(db)
         customers = db.query(Customer).filter_by(operator_id=OPERATOR_ID).all()
         log_page_view(db, request, "conversations", operator_id=OPERATOR_ID)
 
@@ -2217,6 +2222,7 @@ def conversations(request: Request):
         "active": "conversations",
         "operator": operator_data,
         "queue_count": queue_count,
+        "meetings_queue_count": meetings_queue_count,
         "conversations_attention_count": conversations_attention_count,
         "conversations": conversations_data,
         "awaiting_reply_count": health_counts["awaiting_reply"],
@@ -2499,6 +2505,10 @@ def delete_outreach(log_id: int):
             )
             if tentative:
                 tentative.status = "cancelled"
+                # Reset customer back to "replied" — they confirmed a time but invite wasn't sent
+                cust = db.query(Customer).filter_by(id=customer_id, operator_id=OPERATOR_ID).first()
+                if cust and cust.reactivation_status == "booked":
+                    cust.reactivation_status = "replied"
             # Reset inbound log's draft_queued so response_generator can re-queue a fresh draft
             inbound_log = (
                 db.query(OutreachLog)
@@ -4353,6 +4363,7 @@ def agents_page(request: Request):
             )
             .count()
         )
+        meetings_queue_count_agents = _get_meetings_queue_count(db)
         log_page_view(db, request, "agents", operator_id=OPERATOR_ID)
 
     return templates.TemplateResponse("agents.html", {
@@ -4360,6 +4371,7 @@ def agents_page(request: Request):
         "active": "agents",
         "operator": operator_data,
         "queue_count": queued_count,
+        "meetings_queue_count": meetings_queue_count_agents,
         "conversations_attention_count": conversations_attention_count,
         "agents": [
             {
@@ -4516,6 +4528,8 @@ def internal_page(request: Request):
         outreach_count = db.query(OutreachLog).filter_by(operator_id=OPERATOR_ID).count()
         booking_count = db.query(Booking).count()
         conversations_attention_count = _get_conversations_attention_count(db)
+        queue_count = _get_queue_count(db)
+        meetings_queue_count = _get_meetings_queue_count(db)
         log_page_view(db, request, "internal", operator_id=OPERATOR_ID)
 
     return templates.TemplateResponse("internal.html", {
@@ -4523,6 +4537,8 @@ def internal_page(request: Request):
         "active": "internal",
         "operator": operator_data,
         "conversations_attention_count": conversations_attention_count,
+        "queue_count": queue_count,
+        "meetings_queue_count": meetings_queue_count,
         "db_stats": {
             "customers": customer_count,
             "outreach_logs": outreach_count,
@@ -4659,6 +4675,8 @@ def internal_product_page(request: Request, range: str = "30"):
         op = db.query(Operator).filter_by(id=OPERATOR_ID).first()
         operator_data = _operator_data(op)
         conversations_attention_count = _get_conversations_attention_count(db)
+        queue_count_product = _get_queue_count(db)
+        meetings_queue_count_product = _get_meetings_queue_count(db)
 
         # Query ProductEvent table
         try:
@@ -4900,6 +4918,8 @@ def internal_product_page(request: Request, range: str = "30"):
         "active": "internal_product",
         "operator": operator_data,
         "conversations_attention_count": conversations_attention_count,
+        "queue_count": queue_count_product,
+        "meetings_queue_count": meetings_queue_count_product,
         "range_label": range_label,
         "activity": {
             "total_page_views": total_page_views,
@@ -4943,6 +4963,7 @@ def analytics_page(request: Request, range: str = "90", tab: str = "insights"):
         operator_data = _operator_data(op)
         conversations_attention_count = _get_conversations_attention_count(db)
         queue_count = _get_queue_count(db)
+        meetings_queue_count = _get_meetings_queue_count(db)
         log_page_view(db, request, "analytics", operator_id=OPERATOR_ID, properties={"tab": active_tab, "range": range_label})
 
         snapshot = _analytics.get_customer_snapshot(db, OPERATOR_ID)
@@ -4961,6 +4982,7 @@ def analytics_page(request: Request, range: str = "90", tab: str = "insights"):
         "operator": operator_data,
         "conversations_attention_count": conversations_attention_count,
         "queue_count": queue_count,
+        "meetings_queue_count": meetings_queue_count,
         "range_label": range_label,
         "range_param": range_param,
         "active_tab": active_tab,
@@ -4986,6 +5008,7 @@ async def settings_page(request: Request):
         operator_data = _operator_data(op)
         conversations_attention_count = _get_conversations_attention_count(db)
         queue_count = _get_queue_count(db)
+        meetings_queue_count = _get_meetings_queue_count(db)
         log_page_view(db, request, "settings", operator_id=OPERATOR_ID)
 
     cfg = get_config(OPERATOR_ID)
@@ -4996,6 +5019,7 @@ async def settings_page(request: Request):
         "operator": operator_data,
         "conversations_attention_count": conversations_attention_count,
         "queue_count": queue_count,
+        "meetings_queue_count": meetings_queue_count,
         "config": cfg,
         "default_config": DEFAULT_CONFIG,
     })
