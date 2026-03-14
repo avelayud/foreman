@@ -273,13 +273,21 @@
           <a href="/meetings" class="btn-primary" style="display:inline-block;text-decoration:none;font-size:11.5px;padding:5px 12px;margin-top:8px">View in Meetings Queue →</a>
         </div>
       </div>
-      {% elif not active_booking %}
+      {% elif not active_booking and health.key == 'needs_response' %}
       <div class="action-banner" style="background:#fef2f2;border:1px solid #fca5a5">
         <span class="ab-icon">⚠️</span>
         <div>
           <div class="ab-title" style="color:#991b1b">Action Required — Pending Scheduling</div>
           <div class="ab-desc">Customer confirmed availability but the invite was not sent. Generate a new meeting invite draft to queue for review.</div>
           <button onclick="redraftMeetingInvite(this)" class="btn-primary" style="font-size:11.5px;padding:5px 12px;margin-top:8px">Redraft Meeting Invite</button>
+        </div>
+      </div>
+      {% elif active_booking %}
+      <div class="action-banner ab-confirmed">
+        <span class="ab-icon">✓</span>
+        <div>
+          <div class="ab-title">Customer Confirmed — Invite Sent</div>
+          <div class="ab-desc">Appointment is on the calendar. Log the outcome after the visit.</div>
         </div>
       </div>
       {% endif %}
@@ -330,12 +338,12 @@
         {# State B: no draft — show generate button #}
         <div id="generate-prompt" {% if has_pending_draft %}style="display:none"{% endif %}>
           <div style="font-size:13px;color:var(--text-3);margin-bottom:12px">
-            {% if latest_classification == 'booking_confirmed' and not active_booking %}Customer confirmed availability — generate a new meeting invite draft to queue for review in the Meetings Queue.
+            {% if latest_classification == 'booking_confirmed' and not active_booking and health.key == 'needs_response' %}Customer confirmed availability — generate a new meeting invite draft to queue for review in the Meetings Queue.
             {% elif health.needs_response %}Customer replied — generate a response draft to review before queuing.
             {% elif health.needs_follow_up %}Follow-up is overdue. Generate a draft to review before queuing.
             {% else %}No reply yet. Generate a follow-up draft if you want to reach out before the agent's next scheduled run.{% endif %}
           </div>
-          {% if latest_classification == 'booking_confirmed' and not active_booking %}
+          {% if latest_classification == 'booking_confirmed' and not active_booking and health.key == 'needs_response' %}
           <button class="btn-primary" onclick="redraftMeetingInvite(this)" style="font-size:13px;padding:8px 20px">Redraft Meeting Invite</button>
           {% else %}
           <button class="btn-primary" onclick="showGeneratePanel()" style="font-size:13px;padding:8px 20px">Generate Draft</button>

@@ -260,11 +260,12 @@ def _get_conversations_attention_count(db) -> int:
         clogs = logs_by_customer.get(cid, [])
         outbound = [l for l in clogs if l.direction == "outbound"]
         inbound = [l for l in clogs if l.direction == "inbound"]
+        actionable_inbound = [l for l in inbound if l.response_classification != "calendar_accepted"]
         last_outbound_at = max((l.sent_at or l.created_at for l in outbound), default=None)
-        last_inbound_at = max((l.sent_at or l.created_at for l in inbound), default=None)
-        # Override status if inbound logs exist but status wasn't updated yet
+        last_inbound_at = max((l.sent_at or l.created_at for l in actionable_inbound), default=None)
+        # Override status if actionable inbound logs exist but status wasn't updated yet
         effective = status
-        if inbound and effective not in ("booked", "invite_sent", "sequence_complete", "unsubscribed", "replied"):
+        if actionable_inbound and effective not in ("booked", "invite_sent", "sequence_complete", "unsubscribed", "replied"):
             effective = "replied"
         health = _conversation_health(effective, last_outbound_at, last_inbound_at)
         if health["needs_response"] or health["needs_follow_up"]:
@@ -2034,11 +2035,12 @@ def updates_page(request: Request):
 
             outbound = [l for l in logs if l.direction == "outbound"]
             inbound = [l for l in logs if l.direction == "inbound"]
+            actionable_inbound = [l for l in inbound if l.response_classification != "calendar_accepted"]
             last_outbound_at = max((_l.sent_at or _l.created_at for _l in outbound), default=None)
-            last_inbound_at = max((_l.sent_at or _l.created_at for _l in inbound), default=None)
+            last_inbound_at = max((_l.sent_at or _l.created_at for _l in actionable_inbound), default=None)
 
             effective = cust.reactivation_status
-            if inbound and effective not in ("booked", "invite_sent", "sequence_complete", "unsubscribed", "replied"):
+            if actionable_inbound and effective not in ("booked", "invite_sent", "sequence_complete", "unsubscribed", "replied"):
                 effective = "replied"
             health = _conversation_health(effective, last_outbound_at, last_inbound_at)
 
@@ -2175,11 +2177,13 @@ def conversations(request: Request):
             latest_outbound = outbound_logs[0] if outbound_logs else None
             latest_inbound = inbound_logs[0] if inbound_logs else None
             last_outbound_at = _log_timestamp(latest_outbound)
-            last_inbound_at = _log_timestamp(latest_inbound)
+            # calendar_accepted logs need no reply — exclude from health timing
+            actionable_inbound_logs = [l for l in inbound_logs if l.response_classification != "calendar_accepted"]
+            last_inbound_at = _log_timestamp(actionable_inbound_logs[0] if actionable_inbound_logs else None)
             # Derive effective status from actual log activity — handles race where
             # reply_detector logged the inbound message but didn't yet update reactivation_status
             effective_status = customer.reactivation_status
-            if inbound_logs and effective_status not in ("booked", "invite_sent", "sequence_complete", "unsubscribed", "replied"):
+            if actionable_inbound_logs and effective_status not in ("booked", "invite_sent", "sequence_complete", "unsubscribed", "replied"):
                 effective_status = "replied"
             stage = _conversation_stage(effective_status)
             health = _conversation_health(effective_status, last_outbound_at, last_inbound_at)
@@ -2361,12 +2365,19 @@ def conversation_detail(request: Request, customer_id: int):
 
         latest_outbound = next((log for log in logs if log.direction == "outbound"), None)
         latest_inbound = next((log for log in logs if log.direction == "inbound"), None)
+        # Exclude calendar_accepted from health timing — GCal acceptance needs no reply,
+        # so it should not push last_inbound_at past the invite and trigger "Needs Response".
+        latest_actionable_inbound = next(
+            (log for log in logs if log.direction == "inbound"
+             and log.response_classification != "calendar_accepted"),
+            None,
+        )
         last_outbound_at = _log_timestamp(latest_outbound)
-        last_inbound_at = _log_timestamp(latest_inbound)
+        last_inbound_at = _log_timestamp(latest_actionable_inbound)
         # Derive effective status from actual log activity so chips stay consistent
         # with the timeline even if reactivation_status wasn't updated yet
         effective_status = customer.reactivation_status
-        if latest_inbound and effective_status not in ("booked", "invite_sent", "sequence_complete", "unsubscribed", "replied"):
+        if latest_actionable_inbound and effective_status not in ("booked", "invite_sent", "sequence_complete", "unsubscribed", "replied"):
             effective_status = "replied"
         stage = _conversation_stage(effective_status)
         health = _conversation_health(effective_status, last_outbound_at, last_inbound_at)
@@ -3633,9 +3644,10 @@ def get_conversation_status(customer_id: int):
         )
         outbound = [l for l in logs if l.direction == "outbound" and not l.dry_run]
         inbound = [l for l in logs if l.direction == "inbound"]
+        actionable_inbound = [l for l in inbound if l.response_classification != "calendar_accepted"]
         last_outbound_at = outbound[0].created_at if outbound else None
-        last_inbound_at = inbound[0].created_at if inbound else None
-        has_inbound = bool(inbound)
+        last_inbound_at = actionable_inbound[0].created_at if actionable_inbound else None
+        has_inbound = bool(actionable_inbound)
         effective = customer.reactivation_status
         if has_inbound and effective not in ("booked", "invite_sent", "sequence_complete", "unsubscribed", "replied"):
             effective = "replied"

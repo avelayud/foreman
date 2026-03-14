@@ -235,7 +235,27 @@ def _log_and_process_reply(operator_id: int, customer_id: int, customer_name: st
                 customer.reactivation_status = "replied"
 
     if cal_type:
-        print(f"  [reply_detector] Calendar notification logged ({cal_type}) — no action required")
+        if cal_type == "calendar_accepted":
+            # Customer accepted the invite — confirm any tentative booking and mark as booked
+            with get_db() as db:
+                booking = (
+                    db.query(Booking)
+                    .filter(
+                        Booking.customer_id == customer_id,
+                        Booking.operator_id == operator_id,
+                        Booking.status.in_(["tentative", "confirmed"]),
+                    )
+                    .order_by(Booking.created_at.desc())
+                    .first()
+                )
+                if booking:
+                    booking.status = "confirmed"
+                customer = db.query(Customer).filter_by(id=customer_id).first()
+                if customer and customer.reactivation_status in ("invite_sent", "replied", "outreach_sent"):
+                    customer.reactivation_status = "booked"
+            print(f"  [reply_detector] calendar_accepted: booking confirmed, status → booked")
+        else:
+            print(f"  [reply_detector] Calendar notification logged ({cal_type}) — no action required")
         return True
 
     # Update customer profile with reply context (force=True so new reply data is included)
