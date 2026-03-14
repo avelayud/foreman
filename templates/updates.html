@@ -92,9 +92,9 @@
       <span style="font-size:11px;font-weight:700;font-family:'IBM Plex Mono',monospace;color:{{ qcolor }}">{{ qlabel }}</span>
       <span style="font-size:11px;font-weight:700;font-family:'IBM Plex Mono',monospace;color:{{ qcolor }};background:{{ qcolor }}18;padding:1px 8px;border-radius:20px">{{ qdata.count }}</span>
     </div>
-    {% if qdata.items %}
+    {% if qdata['items'] %}
     <div>
-      {% for item in qdata.items %}
+      {% for item in qdata['items'] %}
       <a href="/conversations/{{ item.customer_id }}" style="text-decoration:none;color:inherit;display:flex;align-items:center;justify-content:space-between;padding:8px 14px;border-bottom:1px solid var(--border);gap:10px" onmouseenter="this.style.background='var(--navy-soft)'" onmouseleave="this.style.background=''">
         <span style="font-size:12.5px;font-weight:600;color:var(--navy);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ item.customer_name }}</span>
         <span style="font-size:10.5px;color:var(--text-3);font-family:'IBM Plex Mono',monospace;white-space:nowrap;flex-shrink:0">{{ item.ts | est if item.ts else '' }}</span>

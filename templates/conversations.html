@@ -3,36 +3,50 @@
 
 {% block extra_styles %}
 <style>
-  .conv-list{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow-sm);overflow:hidden}
-  .conv-row{display:flex;align-items:center;gap:12px;padding:10px 16px;border-bottom:1px solid var(--border);cursor:pointer;transition:background 0.1s;text-decoration:none;color:inherit}
-  .conv-row:hover{background:var(--navy-soft)}
-  .conv-row:last-child{border-bottom:none}
-  .conv-name{font-size:13px;font-weight:600;color:var(--navy);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  .conv-meta{font-size:10.5px;font-family:'IBM Plex Mono',monospace;color:var(--text-3);white-space:nowrap;min-width:90px}
-  .conv-health-dot{width:9px;height:9px;border-radius:50%;flex-shrink:0}
+  .conv-card{background:var(--surface);border:1px solid var(--border);border-left-width:5px;border-radius:var(--radius);box-shadow:var(--shadow-sm);padding:10px 14px;margin-bottom:8px}
+  .conv-card.needs-response{border-left-color:var(--red)}
+  .conv-card.needs-follow-up{border-left-color:var(--amber)}
+  .conv-card.awaiting-reply{border-left-color:var(--blue)}
+  .conv-card.invite-sent{border-left-color:#6d28d9}
+  .conv-card.closed{border-left-color:var(--green)}
 
-  .health-chip{display:inline-flex;align-items:center;gap:6px;font-size:11px;font-family:'IBM Plex Mono',monospace;padding:3px 10px;border-radius:20px;border:1px solid}
+  .health-chip{display:inline-flex;align-items:center;gap:5px;font-size:10px;font-family:'IBM Plex Mono',monospace;padding:2px 8px;border-radius:20px;border:1px solid}
   .chip-needs-response{background:var(--red-pale);color:var(--red);border-color:#fecaca}
   .chip-needs-follow-up{background:var(--amber-pale);color:var(--amber);border-color:#fde68a}
   .chip-awaiting-reply{background:var(--blue-pale);color:var(--blue);border-color:#bfdbfe}
   .chip-invite-sent{background:#ede9fe;color:#6d28d9;border-color:#c4b5fd}
   .chip-closed{background:var(--green-pale);color:var(--green);border-color:#a7f3d0}
 
-  .conv-filter-btn{padding:5px 12px;border-radius:20px;font-size:11.5px;font-family:'IBM Plex Mono',monospace;border:1px solid var(--border);color:var(--text-3);background:var(--surface);cursor:pointer;transition:all 0.15s;white-space:nowrap;display:inline-flex;align-items:center;gap:5px}
+  .conv-layout{display:grid;grid-template-columns:minmax(0,1fr) minmax(200px,22%);gap:10px;align-items:stretch}
+  .conv-left{min-width:0}
+  .conv-right{border-left:1px solid var(--border);padding-left:12px;display:flex;flex-direction:column;justify-content:space-between;gap:7px}
+  .conv-top{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;flex-wrap:wrap}
+  .conv-name{font-size:15px;font-family:'Playfair Display',serif;color:var(--navy);font-weight:700;text-decoration:none}
+  .conv-name:hover{text-decoration:underline}
+  .conv-meta{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:3px}
+  .conv-meta-item{font-size:10.5px;color:var(--text-3);font-family:'IBM Plex Mono',monospace}
+
+  .conv-preview{font-size:11.5px;color:var(--text-2);line-height:1.5;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:8px 10px;margin-top:8px}
+  .opp-chip{font-size:10.5px;color:var(--text-2);font-family:'IBM Plex Mono',monospace;background:var(--gold-pale);border:1px solid var(--gold-rule);border-radius:20px;padding:3px 8px}
+  .right-label{font-size:9.5px;font-family:'IBM Plex Mono',monospace;letter-spacing:0.9px;text-transform:uppercase;color:var(--text-3);margin-bottom:2px}
+  .right-value{font-size:11.5px;color:var(--text)}
+
+  .conv-filter-btn{padding:4px 10px;border-radius:20px;font-size:11px;font-family:'IBM Plex Mono',monospace;border:1px solid var(--border);color:var(--text-3);background:var(--surface);cursor:pointer;transition:all 0.15s;white-space:nowrap;display:inline-flex;align-items:center;gap:4px}
   .conv-filter-btn:hover{border-color:var(--fc, var(--navy));color:var(--fc, var(--navy));background:var(--fbc, var(--navy-soft))}
   .conv-filter-btn.active-filter{background:var(--fbc, var(--navy));border-color:var(--fbc2, var(--navy));color:var(--fc, #fff);font-weight:600}
   .conv-filter-btn#filter-all.active-filter{background:var(--navy);border-color:var(--navy);color:#fff}
-  .filter-count{font-size:10px;font-family:'IBM Plex Mono',monospace;opacity:0.75}
+  .filter-count{font-size:9.5px;font-family:'IBM Plex Mono',monospace;opacity:0.75}
 
+  @media (max-width: 1024px){.conv-layout{grid-template-columns:1fr}}
   @media (max-width: 680px){
-    .conv-meta{display:none}
+    .conv-right{border-left:none;border-top:1px solid var(--border);padding-left:0;padding-top:8px}
   }
 </style>
 {% endblock %}
 
 {% block content %}
 
-<div style="display:flex;align-items:flex-end;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:12px">
+<div style="display:flex;align-items:flex-end;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:12px">
   <div>
     <div style="font-size:10.5px;font-family:'IBM Plex Mono',monospace;letter-spacing:1.5px;text-transform:uppercase;color:var(--text-3);margin-bottom:6px">Outreach</div>
     <h1 style="font-family:'Playfair Display',serif;font-size:28px;font-weight:700;color:var(--navy);line-height:1.2">Active Conversations</h1>
@@ -48,63 +62,121 @@
 
 {% if conversations %}
 
-{# ── Donut Chart ── #}
+{# ── Compact summary strip: donut + filter tabs + search ── #}
 {% if donut_total > 0 %}
-<div style="display:flex;align-items:center;gap:24px;margin-bottom:20px;padding:16px 18px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow-sm)">
-  <div style="flex-shrink:0">
-    <svg width="120" height="120" viewBox="0 0 120 120">
+<div style="display:flex;align-items:center;gap:16px;margin-bottom:14px;padding:12px 16px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow-sm);flex-wrap:wrap">
+  {# Donut — compact #}
+  <div style="flex-shrink:0;display:flex;align-items:center;gap:12px">
+    <svg width="72" height="72" viewBox="0 0 120 120">
       {% for arc in donut_arcs %}
       <path d="{{ arc.path }}" fill="none" stroke="{{ arc.color }}" stroke-width="{{ arc.stroke_width }}" stroke-linecap="butt"/>
       {% endfor %}
-      <text x="60" y="56" text-anchor="middle" font-family="'Playfair Display',serif" font-size="22" font-weight="700" fill="var(--navy)">{{ donut_total }}</text>
-      <text x="60" y="71" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="9" fill="var(--text-3)">ACTIVE</text>
+      <text x="60" y="55" text-anchor="middle" font-family="'Playfair Display',serif" font-size="24" font-weight="700" fill="var(--navy)">{{ donut_total }}</text>
+      <text x="60" y="70" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="10" fill="var(--text-3)">ACTIVE</text>
     </svg>
-  </div>
-  <div style="display:flex;flex-wrap:wrap;gap:8px 20px">
-    {% for seg in donut_segments %}
-    {% if seg.count > 0 %}
-    <div style="display:flex;align-items:center;gap:6px">
-      <span style="width:9px;height:9px;border-radius:50%;background:{{ seg.color }};flex-shrink:0;display:inline-block"></span>
-      <span style="font-size:12px;color:var(--text-2)">{{ seg.label }}</span>
-      <span style="font-size:12px;font-weight:700;color:var(--navy);font-family:'IBM Plex Mono',monospace">{{ seg.count }}</span>
+    {# Legend #}
+    <div style="display:flex;flex-direction:column;gap:4px">
+      {% for seg in donut_segments %}{% if seg.count > 0 %}
+      <div style="display:flex;align-items:center;gap:5px">
+        <span style="width:7px;height:7px;border-radius:50%;background:{{ seg.color }};flex-shrink:0"></span>
+        <span style="font-size:11px;color:var(--text-2)">{{ seg.label }}</span>
+        <span style="font-size:11px;font-weight:700;color:var(--navy);font-family:'IBM Plex Mono',monospace">{{ seg.count }}</span>
+      </div>
+      {% endif %}{% endfor %}
     </div>
-    {% endif %}
-    {% endfor %}
+  </div>
+
+  {# Divider #}
+  <div style="width:1px;height:56px;background:var(--border);flex-shrink:0;align-self:center"></div>
+
+  {# Search + Filters #}
+  <div style="flex:1;min-width:240px;display:flex;flex-direction:column;gap:8px">
+    <div style="position:relative">
+      <span style="position:absolute;left:9px;top:50%;transform:translateY(-50%);color:var(--text-4);font-size:13px;pointer-events:none">⌕</span>
+      <input type="text" id="convSearch" placeholder="Search by name or email…" oninput="filterConversations()"
+             style="width:100%;padding:6px 10px 6px 28px;border:1px solid var(--border);border-radius:7px;font-size:12.5px;font-family:'IBM Plex Sans',sans-serif;color:var(--text);background:var(--bg);outline:none;transition:border-color 0.15s;box-sizing:border-box"
+             onfocus="this.style.borderColor='var(--navy)'" onblur="this.style.borderColor='var(--border)'" autocomplete="off">
+    </div>
+    <div style="display:flex;gap:4px;flex-wrap:wrap">
+      <button onclick="setStatusFilter('all', this)" id="filter-all" class="conv-filter-btn active-filter">All <span class="filter-count">{{ conversations|length }}</span></button>
+      <button onclick="setStatusFilter('needs-response', this)" id="filter-needs-response" class="conv-filter-btn" style="--fc:var(--red);--fbc:#fee2e2;--fbc2:#fecaca">Needs Response <span class="filter-count">{{ needs_response_count }}</span></button>
+      <button onclick="setStatusFilter('needs-follow-up', this)" id="filter-needs-follow-up" class="conv-filter-btn" style="--fc:var(--amber);--fbc:#fef3c7;--fbc2:#fde68a">Follow-up <span class="filter-count">{{ needs_follow_up_count }}</span></button>
+      <button onclick="setStatusFilter('awaiting-reply', this)" id="filter-awaiting-reply" class="conv-filter-btn" style="--fc:var(--blue);--fbc:var(--blue-pale);--fbc2:#bfdbfe">Awaiting <span class="filter-count">{{ awaiting_reply_count }}</span></button>
+      <button onclick="setStatusFilter('invite-sent', this)" id="filter-invite-sent" class="conv-filter-btn" style="--fc:#6d28d9;--fbc:#ede9fe;--fbc2:#c4b5fd">Invite Sent <span class="filter-count">{{ invite_sent_count }}</span></button>
+      <button onclick="setStatusFilter('closed', this)" id="filter-closed" class="conv-filter-btn" style="--fc:var(--green);--fbc:var(--green-pale);--fbc2:#a7f3d0">Closed <span class="filter-count">{{ closed_count }}</span></button>
+    </div>
   </div>
 </div>
-{% endif %}
-
-{# ── Search + Filter Tabs ── #}
-<div style="display:flex;align-items:center;gap:12px;margin-bottom:14px;flex-wrap:wrap">
-  <div style="position:relative;flex:1;min-width:200px;max-width:320px">
-    <span style="position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--text-4);font-size:13px;pointer-events:none">⌕</span>
+{% else %}
+{# No donut — just search + filter #}
+<div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap">
+  <div style="position:relative;flex:1;min-width:200px;max-width:300px">
+    <span style="position:absolute;left:9px;top:50%;transform:translateY(-50%);color:var(--text-4);font-size:13px;pointer-events:none">⌕</span>
     <input type="text" id="convSearch" placeholder="Search by name or email…" oninput="filterConversations()"
-           style="width:100%;padding:8px 12px 8px 32px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:'IBM Plex Sans',sans-serif;color:var(--text);background:var(--surface);outline:none;transition:border-color 0.15s;box-sizing:border-box"
+           style="width:100%;padding:6px 10px 6px 28px;border:1px solid var(--border);border-radius:7px;font-size:12.5px;font-family:'IBM Plex Sans',sans-serif;color:var(--text);background:var(--surface);outline:none;transition:border-color 0.15s;box-sizing:border-box"
            onfocus="this.style.borderColor='var(--navy)'" onblur="this.style.borderColor='var(--border)'" autocomplete="off">
   </div>
-  <div style="display:flex;gap:5px;flex-wrap:wrap">
+  <div style="display:flex;gap:4px;flex-wrap:wrap">
     <button onclick="setStatusFilter('all', this)" id="filter-all" class="conv-filter-btn active-filter">All <span class="filter-count">{{ conversations|length }}</span></button>
     <button onclick="setStatusFilter('needs-response', this)" id="filter-needs-response" class="conv-filter-btn" style="--fc:var(--red);--fbc:#fee2e2;--fbc2:#fecaca">Needs Response <span class="filter-count">{{ needs_response_count }}</span></button>
-    <button onclick="setStatusFilter('needs-follow-up', this)" id="filter-needs-follow-up" class="conv-filter-btn" style="--fc:var(--amber);--fbc:#fef3c7;--fbc2:#fde68a">Needs Follow-up <span class="filter-count">{{ needs_follow_up_count }}</span></button>
-    <button onclick="setStatusFilter('awaiting-reply', this)" id="filter-awaiting-reply" class="conv-filter-btn" style="--fc:var(--blue);--fbc:var(--blue-pale);--fbc2:#bfdbfe">Awaiting Reply <span class="filter-count">{{ awaiting_reply_count }}</span></button>
+    <button onclick="setStatusFilter('needs-follow-up', this)" id="filter-needs-follow-up" class="conv-filter-btn" style="--fc:var(--amber);--fbc:#fef3c7;--fbc2:#fde68a">Follow-up <span class="filter-count">{{ needs_follow_up_count }}</span></button>
+    <button onclick="setStatusFilter('awaiting-reply', this)" id="filter-awaiting-reply" class="conv-filter-btn" style="--fc:var(--blue);--fbc:var(--blue-pale);--fbc2:#bfdbfe">Awaiting <span class="filter-count">{{ awaiting_reply_count }}</span></button>
     <button onclick="setStatusFilter('invite-sent', this)" id="filter-invite-sent" class="conv-filter-btn" style="--fc:#6d28d9;--fbc:#ede9fe;--fbc2:#c4b5fd">Invite Sent <span class="filter-count">{{ invite_sent_count }}</span></button>
     <button onclick="setStatusFilter('closed', this)" id="filter-closed" class="conv-filter-btn" style="--fc:var(--green);--fbc:var(--green-pale);--fbc2:#a7f3d0">Closed <span class="filter-count">{{ closed_count }}</span></button>
   </div>
 </div>
+{% endif %}
 
-{# ── Compact Conversation Rows ── #}
-<div class="conv-list">
-  {% for item in conversations %}
-  <a href="/conversations/{{ item.customer_id }}" class="conv-row" data-name="{{ item.customer_name|lower }}" data-email="{{ item.customer_email|lower if item.customer_email else '' }}" data-health="{{ item.health_chip_cls }}">
-    <span class="conv-health-dot" style="background:{{ item.health_color }};{% if item.health_key == 'needs_response' %}animation:pulse-dot 2.2s ease-in-out infinite{% endif %}"></span>
-    <span class="conv-name">{{ item.customer_name }}</span>
-    <span class="conv-meta">{{ item.last_contact_display }}</span>
-    <span class="status-pill {{ item.status_cls }}" style="font-size:10px;padding:2px 8px;white-space:nowrap">{{ item.status_label }}</span>
-    {% if item.score %}<span style="font-size:10px;font-family:'IBM Plex Mono',monospace;color:var(--text-3);white-space:nowrap">{{ item.score }}</span>{% endif %}
-    <span style="font-size:14px;color:var(--text-4);margin-left:auto">›</span>
-  </a>
-  {% endfor %}
+{# ── Conversation Cards ── #}
+{% for item in conversations %}
+<div class="conv-card {{ item.health_chip_cls }}" data-name="{{ item.customer_name|lower }}" data-email="{{ item.customer_email|lower if item.customer_email else '' }}" data-health="{{ item.health_chip_cls }}">
+  <div class="conv-layout">
+    <div class="conv-left">
+      <div class="conv-top">
+        <div>
+          <a href="/conversations/{{ item.customer_id }}" class="conv-name">{{ item.customer_name }}</a>
+          <div class="conv-meta">
+            <span class="health-chip chip-{{ item.health_chip_cls }}">{{ item.health_label }}</span>
+            <span class="conv-meta-item">Out {{ item.outbound_count }}</span>
+            <span class="conv-meta-item">In {{ item.inbound_count }}</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="conv-preview">
+        <div style="font-size:10.5px;color:var(--text-3);font-family:'IBM Plex Mono',monospace;margin-bottom:4px">
+          {% if item.last_message_is_inbound %}<span style="color:var(--red);font-weight:600">Customer replied</span>{% else %}Last outbound{% endif %} · {{ item.last_message_at | est }}
+        </div>
+        <div style="font-size:11.5px;font-weight:600;color:var(--navy);margin-bottom:4px">{{ item.last_message_subject }}</div>
+        {{ item.last_message_preview }}
+      </div>
+    </div>
+
+    <div class="conv-right">
+      <div>
+        <div class="right-label">Last Interaction</div>
+        <div class="right-value" style="font-family:'IBM Plex Mono',monospace">{{ item.last_interaction_label }}</div>
+        <div class="conv-meta-item" style="margin-top:1px">{{ item.last_touch_at | est }}</div>
+      </div>
+
+      <div>
+        <div class="right-label">Status</div>
+        <div class="right-value">{{ item.status_label }}</div>
+      </div>
+
+      <div>
+        <div class="right-label">Opportunity</div>
+        <div class="opp-chip">{{ item.opp_est }} · {{ item.opp_label }}</div>
+      </div>
+
+      <div style="display:flex;gap:6px;flex-wrap:wrap">
+        <a href="/customer/{{ item.customer_id }}" class="btn-ghost" style="text-decoration:none;font-size:11px;padding:5px 10px">Customer</a>
+        <a href="/conversations/{{ item.customer_id }}" class="btn-primary" style="text-decoration:none;font-size:11px;padding:5px 12px">Open →</a>
+      </div>
+    </div>
+  </div>
 </div>
+{% endfor %}
 <div id="conv-no-results" style="display:none;padding:40px 20px;text-align:center;font-size:13px;color:var(--text-3)">No conversations match your search.</div>
 
 {% else %}
@@ -133,9 +205,9 @@ function setStatusFilter(status, btn) {
 
 function filterConversations() {
   const q = (document.getElementById('convSearch')?.value || '').toLowerCase();
-  const rows = document.querySelectorAll('.conv-row');
+  const cards = document.querySelectorAll('.conv-card');
   let shown = 0;
-  rows.forEach(c => {
+  cards.forEach(c => {
     const textMatch = !q || c.dataset.name.includes(q) || (c.dataset.email||'').includes(q);
     const statusMatch = _activeStatus === 'all' || c.dataset.health === _activeStatus;
     const visible = textMatch && statusMatch;
