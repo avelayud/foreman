@@ -2062,7 +2062,7 @@ def updates_page(request: Request):
 
         for cust in all_active_customers:
             logs = (
-                db.query(OutreachLog.direction, OutreachLog.sent_at, OutreachLog.created_at)
+                db.query(OutreachLog.direction, OutreachLog.sent_at, OutreachLog.created_at, OutreachLog.response_classification)
                 .filter_by(operator_id=OPERATOR_ID, customer_id=cust.id, dry_run=False)
                 .all()
             )
