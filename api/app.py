@@ -18,13 +18,14 @@ JSON API:
 
 import calendar as _cal
 import json
+import math
 import os
 import sys
 import threading
 import time
 import re
 import traceback as _traceback
-from collections import defaultdict
+from collections import Counter, defaultdict
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -984,6 +985,43 @@ def _conversation_stage(status: str) -> dict:
         status,
         {"label": status.replace("_", " ").title(), "progress_pct": 0, "status_cls": "s-none"},
     )
+
+
+def _compute_donut_arcs(segments, cx=60, cy=60, r=46, stroke_width=14):
+    total = sum(s["count"] for s in segments)
+    if total == 0:
+        return [], 0
+    arcs = []
+    angle = -90
+    for seg in segments:
+        if seg["count"] == 0:
+            continue
+        pct = seg["count"] / total
+        sweep = 360 * pct
+        start_rad = math.radians(angle)
+        end_rad = math.radians(angle + sweep)
+        x1 = cx + r * math.cos(start_rad)
+        y1 = cy + r * math.sin(start_rad)
+        x2 = cx + r * math.cos(end_rad)
+        y2 = cy + r * math.sin(end_rad)
+        large_arc = 1 if sweep > 180 else 0
+        arcs.append({
+            **seg,
+            "path": f"M {x1:.1f} {y1:.1f} A {r} {r} 0 {large_arc} 1 {x2:.1f} {y2:.1f}",
+            "stroke_width": stroke_width,
+        })
+        angle += sweep
+    return arcs, total
+
+
+HEALTH_COLORS = {
+    "needs_response": "#ef4444",
+    "needs_follow_up": "#f59e0b",
+    "awaiting_reply": "#3b82f6",
+    "invite_sent": "#7c3aed",
+    "closed": "#10b981",
+    "booked": "#10b981",
+}
 
 
 def _conversation_health(status: str, last_outbound_at, last_inbound_at, health_override: str | None = None):
@@ -2255,24 +2293,40 @@ def conversations(request: Request):
             # Preview: show most recent message (could be inbound reply)
             last_message_is_inbound = last_touch_log.direction == "inbound"
 
+            last_touch_ts = _log_timestamp(last_touch_log)
+            last_contact_display = ""
+            if last_touch_ts:
+                days_ago = (datetime.utcnow() - last_touch_ts).days
+                if days_ago == 0:
+                    last_contact_display = "Today"
+                elif days_ago == 1:
+                    last_contact_display = "Yesterday"
+                elif days_ago < 7:
+                    last_contact_display = f"{days_ago}d ago"
+                else:
+                    last_contact_display = last_touch_ts.strftime("%-m/%-d")
             conversations_data.append({
                 "customer_id": customer.id,
                 "customer_name": customer.name,
                 "customer_email": customer.email,
                 "status_label": stage["label"],
+                "status_cls": stage["status_cls"],
                 "last_interaction_label": "Customer reply" if last_message_is_inbound else "Agent outreach",
                 "health_label": health["label"],
                 "health_chip_cls": health["chip_cls"],
+                "health_key": health["key"],
+                "health_color": HEALTH_COLORS.get(health["key"], "#94a3b8"),
                 "health_rank": health["rank"],
                 "reactivation_status": effective_status,
                 "outbound_count": len(outbound_logs),
                 "inbound_count": len(inbound_logs),
-                "last_touch_at": _log_timestamp(last_touch_log),
+                "last_touch_at": last_touch_ts,
                 "last_touch_direction": last_touch_log.direction,
                 "last_outbound_at": last_outbound_at,
+                "last_contact_display": last_contact_display,
                 # Latest message preview (inbound reply if most recent, else last outbound)
                 "last_message_is_inbound": last_message_is_inbound,
-                "last_message_at": _log_timestamp(last_touch_log),
+                "last_message_at": last_touch_ts,
                 "last_message_subject": (last_touch_log.subject or "(no subject)") if last_touch_log else "(no subject)",
                 "last_message_preview": _compact_summary(last_touch_log.content or "", 180) if last_touch_log else "",
                 "needs_response": health["needs_response"],
@@ -2281,6 +2335,7 @@ def conversations(request: Request):
                 "opp_label": summary.get("opp_label"),
                 "days_dormant": summary.get("days_dormant"),
                 "total_spend": summary.get("total_spend"),
+                "score": customer.score,
             })
 
     conversations_data.sort(key=lambda row: row["last_touch_at"] or datetime.min, reverse=True)
@@ -2289,6 +2344,17 @@ def conversations(request: Request):
     conversations_attention_count = sum(
         1 for item in conversations_data if item["needs_response"] or item["needs_follow_up"]
     )
+
+    # Build donut chart data
+    donut_segment_defs = [
+        {"key": "needs_response", "label": "Needs Response", "color": "#ef4444"},
+        {"key": "needs_follow_up", "label": "Needs Follow-up", "color": "#f59e0b"},
+        {"key": "awaiting_reply", "label": "Awaiting Reply", "color": "#3b82f6"},
+        {"key": "invite_sent", "label": "Invite Sent", "color": "#7c3aed"},
+        {"key": "closed", "label": "Closed / Booked", "color": "#10b981"},
+    ]
+    segs = [{**s, "count": health_counts.get(s["key"], 0)} for s in donut_segment_defs]
+    donut_arcs, donut_total = _compute_donut_arcs(segs)
 
     return templates.TemplateResponse("conversations.html", {
         "request": request,
@@ -2303,6 +2369,9 @@ def conversations(request: Request):
         "needs_follow_up_count": health_counts["needs_follow_up"],
         "invite_sent_count": health_counts["invite_sent"],
         "closed_count": health_counts["closed"],
+        "donut_arcs": donut_arcs,
+        "donut_total": donut_total,
+        "donut_segments": segs,
     })
 
 
