@@ -133,6 +133,7 @@ class Customer(Base):
             "sequence_step_3",
             "sequence_complete",
             "replied",
+            "invite_sent",
             "booked",
             "unsubscribed",
             native_enum=False
