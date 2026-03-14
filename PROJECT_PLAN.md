@@ -21,14 +21,30 @@
 ## Current Status
 
 - **Active Phase:** Phase 8 — Operator Config + Agent Quality
-- **State:** Phases 1–7 and 6b all complete. Customer Analyzer reads from OutreachLog (DB-first, Gmail fallback). Booking confirmation auto-detection live. Email formatting fixed. Conversation agent context-awareness fixed. Next: Phase 8 (Operator Config page), then Phase 9 (SMS).
-- **Last Updated:** 2026-03-13
+- **State:** Phases 1–7 and 6b all complete. Jobs 11–23 complete (Gmail thread fix, meeting approval gate, calendar acceptance/decline, reply detector trigger chain, invite_sent status, meetings queue overhaul, appointment confirmed module, status refresh triggers, updates page improvements, draft revision notes). Next: Phase 8 (Operator Config page), then Phase 9 (SMS).
+- **Last Updated:** 2026-03-14
 - **Live URL:** https://web-production-3df3a.up.railway.app
 - **Repo:** https://github.com/avelayud/foreman
 
 ---
 
 ## Recently Completed
+
+### 2026-03-14 — Jobs 11–23: Meetings Queue, Conversation UX, Booking Flow
+
+- **Job 11 (Agent run timeout):** AbortController 120s safety valve on all Run Now buttons; "Still running — reload when ready" amber state so operators aren't stranded.
+- **Job 12 (Gmail thread split fix):** `send_email()` sets `In-Reply-To` + `References` headers referencing the customer's reply RFC Message-ID, so Foreman replies land in the same thread on the customer side.
+- **Job 13 (Meeting approval gate):** Booking proposals no longer auto-send — all `booking_intent` drafts queue to Meetings Queue for operator review before sending.
+- **Job 14 (Calendar acceptance false positive):** Fixed bug where a customer accepting a Google Calendar invite was re-classified as a new reply triggering a redundant redraft.
+- **Job 15 (Reply detector trigger chain):** Reply detector polls every 5 minutes; runs response generator inline immediately when new replies are found (no independent poll). Nav badge updates live.
+- **Job 16 (invite_sent status):** New `reactivation_status = invite_sent` — set when a calendar invite is sent from Meetings Queue. Surfaces correctly in conversations and dashboard groups.
+- **Job 17 (Calendar invite accept/decline handling):** Accept → confirm booking + success toast on conversation page. Decline → delete booking + queue redraft in Meetings Queue.
+- **Job 18 (Meetings queue UI overhaul):** Cleaner card layout, slot display, approve/decline actions. Revision notes field. Regenerate button wired to conversation agent.
+- **Job 19 (Appointment confirmed module):** Conversation page shows confirmed appointment panel above draft panel when booking is active. Schedule panel bubbles to top via CSS `order:-1`.
+- **Job 20 (Status refresh triggers):** Nav badge counts refresh after every approve/send action via `refreshNavCounts()` in base.html. Conversation page reloads 900ms after approve.
+- **Job 21 (Meetings queue scope):** Meetings Queue now shows only `booking_confirmed` calendar invites. `booking_intent` (day-window proposals) routes to Outreach Queue.
+- **Job 22 (Updates page improvements):** `needs_response` and `recent_replies` sorted by `created_at` desc. Post-visit update section added. Attention counts accurate.
+- **Job 23 (Draft revision notes):** Operator influence box (textarea) on Outreach Queue, Meetings Queue, and Conversation page. Notes appended to Claude prompt at generation time via `revision_notes` param on all draft endpoints.
 
 ### 2026-03-13 — Job 01 (Customer Analyzer) + Phase 6b (Booking Confirmation)
 
@@ -396,15 +412,17 @@ I'm continuing work on Foreman — an AI reactivation system for HVAC & field se
 
 Read PROJECT_PLAN.md and README.md first for full context, then look at any code files attached.
 
-Current state (2026-03-13): Phases 1–7 + 6b all complete. Active: Phase 8.
+Current state (2026-03-14): Phases 1–7 + 6b all complete. Jobs 11–23 complete.
 Live: https://web-production-3df3a.up.railway.app
 
-Completed recently:
-- Customer Analyzer DB-first (Job 01): OutreachLog as primary source, Gmail fallback, --force flag.
-- Booking confirmation auto-detection (Phase 6b): _auto_create_booking() fires on booking_confirmed,
-  creates Booking record, flips customer to booked, creates GCal event.
-- Email formatting: multipart/alternative, _plain_to_html() for natural reflow.
-- Conversation agent improvements: temporal context-awareness, NOT_INTERESTED_PROMPT, pricing ranges.
+Completed recently (Jobs 11–23):
+- Gmail thread split fix, meeting approval gate, calendar acceptance false positive fix.
+- Reply detector: 5-min poll, inline response generator trigger, nav badge live refresh.
+- invite_sent status, calendar invite accept/decline handling, meetings queue UI overhaul.
+- Appointment confirmed module (schedule panel, CSS order swap), status refresh triggers.
+- Meetings queue scoped to booking_confirmed only. booking_intent → Outreach Queue.
+- Updates page: sorted by created_at, post-visit section. Draft revision notes on all queues.
+- Post-Visit Agent (agents/post_visit.py): daily, flags customers with past appointments needing outcome. Revenue data integrity checkpoints (estimate required, quote/close/no-show).
 
 Active: Phase 8 — Operator Config + Agent Quality + Revenue Data Integrity
 - Job 05: Operator Config page (/settings) — sliders, job ranking, estimate ranges, business context

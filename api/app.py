@@ -3986,6 +3986,13 @@ def run_agent_follow_up():
     return {"status": "ok"}
 
 
+@app.post("/api/agent/run-post-visit")
+def run_agent_post_visit():
+    """Run post-visit agent synchronously — flags customers with past appointments needing outcome."""
+    _run_post_visit_job()
+    return {"status": "ok"}
+
+
 @app.post("/api/classify/{log_id}")
 def classify_log(log_id: int):
     """Manually trigger classification on an inbound OutreachLog."""
@@ -4503,6 +4510,11 @@ def agents_page(request: Request):
             )
             .count()
         )
+        post_visit_flagged = (
+            db.query(Customer)
+            .filter(Customer.operator_id == OPERATOR_ID, Customer.needs_post_visit_update == True)
+            .count()
+        )
         meetings_queue_count_agents = _get_meetings_queue_count(db)
         log_page_view(db, request, "agents", operator_id=OPERATOR_ID)
 
@@ -4639,17 +4651,31 @@ def agents_page(request: Request):
                 "phase": "Phase 6",
             },
             {
+                "key": "post_visit",
+                "name": "Post-Visit Agent",
+                "icon": "📋",
+                "description": "Runs daily. Finds all bookings where the appointment time has passed and the outcome hasn't been logged. Flags the customer so the conversation page shows the post-visit banner and /updates surfaces them under Needs Post-Visit Update.",
+                "status": "active",
+                "status_label": "Active (scheduled daily)",
+                "last_run_at": _agent_last_run.get("post_visit"),
+                "stat_label": "Awaiting outcome",
+                "stat_value": str(post_visit_flagged),
+                "stat_meta": "Customers needing Quote Given, Job Won, or No Show" if post_visit_flagged else "All appointments logged",
+                "cli": "python -m agents.post_visit --operator-id 1",
+                "phase": "Phase 8",
+            },
+            {
                 "key": "sms_outreach",
                 "name": "SMS Outreach",
                 "icon": "💬",
                 "description": "Sends and receives text messages via Twilio. Handles two-way replies, opt-outs, and booking confirmations over SMS.",
                 "status": "planned",
-                "status_label": "Planned — Phase 5",
+                "status_label": "Planned — Phase 9",
                 "last_run_at": None,
                 "stat_label": None,
                 "stat_value": None,
                 "cli": None,
-                "phase": "Phase 5",
+                "phase": "Phase 9",
             },
         ],
     })

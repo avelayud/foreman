@@ -28,9 +28,9 @@ Foreman identifies dormant customers, scores them by rebooking probability, reac
 
 ---
 
-## Product State (2026-03-13)
+## Product State (2026-03-14)
 
-> **Phases 1–7 + 6b complete.** Customer Analyzer reads from OutreachLog (DB-first, Gmail fallback) — profiles populate for all 200 customers. Booking confirmation auto-detected: `booking_confirmed` reply → Booking record + Google Calendar event created automatically. Active: Phase 8 (Operator Config + Agent Quality).
+> **Phases 1–7 + 6b complete. Jobs 11–23 complete.** Full booking flow live end-to-end: reply detected → classified → draft generated → operator approves → calendar invite sent → customer accepts → booking confirmed + GCal event created. Meeting approval gate, invite_sent status, accept/decline handling, appointment module on conversation page, draft revision notes, post-visit outcome tracking. Active: Phase 8 (Operator Config + Agent Quality).
 
 ## Feature Status
 
@@ -62,7 +62,7 @@ Foreman identifies dormant customers, scores them by rebooking probability, reac
 | Calendar view (agenda-style, color-coded by service type) | ✅ |
 | Email thread continuity (In-Reply-To + References RFC headers) | ✅ |
 | Dual-pass reply detection (thread scan + inbox address scan fallback) | ✅ |
-| Updates inbox (`/updates`) — needs response, overdue follow-ups, recent replies | ✅ |
+| Updates inbox (`/updates`) — needs response, overdue follow-ups, recent replies, post-visit | ✅ |
 | Per-page analytics in Internal Metrics | ✅ |
 | Server-side action event tracking | ✅ |
 | `unsubscribe_request` classifier category | ✅ |
@@ -73,6 +73,15 @@ Foreman identifies dormant customers, scores them by rebooking probability, reac
 | Error tracking log (all 500s captured, visible in Internal Metrics) | ✅ |
 | Customer Analyzer DB-first (OutreachLog primary, Gmail fallback) | ✅ |
 | Booking confirmation auto-detection (booking_confirmed → Booking + GCal event) | ✅ |
+| Meeting approval gate — booking proposals queue for review before sending | ✅ |
+| Calendar invite accept/decline handling (accept confirms booking, decline re-queues redraft) | ✅ |
+| `invite_sent` conversation status — distinct state after calendar invite is sent | ✅ |
+| Appointment confirmed module — schedule panel on conversation page when booking active | ✅ |
+| Meetings Queue scoped to calendar invites only (booking_confirmed) | ✅ |
+| Draft revision notes — operator influence box on all queue pages + conversation page | ✅ |
+| Post-Visit Agent — daily, flags appointments needing outcome logged | ✅ |
+| Post-visit outcome tracking — Quote Given, Job Won, No Show, conversation lock | ✅ |
+| Nav badge live refresh after send/approve actions | ✅ |
 | Operator Config page (`/settings`) — tone, salesy, job ranking, estimate ranges | ⬜ Phase 8 (Job 05) |
 | Prompt Quality Sprint — HVAC-native agent voices using config values | ⬜ Phase 8 (Job 06) |
 | SMS channel (Twilio) — send path + inbound webhook | ⬜ Phase 9 (Job 07) |
@@ -106,10 +115,13 @@ Feature work is tracked in `plans/` — one folder per job, each containing a `p
 ```
 plans/
 ├── README.md
-├── job_05_operator_config/     # 🔵 Active — Phase 8
-├── job_06_prompt_quality/      # ⬜ Phase 8 (depends on Job 05)
-├── job_07_sms_send_path/       # ⬜ Phase 9
-└── job_08_sms_ux/              # ⬜ Phase 9 (depends on Job 07)
+├── job_05_operator_config_page/   # 🔵 Active — Phase 8
+├── job_06_prompt_quality/         # ⬜ Phase 8 (depends on Job 05)
+├── job_07_sms_send_path/          # ⬜ Phase 9
+├── job_08_sms_ux/                 # ⬜ Phase 9 (depends on Job 07)
+├── job_09_revenue_data_integrity/ # ⬜ Phase 8 (parallel to Jobs 05/06)
+├── job_10_jobber_integration/     # ⬜ Phase 10
+└── archive/                       # ✅ Completed jobs 11–23
 ```
 
 ---
@@ -126,8 +138,11 @@ foreman/
 │   ├── reactivation.py
 │   ├── customer_analyzer.py      # DB-first profile builder (daily)
 │   ├── reply_detector.py
+│   ├── response_classifier.py
+│   ├── response_generator.py
+│   ├── conversation_agent.py
 │   ├── follow_up.py
-│   └── response_classifier.py
+│   └── post_visit.py             # Daily — flags past appointments needing outcome
 ├── core/
 │   ├── config.py
 │   ├── database.py               # SCHEMA_PATCHES, get_db(), init_db()
