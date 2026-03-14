@@ -134,60 +134,67 @@
   <div class="queue-body">
     <div class="queue-layout">
       <div class="queue-left">
-        <div class="confirm-panel">
-          <div class="confirm-panel-title">Appointment Details</div>
-          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px">
-            <div class="field-block" style="margin-bottom:0">
-              <label class="field-label">Day</label>
-              <select id="slot-date-{{ item.log_id }}" class="field-input send-at-compact"
-                      data-preselect="{{ item.booking_slot_start_input or '' }}"
-                      onchange="loadMeetingSlots({{ item.log_id }})"></select>
+        {# ── Top: Appointment Details + Calendar Invite Email side-by-side ── #}
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:0">
+
+          {# Left col: Appointment Details #}
+          <div class="confirm-panel" style="margin-bottom:0">
+            <div class="confirm-panel-title">Appointment Details</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+              <div class="field-block" style="margin-bottom:0">
+                <label class="field-label">Day</label>
+                <select id="slot-date-{{ item.log_id }}" class="field-input send-at-compact"
+                        data-preselect="{{ item.booking_slot_start_input or '' }}"
+                        onchange="loadMeetingSlots({{ item.log_id }})"></select>
+              </div>
+              <div class="field-block" style="margin-bottom:0">
+                <label class="field-label">Duration</label>
+                <select id="slot-duration-{{ item.log_id }}" class="field-input send-at-compact">
+                  <option value="30">30 min</option>
+                  <option value="60" selected>1 hr</option>
+                  <option value="90">1.5 hr</option>
+                  <option value="120">2 hr</option>
+                  <option value="180">3 hr</option>
+                </select>
+              </div>
             </div>
-            <div class="field-block" style="margin-bottom:0">
+            <div class="field-block" style="margin-top:8px;margin-bottom:0">
               <label class="field-label">Time</label>
               <select id="slot-time-{{ item.log_id }}" class="field-input send-at-compact"
                       data-preselect="{{ item.booking_slot_start_input or '' }}"></select>
             </div>
-            <div class="field-block" style="margin-bottom:0">
-              <label class="field-label">Duration</label>
-              <select id="slot-duration-{{ item.log_id }}" class="field-input send-at-compact">
-                <option value="30">30 min</option>
-                <option value="60" selected>1 hr</option>
-                <option value="90">1.5 hr</option>
-                <option value="120">2 hr</option>
-                <option value="180">3 hr</option>
-              </select>
+            <div id="meeting-slots-{{ item.log_id }}" style="display:none;margin-top:8px;margin-bottom:0">
+              <div style="font-size:9px;font-family:'IBM Plex Mono',monospace;letter-spacing:1px;text-transform:uppercase;color:var(--text-3);margin-bottom:5px">Available Slots</div>
+              <div id="meeting-slot-btns-{{ item.log_id }}" style="display:flex;flex-wrap:wrap;gap:5px"></div>
+            </div>
+            <div class="field-block" style="margin-top:8px;margin-bottom:0">
+              <label class="field-label">Service Type</label>
+              <input id="service-type-{{ item.log_id }}" type="text" class="field-input"
+                     value="{{ item.customer_last_service_type }}" placeholder="e.g. AC tune-up" />
+            </div>
+            <div class="field-block" style="margin-top:8px;margin-bottom:0">
+              <label class="field-label">Notes (optional)</label>
+              <input id="notes-{{ item.log_id }}" type="text" class="field-input" placeholder="e.g. Customer prefers morning" />
             </div>
           </div>
-          <div id="meeting-slots-{{ item.log_id }}" style="display:none;margin-top:8px;margin-bottom:0">
-            <div style="font-size:9px;font-family:'IBM Plex Mono',monospace;letter-spacing:1px;text-transform:uppercase;color:var(--text-3);margin-bottom:5px">Available Slots</div>
-            <div id="meeting-slot-btns-{{ item.log_id }}" style="display:flex;flex-wrap:wrap;gap:5px"></div>
-          </div>
-          <div class="field-block" style="margin-top:10px;margin-bottom:0">
-            <label class="field-label">Service Type</label>
-            <input id="service-type-{{ item.log_id }}" type="text" class="field-input"
-                   value="{{ item.customer_last_service_type }}" placeholder="e.g. AC tune-up" />
-          </div>
-          <div class="field-block" style="margin-top:10px;margin-bottom:0">
-            <label class="field-label">Notes (optional)</label>
-            <input id="notes-{{ item.log_id }}" type="text" class="field-input" placeholder="e.g. Customer prefers morning" />
+
+          {# Right col: Calendar Invite Email #}
+          <div>
+            <div style="font-size:9px;font-family:'IBM Plex Mono',monospace;letter-spacing:1.2px;text-transform:uppercase;color:var(--text-3);margin-bottom:6px">Calendar Invite Email</div>
+            <div class="field-block">
+              <label class="field-label">Subject</label>
+              <input id="subject-{{ item.log_id }}" type="text" class="field-input"
+                     value="Confirming your {{ item.customer_last_service_type }} appointment" />
+            </div>
+            <div class="field-block" style="margin-bottom:0">
+              <label class="field-label">Body</label>
+              <textarea id="body-{{ item.log_id }}" rows="7" class="field-textarea">{{ item.content or '' }}</textarea>
+            </div>
           </div>
         </div>
 
-        <div class="field-block">
-          <label class="field-label">Customer</label>
-          <input type="text" class="field-input" value="{{ item.customer_name }}{% if item.customer_email %} · {{ item.customer_email }}{% endif %}" readonly />
-        </div>
-        <div style="font-size:9px;font-family:'IBM Plex Mono',monospace;letter-spacing:1.2px;text-transform:uppercase;color:var(--text-3);margin:14px 0 6px;padding-top:10px;border-top:1px solid var(--border)">Calendar Invite Email</div>
-        <div class="field-block">
-          <label class="field-label">Subject</label>
-          <input id="subject-{{ item.log_id }}" type="text" class="field-input" value="{{ item.subject or '' }}" />
-        </div>
-        <div class="field-block">
-          <label class="field-label">Body</label>
-          <textarea id="body-{{ item.log_id }}" rows="6" class="field-textarea">{{ item.content or '' }}</textarea>
-        </div>
-        <div style="font-size:9px;font-family:'IBM Plex Mono',monospace;letter-spacing:1.2px;text-transform:uppercase;color:var(--text-3);margin:14px 0 6px;padding-top:10px;border-top:1px solid var(--border)">Reply in Thread <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--text-4)">(optional — sent as a casual follow-up in the existing email chain)</span></div>
+        {# ── Bottom: Reply in Thread (full width) ── #}
+        <div style="font-size:9px;font-family:'IBM Plex Mono',monospace;letter-spacing:1.2px;text-transform:uppercase;color:var(--text-3);margin:14px 0 6px;padding-top:12px;border-top:1px solid var(--border)">Reply in Thread <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--text-4)">(optional — casual follow-up in the existing email chain)</span></div>
         <div class="field-block" style="margin-bottom:0">
           <textarea id="thread-reply-{{ item.log_id }}" rows="3" class="field-textarea" placeholder="Hey {{ item.customer_name.split(' ')[0] }}, you're all set! I'll have the calendar invite over to you shortly.">Hey {{ item.customer_name.split(' ')[0] }}, you're all set on our end! I'll have the calendar invite over to you shortly. Looking forward to it!</textarea>
         </div>
@@ -230,6 +237,19 @@
             </button>
           </div>
         </div>
+
+        {# Customer contact details #}
+        {% if item.customer_email or item.customer_phone %}
+        <div>
+          <div class="right-title" style="margin-bottom:6px">Customer</div>
+          {% if item.customer_email %}
+          <div style="font-size:11.5px;color:var(--text-2);font-family:'IBM Plex Mono',monospace;margin-bottom:3px;word-break:break-all">{{ item.customer_email }}</div>
+          {% endif %}
+          {% if item.customer_phone %}
+          <div style="font-size:11.5px;color:var(--text-2);font-family:'IBM Plex Mono',monospace">{{ item.customer_phone }}</div>
+          {% endif %}
+        </div>
+        {% endif %}
 
         <div class="right-title">Quick Links</div>
         <div class="link-stack">

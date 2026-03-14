@@ -1769,6 +1769,7 @@ def _outreach_row(log, customer) -> dict:
         "booking_slot_start_input": _format_datetime_local(getattr(log, "booking_slot_start", None)),
         "booking_slot_end_input": _format_datetime_local(getattr(log, "booking_slot_end", None)),
         "customer_last_service_type": getattr(customer, "last_service_type", None) or "Service",
+        "customer_phone": getattr(customer, "phone", None) or "",
     }
 
 
@@ -3480,7 +3481,7 @@ def confirm_booking(log_id: int, req: ConfirmBookingRequest):
             end_dt=slot_end,
             customer_email=customer_email,
             description=(
-                f"Booked via Foreman reactivation outreach.\n"
+                f"Booked via Foreman.\n"
                 f"Customer: {customer_name}"
                 + (f"\nNotes: {req.notes}" if req.notes else "")
             ),
@@ -3712,7 +3713,7 @@ def book_and_invite(customer_id: int, req: ConfirmBookingRequest):
             end_dt=slot_end,
             customer_email=customer_email,
             description=(
-                f"Booked via Foreman reactivation outreach.\n"
+                f"Booked via Foreman.\n"
                 f"Customer: {customer_name}"
                 + (f"\nNotes: {req.notes}" if req.notes else "")
             ),
