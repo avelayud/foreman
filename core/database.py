@@ -71,6 +71,7 @@ SCHEMA_PATCHES = {
         "job_won": "BOOLEAN",
         "final_invoice_value": "FLOAT",
         "closed_at": "TIMESTAMP",
+        "google_cal_event_id": "VARCHAR",
         "orphaned": "BOOLEAN DEFAULT FALSE",
         "time_changed": "BOOLEAN DEFAULT FALSE",
     },
