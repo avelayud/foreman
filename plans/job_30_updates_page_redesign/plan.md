@@ -1,9 +1,10 @@
-# Job 30 — Updates Page Redesign
+# Job 30 — Command Center Redesign (formerly Updates Page)
 
 **Phase:** 8
 **Status:** ⬜ Not started
 **Depends on:** Nothing — fully independent
-**Goal:** Redesign the Updates page so it communicates urgency effectively. Replace the oversized grouped sections with: (1) a chronological notification feed at the top showing all updates in time order, and (2) a compact four-quadrant grid below that surfaces each category at a glance with reduced visual footprint.
+**Note:** The page has been renamed from "Updates" to "Command Center" in the nav and page header (done 2026-03-14). This job redesigns the content layout.
+**Goal:** Redesign the Command Center so it communicates urgency effectively. Replace the oversized grouped sections with: (1) a chronological notification feed at the top showing all updates in time order, and (2) a compact four-quadrant grid below that surfaces each category at a glance with reduced visual footprint.
 
 ---
 
