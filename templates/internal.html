@@ -27,7 +27,7 @@
       <div>
         <div style="font-size:15px;font-weight:600;color:var(--text);margin-bottom:4px">Run All Agents</div>
         <div style="font-size:13px;color:var(--text-2);line-height:1.55">
-          Runs all agents in sequence: Tone Profiler → Reactivation Analyzer → Priority Scorer → Customer Analyzer → Reply Detector → Follow-up Sequencer. Waits for completion — takes 30–90 seconds. Last-run timestamps on the Agents page will update.
+          Fires all agents in the background: Tone Profiler → Reactivation Analyzer → Priority Scorer → Customer Analyzer → Reply Detector → Follow-up Sequencer. Returns immediately — no timeout. Last-run timestamps on the Agents page update as each completes.
         </div>
       </div>
     </div>
@@ -111,53 +111,31 @@ async function runAllAgents() {
   const error = document.getElementById('agentsError');
 
   btn.disabled = true;
-  btn.textContent = 'Running…';
+  btn.textContent = 'Starting…';
   running.style.display = 'flex';
   success.style.display = 'none';
   error.style.display = 'none';
 
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 300000); // 5 min max
-
   try {
-    const res = await fetch('/api/internal/run-all-agents', {
-      method: 'POST',
-      signal: controller.signal,
-    });
-    clearTimeout(timeout);
+    const res = await fetch('/api/internal/run-all-agents', { method: 'POST' });
     const data = await res.json().catch(() => ({}));
     running.style.display = 'none';
 
-    if (data.ok) {
-      // Build per-agent result lines
-      const LABELS = {
-        tone_profiler: 'Tone Profiler',
-        reactivation: 'Reactivation Analyzer',
-        scoring: 'Priority Scorer',
-        customer_analyzer: 'Customer Analyzer',
-        reply_detector: 'Reply Detector',
-        follow_up: 'Follow-up Sequencer',
-      };
-      const results = data.results || {};
-      const lines = Object.entries(LABELS).map(([key, label]) => {
-        const r = results[key];
-        if (!r) return `${label}: skipped`;
-        return r.ok ? `✓ ${label}` : `✗ ${label}: ${r.error}`;
-      });
-      document.getElementById('agentsResults').textContent = lines.join('\n');
+    if (res.ok && data.status === 'started') {
+      document.getElementById('agentsResults').textContent =
+        'All agents are running in the background.\nLast-run timestamps on the Agents page will update as each completes.';
       success.style.display = 'block';
-      setTimeout(() => { window.location.href = '/agents'; }, 2500);
+      // Redirect to agents page after short delay so operator can watch timestamps update
+      setTimeout(() => { window.location.href = '/agents'; }, 2000);
     } else {
-      document.getElementById('agentsErrorMsg').textContent = data.error || 'Unknown error';
+      document.getElementById('agentsErrorMsg').textContent = data.error || data.detail || 'Unknown error';
       error.style.display = 'block';
       btn.disabled = false;
       btn.textContent = 'Run All Agents';
     }
   } catch (err) {
-    clearTimeout(timeout);
     running.style.display = 'none';
-    document.getElementById('agentsErrorMsg').textContent =
-      err.name === 'AbortError' ? 'Timed out after 5 minutes.' : (err.message || 'Network error');
+    document.getElementById('agentsErrorMsg').textContent = err.message || 'Network error';
     error.style.display = 'block';
     btn.disabled = false;
     btn.textContent = 'Run All Agents';

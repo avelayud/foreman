@@ -4596,40 +4596,41 @@ def internal_page(request: Request):
 
 @app.post("/api/internal/run-all-agents")
 def api_run_all_agents():
-    """Run all agents synchronously in sequence. Updates _agent_last_run for each."""
+    """Fire all agents as background threads and return immediately.
+
+    Each agent updates _agent_last_run when it completes. The agents page
+    reflects the updated timestamps on the next load.
+    """
     global _agent_last_run
-    from agents.tone_profiler import run as run_tone_profiler
-    from agents.reactivation import run as run_reactivation
-    from agents.reply_detector import run as run_reply_detector
-    from agents.follow_up import run as run_follow_up
 
-    results = {}
-
-    def _step(key, fn, **kwargs):
+    def _run_in_bg(key, fn, **kwargs):
         try:
-            result = fn(**kwargs)
+            fn(**kwargs)
             _agent_last_run[key] = datetime.utcnow()
-            results[key] = {"ok": True, "result": str(result) if result is not None else "done"}
+            print(f"[run-all] {key} complete", flush=True)
         except Exception as e:
-            results[key] = {"ok": False, "error": str(e)[:200]}
+            print(f"[run-all] {key} error: {e}", flush=True)
 
-    _step("tone_profiler", run_tone_profiler, operator_id=OPERATOR_ID)
-    _step("reactivation", run_reactivation, operator_id=OPERATOR_ID, limit=20)
-    try:
+    def _run_all():
+        from agents.tone_profiler import run as run_tone_profiler
+        from agents.reactivation import run as run_reactivation
+        from agents.reply_detector import run as run_reply_detector
+        from agents.follow_up import run as run_follow_up
+
+        _run_in_bg("tone_profiler", run_tone_profiler, operator_id=OPERATOR_ID)
+        _run_in_bg("reactivation", run_reactivation, operator_id=OPERATOR_ID, limit=20)
         _run_scoring_job()
-        _agent_last_run["scoring"] = datetime.utcnow()
-        results["scoring"] = {"ok": True, "result": "done"}
-    except Exception as e:
-        results["scoring"] = {"ok": False, "error": str(e)[:200]}
-    try:
         _run_customer_analyzer_job()
-        results["customer_analyzer"] = {"ok": True, "result": "done"}
-    except Exception as e:
-        results["customer_analyzer"] = {"ok": False, "error": str(e)[:200]}
-    _step("reply_detector", run_reply_detector, operator_id=OPERATOR_ID)
-    _step("follow_up", run_follow_up, operator_id=OPERATOR_ID)
+        _run_in_bg("reply_detector", run_reply_detector, operator_id=OPERATOR_ID)
+        _run_in_bg("follow_up", run_follow_up, operator_id=OPERATOR_ID)
 
-    return {"ok": True, "results": results}
+    t = threading.Thread(target=_run_all, daemon=True)
+    t.start()
+
+    return {"status": "started", "agents": [
+        "tone_profiler", "reactivation", "scoring",
+        "customer_analyzer", "reply_detector", "follow_up",
+    ]}
 
 
 @app.post("/api/internal/reseed")
