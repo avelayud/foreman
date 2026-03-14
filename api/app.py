@@ -3423,6 +3423,13 @@ def confirm_booking(log_id: int, req: ConfirmBookingRequest):
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid slot_start or slot_end — expected ISO datetime")
 
+    # Estimate gate — require a value or explicit "Unknown" before confirming
+    if req.estimated_value is None and not req.estimate_unknown:
+        raise HTTPException(
+            status_code=400,
+            detail="Please enter a job estimate or check 'Unknown' before confirming the booking."
+        )
+
     # Load log + customer
     with get_db() as db:
         log = db.query(OutreachLog).filter_by(id=log_id, operator_id=OPERATOR_ID).first()
@@ -3532,12 +3539,12 @@ def confirm_booking(log_id: int, req: ConfirmBookingRequest):
         except Exception as e:
             send_error = str(e)
     else:
-        # Dry run mode — log stays in queue as scheduled, booking stays tentative
+        # Dry run mode — log stays in queue as pending (NOT scheduled; meeting invites
+        # must never be auto-sent by the background scheduler — operator must confirm explicitly)
         with get_db() as db:
             log = db.query(OutreachLog).filter_by(id=log_id).first()
             if log:
-                log.approval_status = "scheduled"
-                log.scheduled_send_at = _next_business_send_time()
+                log.approval_status = "pending"
 
     return {
         "status": "confirmed" if email_sent else "tentative",

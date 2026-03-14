@@ -556,6 +556,15 @@
       return;
     }
 
+    const _estInput = document.getElementById('estimate-value-' + logId);
+    const _estUnknown = document.getElementById('estimate-unknown-' + logId);
+    const _hasEstimate = (_estInput && !_estInput.disabled && _estInput.value.trim() !== '') || (_estUnknown && _estUnknown.checked);
+    if (!_hasEstimate) {
+      errEl.textContent = '⚠ Please enter a job estimate or check "Unknown" before confirming.';
+      errEl.style.display = 'inline';
+      return;
+    }
+
     if (!window.confirm('Confirm this booking? This will:\n• Create a Google Calendar event\n• Auto-send a .ics invite to the customer\n• Send a confirmation email')) return;
 
     btn.disabled = true;
