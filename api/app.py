@@ -138,8 +138,8 @@ _response_generator_lock = threading.Lock()
 _db_ready = False
 _db_init_error: Exception | None = None
 
-REPLY_POLL_SECONDS = 900  # 15 minutes
-RESPONSE_GEN_POLL_SECONDS = 300  # 5 minutes — runs more frequently than reply_detector
+REPLY_POLL_SECONDS = 300  # 5 minutes
+RESPONSE_GEN_POLL_SECONDS = 300  # kept for reference — response generator now runs inline
 _scoring_scheduler: BackgroundScheduler | None = None
 _last_analyzer_run: datetime | None = None
 
@@ -558,7 +558,10 @@ def _start_scheduled_sender():
 
 
 def _reply_detector_loop():
-    """Poll Gmail for customer replies every REPLY_POLL_SECONDS."""
+    """Poll Gmail for customer replies every REPLY_POLL_SECONDS.
+    When new replies are found, runs the response generator inline in the same pass
+    so drafts are queued within a single 5-min cycle rather than waiting for a second poll.
+    """
     global _agent_last_run
     # Delay first run by 30s to let the app fully settle
     time.sleep(30)
@@ -568,7 +571,15 @@ def _reply_detector_loop():
             count = run_reply_detector(operator_id=OPERATOR_ID)
             _agent_last_run["reply_detector"] = datetime.utcnow()
             if count:
-                print(f"[reply_detector] {count} new reply(s) detected", flush=True)
+                print(f"[reply_detector] {count} new reply(s) — running response generator inline", flush=True)
+                try:
+                    from agents.response_generator import run as run_response_generator
+                    drafts = run_response_generator(operator_id=OPERATOR_ID)
+                    _agent_last_run["response_generator"] = datetime.utcnow()
+                    if drafts:
+                        print(f"[response_generator] {drafts} draft(s) generated (inline)", flush=True)
+                except Exception as rg_exc:
+                    print(f"[response_generator] inline run error: {rg_exc}", flush=True)
         except Exception as exc:
             print(f"[reply_detector] loop error: {exc}", flush=True)
         time.sleep(REPLY_POLL_SECONDS)
@@ -586,39 +597,13 @@ def _start_reply_detector():
         )
         worker.start()
         _reply_detector_started = True
-        print(f"✅ Reply detector started (poll: {REPLY_POLL_SECONDS}s / 15 min)", flush=True)
-
-
-def _response_generator_loop():
-    """Process classified inbound replies and generate drafts every RESPONSE_GEN_POLL_SECONDS."""
-    global _agent_last_run
-    # Delay first run by 60s to let reply_detector's initial pass complete first
-    time.sleep(60)
-    while True:
-        try:
-            from agents.response_generator import run as run_response_generator
-            count = run_response_generator(operator_id=OPERATOR_ID)
-            _agent_last_run["response_generator"] = datetime.utcnow()
-            if count:
-                print(f"[response_generator] {count} draft(s) generated", flush=True)
-        except Exception as exc:
-            print(f"[response_generator] loop error: {exc}", flush=True)
-        time.sleep(RESPONSE_GEN_POLL_SECONDS)
+        print(f"✅ Reply detector started (poll: {REPLY_POLL_SECONDS}s / 5 min)", flush=True)
 
 
 def _start_response_generator():
-    global _response_generator_started
-    with _response_generator_lock:
-        if _response_generator_started:
-            return
-        worker = threading.Thread(
-            target=_response_generator_loop,
-            daemon=True,
-            name="response-generator",
-        )
-        worker.start()
-        _response_generator_started = True
-        print(f"✅ Response generator started (poll: {RESPONSE_GEN_POLL_SECONDS}s / 5 min)", flush=True)
+    # Response generator now runs inline in _reply_detector_loop when new replies are found.
+    # No independent background thread needed.
+    print("✅ Response generator: runs inline after reply detector (no independent poll)", flush=True)
 
 
 def _run_scoring_job():
@@ -4487,9 +4472,9 @@ def agents_page(request: Request):
                 "key": "reply_detector",
                 "name": "Reply Detector",
                 "icon": "📬",
-                "description": "Polls Gmail inbox by thread ID every 15 minutes. Logs inbound replies, marks customers as replied, refreshes customer profiles, and classifies the reply. Response generation is handled by a separate agent.",
+                "description": "Polls Gmail inbox by thread ID every 5 minutes. Logs inbound replies, marks customers as replied, refreshes customer profiles, classifies the reply, and immediately triggers the response generator inline when new replies are found.",
                 "status": "active" if tracked_threads > 0 else "needs_setup",
-                "status_label": "Active (15-min poll)" if tracked_threads > 0 else "Waiting for sent Gmail threads",
+                "status_label": "Active (5-min poll)" if tracked_threads > 0 else "Waiting for sent Gmail threads",
                 "last_run_at": _agent_last_run.get("reply_detector") or latest_reply_at,
                 "stat_label": "Replies detected",
                 "stat_value": str(replies_detected),
@@ -4501,9 +4486,9 @@ def agents_page(request: Request):
                 "key": "response_generator",
                 "name": "Response Generator",
                 "icon": "⚡",
-                "description": "Picks up classified inbound replies and generates bespoke draft responses via the Conversation Agent. Runs every 5 minutes. Marks each reply as processed so drafts are never duplicated.",
+                "description": "Picks up classified inbound replies and generates bespoke draft responses via the Conversation Agent. Runs inline after reply detector when new replies are found — no independent poll.",
                 "status": "active",
-                "status_label": "Active (5-min poll)",
+                "status_label": "Runs inline after reply detector",
                 "last_run_at": _agent_last_run.get("response_generator"),
                 "stat_label": "Drafts generated",
                 "stat_value": str(drafts_generated),
