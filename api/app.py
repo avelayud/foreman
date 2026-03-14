@@ -2489,41 +2489,30 @@ def delete_outreach(log_id: int):
         customer_id = log.customer_id
         classification = log.response_classification
         db.delete(log)
-        # If this was a booking_confirmed draft, cancel any associated tentative booking
-        # and reset the inbound log so a new draft can be generated
-        if classification == "booking_confirmed":
-            tentative = (
+        # If this was a booking_confirmed/booking_intent draft, cancel any associated
+        # bookings and reset customer status back to "replied".
+        # Safe to cancel ALL ai_outreach bookings here because we only reach this code
+        # when the draft is "pending" or "failed" — meaning no email was ever actually sent.
+        if classification in ("booking_confirmed", "booking_intent"):
+            stale_bookings = (
                 db.query(Booking)
                 .filter(
                     Booking.customer_id == customer_id,
                     Booking.operator_id == OPERATOR_ID,
-                    Booking.status == "tentative",
+                    Booking.status.in_(["tentative", "confirmed"]),
                     Booking.source == "ai_outreach",
                 )
-                .order_by(Booking.created_at.desc())
-                .first()
+                .all()
             )
-            if tentative:
-                tentative.status = "cancelled"
-                # Reset customer back to "replied" — they confirmed a time but invite wasn't sent
-                cust = db.query(Customer).filter_by(id=customer_id, operator_id=OPERATOR_ID).first()
-                if cust and cust.reactivation_status == "booked":
-                    cust.reactivation_status = "replied"
-            # Reset inbound log's draft_queued so response_generator can re-queue a fresh draft
-            inbound_log = (
-                db.query(OutreachLog)
-                .filter(
-                    OutreachLog.customer_id == customer_id,
-                    OutreachLog.operator_id == OPERATOR_ID,
-                    OutreachLog.direction == "inbound",
-                    OutreachLog.response_classification == "booking_confirmed",
-                    OutreachLog.draft_queued == True,
-                )
-                .order_by(OutreachLog.created_at.desc())
-                .first()
-            )
-            if inbound_log:
-                inbound_log.draft_queued = False
+            for b in stale_bookings:
+                b.status = "cancelled"
+            # Always reset customer to "replied" — covers stale "booked" status set by
+            # old code that didn't distinguish tentative vs confirmed bookings.
+            cust = db.query(Customer).filter_by(id=customer_id, operator_id=OPERATOR_ID).first()
+            if cust and cust.reactivation_status == "booked":
+                cust.reactivation_status = "replied"
+            # Do NOT reset draft_queued — prevents auto-regeneration by response_generator.
+            # Operator uses "Redraft Meeting Invite" on the conversation page to re-queue on demand.
     return {"status": "deleted"}
 
 
@@ -2902,6 +2891,50 @@ class QueueDraftRequest(BaseModel):
     sequence_step: int = 0
 
 
+@app.post("/api/conversation/{customer_id}/redraft-meeting-invite")
+def redraft_meeting_invite(customer_id: int):
+    """Re-generate a booking_confirmed meeting invite draft on demand.
+
+    Finds the most recent booking_confirmed inbound reply, resets its draft_queued flag,
+    and runs the conversation agent to produce a fresh draft in the Meetings Queue.
+    """
+    with get_db() as db:
+        inbound_log = (
+            db.query(OutreachLog)
+            .filter(
+                OutreachLog.customer_id == customer_id,
+                OutreachLog.operator_id == OPERATOR_ID,
+                OutreachLog.direction == "inbound",
+                OutreachLog.response_classification == "booking_confirmed",
+            )
+            .order_by(OutreachLog.created_at.desc())
+            .first()
+        )
+        if not inbound_log:
+            raise HTTPException(status_code=404, detail="No booking_confirmed reply found for this customer")
+        inbound_log_id = inbound_log.id
+        inbound_log.draft_queued = False  # allow fresh generation
+
+    from agents.conversation_agent import generate_response
+    draft_id = generate_response(
+        operator_id=OPERATOR_ID,
+        customer_id=customer_id,
+        classification="booking_confirmed",
+        inbound_log_id=inbound_log_id,
+        verbose=True,
+    )
+    if not draft_id:
+        raise HTTPException(status_code=500, detail="Failed to generate meeting invite draft")
+
+    # Mark inbound log as processed so response_generator won't duplicate
+    with get_db() as db:
+        log = db.query(OutreachLog).filter_by(id=inbound_log_id).first()
+        if log:
+            log.draft_queued = True
+
+    return {"status": "queued", "draft_id": draft_id, "queue": "meetings"}
+
+
 @app.post("/api/conversation/{customer_id}/queue")
 def queue_conversation_draft(customer_id: int, req: QueueDraftRequest):
     """Queue a conversation reply/follow-up draft for operator review before sending."""
@@ -3195,6 +3228,7 @@ class ConfirmBookingRequest(BaseModel):
     email_body: str = ""
     estimated_value: float | None = None   # Required unless estimate_unknown=True
     estimate_unknown: bool = False
+    thread_reply_body: str | None = None  # Optional short reply sent in the existing email thread
 
 
 class BookingNotesRequest(BaseModel):
@@ -3481,6 +3515,19 @@ def confirm_booking(log_id: int, req: ConfirmBookingRequest):
                 c = db.query(Customer).filter_by(id=customer_id).first()
                 if c:
                     c.reactivation_status = "booked"
+            # Send thread reply if provided — short casual note in the existing email chain
+            thread_reply_sent = False
+            if email_sent and req.thread_reply_body and req.thread_reply_body.strip():
+                try:
+                    _gmail_send_message(
+                        to=customer_email,
+                        subject=f"Re: {email_subject}",
+                        body=req.thread_reply_body.strip(),
+                        thread_id=thread_id or existing_thread_id,
+                    )
+                    thread_reply_sent = True
+                except Exception as tre:
+                    print(f"[confirm_booking] Thread reply send failed (non-fatal): {tre}")
         except Exception as e:
             send_error = str(e)
     else:

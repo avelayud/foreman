@@ -288,7 +288,7 @@
         <div>
           <div class="ab-title" style="color:#991b1b">Action Required — Pending Scheduling</div>
           <div class="ab-desc">Customer confirmed availability but the invite was not sent. Generate a new meeting invite draft to queue for review.</div>
-          <button onclick="showGeneratePanel()" class="btn-primary" style="font-size:11.5px;padding:5px 12px;margin-top:8px">Redraft Meeting Invite</button>
+          <button onclick="redraftMeetingInvite(this)" class="btn-primary" style="font-size:11.5px;padding:5px 12px;margin-top:8px">Redraft Meeting Invite</button>
         </div>
       </div>
       {% endif %}
@@ -344,9 +344,11 @@
             {% elif health.needs_follow_up %}Follow-up is overdue. Generate a draft to review before queuing.
             {% else %}No reply yet. Generate a follow-up draft if you want to reach out before the agent's next scheduled run.{% endif %}
           </div>
-          <button class="btn-primary" onclick="showGeneratePanel()" style="font-size:13px;padding:8px 20px">
-            {% if latest_classification == 'booking_confirmed' and not active_booking %}Redraft Meeting Invite{% else %}Generate Draft{% endif %}
-          </button>
+          {% if latest_classification == 'booking_confirmed' and not active_booking %}
+          <button class="btn-primary" onclick="redraftMeetingInvite(this)" style="font-size:13px;padding:8px 20px">Redraft Meeting Invite</button>
+          {% else %}
+          <button class="btn-primary" onclick="showGeneratePanel()" style="font-size:13px;padding:8px 20px">Generate Draft</button>
+          {% endif %}
         </div>
 
         {# State C: loading / form #}
@@ -399,7 +401,7 @@
             <div style="font-size:11px;font-family:'IBM Plex Mono',monospace;letter-spacing:1px;text-transform:uppercase;color:var(--red);margin-bottom:6px">⚠ Pending Scheduling</div>
             <div style="font-size:12.5px;color:var(--navy);font-weight:600;margin-bottom:4px">Customer confirmed availability</div>
             <div style="font-size:11.5px;color:var(--text-3);margin-bottom:10px">The invite was not sent. Generate a new invite draft — it will go to the Meetings Queue for review before sending.</div>
-            <button class="btn-primary" onclick="showGeneratePanel()" style="font-size:12px;padding:6px 14px">Redraft Meeting Invite</button>
+            <button class="btn-primary" onclick="redraftMeetingInvite(this)" style="font-size:12px;padding:6px 14px">Redraft Meeting Invite</button>
           </div>
           {% else %}
           <div style="font-size:13px;color:var(--text-3);margin-bottom:12px">Book a time, create a Google Calendar event, and send a confirmation email — all in one click.</div>
@@ -785,6 +787,25 @@
     const btn = document.getElementById('approve-btn');
     if (btn) { btn.disabled = false; btn.textContent = 'Approve & Queue →'; }
     loadDraft();
+  }
+
+  async function redraftMeetingInvite(btn) {
+    const origText = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = 'Generating…';
+    try {
+      const res = await fetch(`/api/conversation/${CUSTOMER_ID}/redraft-meeting-invite`, { method: 'POST' });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.detail || 'Server error');
+      btn.textContent = '✓ Draft queued!';
+      btn.style.background = 'var(--green)';
+      btn.style.color = '#fff';
+      setTimeout(() => { window.location.href = '/meetings'; }, 1200);
+    } catch (e) {
+      btn.disabled = false;
+      btn.textContent = origText;
+      alert('Could not generate draft: ' + e.message);
+    }
   }
 
   async function approveDraft() {

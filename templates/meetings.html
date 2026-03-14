@@ -178,13 +178,18 @@
           <label class="field-label">Customer</label>
           <input type="text" class="field-input" value="{{ item.customer_name }}{% if item.customer_email %} · {{ item.customer_email }}{% endif %}" readonly />
         </div>
+        <div style="font-size:9px;font-family:'IBM Plex Mono',monospace;letter-spacing:1.2px;text-transform:uppercase;color:var(--text-3);margin:14px 0 6px;padding-top:10px;border-top:1px solid var(--border)">Calendar Invite Email</div>
         <div class="field-block">
-          <label class="field-label">Confirmation Email Subject</label>
+          <label class="field-label">Subject</label>
           <input id="subject-{{ item.log_id }}" type="text" class="field-input" value="{{ item.subject or '' }}" />
         </div>
         <div class="field-block">
-          <label class="field-label">Confirmation Email Body</label>
-          <textarea id="body-{{ item.log_id }}" rows="7" class="field-textarea">{{ item.content or '' }}</textarea>
+          <label class="field-label">Body</label>
+          <textarea id="body-{{ item.log_id }}" rows="6" class="field-textarea">{{ item.content or '' }}</textarea>
+        </div>
+        <div style="font-size:9px;font-family:'IBM Plex Mono',monospace;letter-spacing:1.2px;text-transform:uppercase;color:var(--text-3);margin:14px 0 6px;padding-top:10px;border-top:1px solid var(--border)">Reply in Thread <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--text-4)">(optional — sent as a casual follow-up in the existing email chain)</span></div>
+        <div class="field-block" style="margin-bottom:0">
+          <textarea id="thread-reply-{{ item.log_id }}" rows="3" class="field-textarea" placeholder="Hey {{ item.customer_name.split(' ')[0] }}, you're all set! I'll have the calendar invite over to you shortly.">Hey {{ item.customer_name.split(' ')[0] }}, you're all set on our end! I'll have the calendar invite over to you shortly. Looking forward to it!</textarea>
         </div>
       </div>
 
@@ -562,6 +567,8 @@
     const estimateUnknown = document.getElementById('estimate-unknown-' + logId);
     const estimatedValue = estimateInput && !estimateInput.disabled && estimateInput.value ? parseFloat(estimateInput.value) : null;
     const unknownEstimate = estimateUnknown ? estimateUnknown.checked : false;
+    const threadReplyEl = document.getElementById('thread-reply-' + logId);
+    const threadReplyBody = threadReplyEl ? threadReplyEl.value.trim() : null;
 
     try {
       const res = await fetch(`/api/outreach/${logId}/confirm-booking`, {
@@ -576,6 +583,7 @@
           email_body: document.getElementById('body-' + logId)?.value || '',
           estimated_value: estimatedValue,
           estimate_unknown: unknownEstimate,
+          thread_reply_body: threadReplyBody || null,
         }),
       });
       const data = await res.json().catch(() => ({}));
