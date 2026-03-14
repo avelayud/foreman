@@ -191,7 +191,7 @@ def _operator_data(op) -> dict:
     }
 
 
-_MEETINGS_CLASSIFICATIONS = ("booking_intent", "booking_confirmed")
+_MEETINGS_CLASSIFICATIONS = ("booking_confirmed",)
 
 
 def _get_queue_count(db) -> int:

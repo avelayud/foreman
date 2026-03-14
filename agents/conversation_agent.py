@@ -12,7 +12,7 @@ reactivation conversation. Every draft is informed by:
   - Real calendar availability (for booking proposals)
 
 Draft types (matched to response_classifier output):
-  booking_intent    -> BookingProposalDraft: proposes 3 real available slots (Meetings Queue)
+  booking_intent    -> ConversationalReply: proposes 2-3 available day windows in the email body (Outreach Queue)
   booking_confirmed -> BookingConfirmationDraft: confirms the agreed slot (Meetings Queue)
   callback_request  -> CallbackAckDraft: warm acknowledgement + best call window
   price_inquiry     -> PriceResponseDraft: transparent estimate using job history
@@ -79,8 +79,8 @@ BOOKING_PROPOSAL_PROMPT = """Operator tone:
 {voice_section}{profile_section}Customer: {name}
 Service history: {service_summary}
 
-The customer has explicitly said they want to book or schedule service.
-Here are the operator's next available appointment slots:
+The customer wants to schedule service. Propose 2-3 available day windows naturally in your reply.
+Operator's upcoming available days/windows:
 {slot_text}
 
 Full conversation so far:
@@ -89,13 +89,14 @@ Full conversation so far:
 Most recent customer message:
 {reply_text}
 
-Write a warm, direct reply that:
-1. Acknowledges what they said (reference the specific thing they mentioned)
-2. Proposes the available times clearly
-3. Makes it easy for them to pick one
-4. Keeps it brief -- they've already said yes, don't oversell
+Write a warm, conversational reply that:
+1. Answers any question the customer asked (be direct — don't dodge)
+2. Proposes 2-3 available day windows naturally in the email body
+   (e.g. "I have availability Tuesday or Thursday afternoon — would either of those work for you?")
+   Use real availability from the list above. Do NOT list specific times or use a formal slot format.
+3. Keeps it brief -- 2-4 sentences max
 
-Subject line should be a natural reply continuation."""
+This is a regular reply email, not a formal invite. Subject should be a natural continuation."""
 
 PRICE_RESPONSE_PROMPT = """Operator tone:
 {tone}

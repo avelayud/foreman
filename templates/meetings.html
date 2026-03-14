@@ -80,7 +80,7 @@
   <div>
     <div style="font-size:10.5px;font-family:'IBM Plex Mono',monospace;letter-spacing:1.5px;text-transform:uppercase;color:var(--text-3);margin-bottom:6px">Outreach</div>
     <h1 style="font-family:'Playfair Display',serif;font-size:28px;font-weight:700;color:var(--navy);line-height:1.2">Meetings Queue</h1>
-    <div style="font-size:13px;color:var(--text-3);margin-top:6px;line-height:1.5">Booking proposals awaiting operator review. Edit slot times or email copy before sending.</div>
+    <div style="font-size:13px;color:var(--text-3);margin-top:6px;line-height:1.5">Calendar invite drafts awaiting review. Confirm appointment details before sending.</div>
   </div>
   <div style="display:flex;align-items:center;gap:10px">
     <a href="/outreach" class="btn-ghost" style="text-decoration:none;font-size:12.5px">Outreach Queue</a>
@@ -100,8 +100,7 @@
 </div>
 {% endif %}
 
-{% set confirmed_items = pending | selectattr("response_classification", "equalto", "booking_confirmed") | list %}
-{% set proposal_items = pending | rejectattr("response_classification", "equalto", "booking_confirmed") | list %}
+{% set confirmed_items = pending %}
 
 {% if pending %}
 <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;gap:16px;flex-wrap:wrap">
@@ -264,111 +263,17 @@
 {% endfor %}
 {% endif %}
 
-{# ── Section 2: Booking Proposals ───────────────────────────────────────── #}
-{% if proposal_items %}
-{% if confirmed_items %}<div class="section-heading" style="margin-top:28px">Booking Proposals</div>{% endif %}
-{% for item in proposal_items %}
-<div class="queue-card state-{{ item.approval_chip_cls }}" id="card-{{ item.log_id }}" data-name="{{ item.customer_name|lower }}" data-email="{{ item.customer_email|lower }}">
-  <div class="queue-header">
-    <div class="queue-meta">
-      <span style="font-size:16px">📅</span>
-      <a href="/customer/{{ item.customer_id }}" class="queue-name">{{ item.customer_name }}</a>
-      <span class="booking-badge">booking intent</span>
-      <span class="tag-status tag-{{ item.approval_chip_cls }}">{{ item.approval_status_label }}</span>
-    </div>
-    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-      <span class="queue-info">Stage</span>
-      <span class="reach-stage">{{ item.sequence_label }}</span>
-    </div>
-  </div>
-
-  <div class="queue-body">
-    <div class="queue-layout">
-      <div class="queue-left">
-        {% set body_text = item.content or '' %}
-        {% if 'Option' in body_text or 'slot' in body_text|lower or 'available' in body_text|lower %}
-        <div class="slots-panel">
-          <div class="slots-title">📅 Proposed Slots</div>
-          {% for line in body_text.split('\n') %}
-            {% if ('Option' in line or 'AM' in line or 'PM' in line) and line.strip() %}
-            <div class="slot-line">{{ line.strip() }}</div>
-            {% endif %}
-          {% endfor %}
-        </div>
-        {% endif %}
-
-        <div class="field-block">
-          <label class="field-label">Customer</label>
-          <input type="text" class="field-input" value="{{ item.customer_name }}{% if item.customer_email %} · {{ item.customer_email }}{% endif %}" readonly />
-        </div>
-        <div class="field-block">
-          <label class="field-label">Subject</label>
-          <input id="subject-{{ item.log_id }}" type="text" class="field-input" value="{{ item.subject or '' }}" />
-        </div>
-        <div class="field-block">
-          <label class="field-label">Email Body</label>
-          <textarea id="body-{{ item.log_id }}" rows="9" class="field-textarea">{{ item.content or '' }}</textarea>
-        </div>
-      </div>
-
-      <div class="queue-right">
-        <div class="action-panel">
-          <div class="right-title" style="margin-bottom:8px">Actions</div>
-          <div class="action-stack">
-            <div>
-              <label class="field-label" style="margin-bottom:4px">Time to Send</label>
-              <input id="send-at-{{ item.log_id }}" type="datetime-local" class="field-input send-at-compact" value="{{ item.scheduled_send_input }}" />
-            </div>
-            <button onclick="approveAndSchedule({{ item.log_id }})" class="btn-success action-btn" id="approve-btn-{{ item.log_id }}">
-              {% if item.approval_status == 'pending' %}Approve + Schedule{% else %}Update Schedule{% endif %}
-            </button>
-            <button onclick="sendNow({{ item.log_id }})" class="btn-primary action-btn send-now-btn" id="send-btn-{{ item.log_id }}"
-                    {% if not operator.is_production_mode %}disabled title="Switch to Production mode to send real email"{% endif %}>
-              Send Now
-            </button>
-            <span class="schedule-note">
-              {% if item.scheduled_send_at %}
-                Scheduled for {{ item.scheduled_send_at.strftime('%b %-d, %Y · %-I:%M %p') }}
-              {% else %}
-                Defaults to following morning if saved outside business hours.
-              {% endif %}
-            </span>
-            {% if item.send_error %}
-            <span class="inline-status" style="color:var(--red)">Last send error: {{ item.send_error }}</span>
-            {% endif %}
-            <span id="action-label-{{ item.log_id }}" class="inline-status" style="display:none;color:var(--green)"></span>
-            <span id="action-error-{{ item.log_id }}" class="inline-status" style="display:none;color:var(--red)"></span>
-            <button onclick="removeFromQueue({{ item.log_id }})" class="btn-ghost action-btn" style="color:var(--red);border-color:#fecaca" id="remove-btn-{{ item.log_id }}">
-              Remove Draft
-            </button>
-            <button class="btn-ghost action-btn" style="color:var(--text-3);font-size:11px" onclick="regenerateMeeting({{ item.log_id }}, this)">&#8635; Regenerate</button>
-          </div>
-        </div>
-
-        <div class="right-title">Quick Links</div>
-        <div class="link-stack">
-          <a href="/customer/{{ item.customer_id }}" class="btn-ghost" style="text-decoration:none;text-align:center;display:flex;justify-content:center">Customer Page</a>
-          <a href="/conversations/{{ item.customer_id }}" class="btn-primary" style="text-decoration:none;display:flex;justify-content:center;padding:8px 14px">Open Conversation</a>
-          <a href="/calendar" class="btn-ghost" style="text-decoration:none;text-align:center;display:flex;justify-content:center">View Calendar</a>
-        </div>
-      </div>
-    </div>
-  </div>
-</div>
-{% endfor %}
-{% endif %}
-
 {% else %}
 <div class="card" style="padding:72px 40px;text-align:center">
   <div style="font-size:40px;margin-bottom:16px;opacity:0.3">📅</div>
-  <div style="font-family:'Playfair Display',serif;font-size:20px;font-weight:700;color:var(--navy);margin-bottom:8px">No booking proposals</div>
+  <div style="font-family:'Playfair Display',serif;font-size:20px;font-weight:700;color:var(--navy);margin-bottom:8px">No meeting invites pending</div>
   <div style="font-size:13px;color:var(--text-3);margin-bottom:24px;max-width:360px;margin-left:auto;margin-right:auto;line-height:1.6">
-    When a customer expresses intent to book, the conversation agent drafts a proposal with available slots. It will appear here for your review.
+    Once a customer confirms a specific time, a calendar invite draft will appear here for review before sending.
   </div>
   <a href="/conversations" class="btn-primary" style="text-decoration:none">View Conversations</a>
 </div>
 {% endif %}
-<div id="meetings-no-results" style="display:none;padding:40px 20px;text-align:center;font-size:13px;color:var(--text-3)">No proposals match your search.</div>
+<div id="meetings-no-results" style="display:none;padding:40px 20px;text-align:center;font-size:13px;color:var(--text-3)">No invites match your search.</div>
 
 {% endblock %}
 
@@ -446,13 +351,13 @@
   }
 
   function sendNow(logId) {
-    const ok = window.confirm('Send this booking proposal immediately? This will send a real email now.');
+    const ok = window.confirm('Send this meeting invite immediately? This will send a real email now.');
     if (!ok) return;
     submitQueueAction(logId, true);
   }
 
   async function removeFromQueue(logId) {
-    const ok = window.confirm('Remove this booking proposal from the queue? This cannot be undone.');
+    const ok = window.confirm('Remove this draft from the queue? This cannot be undone.');
     if (!ok) return;
     const btn = document.getElementById('remove-btn-' + logId);
     btn.disabled = true;
@@ -641,7 +546,7 @@
   }
 
   async function regenerateMeeting(logId, btn) {
-    if (!confirm('Regenerate this booking proposal? Calendar slots will be refreshed.')) return;
+    if (!confirm('Regenerate this invite draft? Calendar slots will be refreshed.')) return;
     btn.disabled = true;
     btn.textContent = 'Regenerating…';
     try {
