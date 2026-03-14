@@ -3595,6 +3595,46 @@ def cancel_booking(booking_id: int):
     return {"status": "cancelled"}
 
 
+@app.get("/api/nav-counts")
+def get_nav_counts():
+    """Return sidebar badge counts for queue and meetings. Used by frontend to refresh badges inline."""
+    with get_db() as db:
+        return {
+            "queue_count": _get_queue_count(db),
+            "meetings_queue_count": _get_meetings_queue_count(db),
+        }
+
+
+@app.get("/api/conversation/{customer_id}/status")
+def get_conversation_status(customer_id: int):
+    """Return current health chip and stage label for a single conversation. Used for inline status refresh."""
+    with get_db() as db:
+        customer = db.query(Customer).filter_by(id=customer_id, operator_id=OPERATOR_ID).first()
+        if not customer:
+            raise HTTPException(status_code=404, detail="Customer not found")
+        logs = (
+            db.query(OutreachLog)
+            .filter_by(customer_id=customer_id, operator_id=OPERATOR_ID)
+            .order_by(OutreachLog.created_at.desc())
+            .all()
+        )
+        outbound = [l for l in logs if l.direction == "outbound" and not l.dry_run]
+        inbound = [l for l in logs if l.direction == "inbound"]
+        last_outbound_at = outbound[0].created_at if outbound else None
+        last_inbound_at = inbound[0].created_at if inbound else None
+        has_inbound = bool(inbound)
+        effective = customer.reactivation_status
+        if has_inbound and effective not in ("booked", "invite_sent", "sequence_complete", "unsubscribed", "replied"):
+            effective = "replied"
+        health = _conversation_health(effective, last_outbound_at, last_inbound_at)
+    return {
+        "health_key": health["key"],
+        "health_label": health["label"],
+        "chip_cls": health["chip_cls"],
+        "reactivation_status": customer.reactivation_status,
+    }
+
+
 @app.get("/api/calendar/slots")
 def calendar_slots_for_date(date: str, duration: int = 60):
     """Return available appointment time slots for a given date (YYYY-MM-DD)."""

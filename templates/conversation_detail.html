@@ -842,6 +842,8 @@
       statusEl.textContent = '✓ Added to outreach queue';
       btn.textContent = 'Queued ✓';
       trackEvent('draft_queued', {page: `conversations/${CUSTOMER_ID}`});
+      refreshNavCounts();
+      setTimeout(() => window.location.reload(), 900);
     } catch (e) {
       statusEl.style.color = 'var(--red)';
       statusEl.textContent = `Failed: ${e.message}`;

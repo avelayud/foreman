@@ -215,15 +215,11 @@
       <div class="sb-section">Queues</div>
       <a href="/outreach" class="sb-link {% if active == 'outreach' %}active{% endif %}" onclick="trackEvent('nav_to_outreach', {page:'outreach'})">
         <span>✉</span> Outreach Queue
-        {% if queue_count is defined and queue_count > 0 %}
-        <span style="margin-left:auto;background:var(--gold);color:#fff;font-size:9.5px;font-weight:600;font-family:'IBM Plex Mono',monospace;padding:1px 7px;border-radius:20px">{{ queue_count }}</span>
-        {% endif %}
+        <span id="nav-badge-queue" style="margin-left:auto;background:var(--gold);color:#fff;font-size:9.5px;font-weight:600;font-family:'IBM Plex Mono',monospace;padding:1px 7px;border-radius:20px{% if not (queue_count is defined and queue_count > 0) %};display:none{% endif %}">{% if queue_count is defined and queue_count > 0 %}{{ queue_count }}{% endif %}</span>
       </a>
       <a href="/meetings" class="sb-link {% if active == 'meetings' %}active{% endif %}" onclick="trackEvent('nav_to_meetings', {page:'meetings'})">
         <span>📅</span> Meetings Queue
-        {% if meetings_queue_count is defined and meetings_queue_count > 0 %}
-        <span style="margin-left:auto;background:var(--blue);color:#fff;font-size:9.5px;font-weight:600;font-family:'IBM Plex Mono',monospace;padding:1px 7px;border-radius:20px">{{ meetings_queue_count }}</span>
-        {% endif %}
+        <span id="nav-badge-meetings" style="margin-left:auto;background:var(--blue);color:#fff;font-size:9.5px;font-weight:600;font-family:'IBM Plex Mono',monospace;padding:1px 7px;border-radius:20px{% if not (meetings_queue_count is defined and meetings_queue_count > 0) %};display:none{% endif %}">{% if meetings_queue_count is defined and meetings_queue_count > 0 %}{{ meetings_queue_count }}{% endif %}</span>
       </a>
 
       <div class="sb-section">Agents</div>
@@ -345,6 +341,22 @@ function trackEvent(name, props) {
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({event_name: name, ...(props || {})})
         }).catch(function(){});
+    } catch(e) {}
+}
+
+async function refreshNavCounts() {
+    try {
+        const data = await fetch('/api/nav-counts').then(r => r.json());
+        const qBadge = document.getElementById('nav-badge-queue');
+        const mBadge = document.getElementById('nav-badge-meetings');
+        if (qBadge) {
+            if (data.queue_count > 0) { qBadge.textContent = data.queue_count; qBadge.style.display = ''; }
+            else { qBadge.style.display = 'none'; }
+        }
+        if (mBadge) {
+            if (data.meetings_queue_count > 0) { mBadge.textContent = data.meetings_queue_count; mBadge.style.display = ''; }
+            else { mBadge.style.display = 'none'; }
+        }
     } catch(e) {}
 }
 </script>

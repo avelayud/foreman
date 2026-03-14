@@ -314,6 +314,7 @@
         label.textContent = 'Saved.';
       }
       label.style.display = 'inline';
+      refreshNavCounts();
       setTimeout(() => window.location.reload(), 650);
     } catch (e) {
       approveBtn.disabled = false;
