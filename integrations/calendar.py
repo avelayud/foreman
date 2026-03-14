@@ -302,6 +302,24 @@ def create_calendar_event(
     return result
 
 
+def update_calendar_event(event_id: str, start_dt, end_dt, summary: str = None, description: str = None) -> dict:
+    """Patch an existing GCal event's time and optionally summary/description."""
+    try:
+        service = _get_calendar_service()
+        body = {
+            "start": {"dateTime": start_dt.isoformat(), "timeZone": "America/New_York"},
+            "end": {"dateTime": end_dt.isoformat(), "timeZone": "America/New_York"},
+        }
+        if summary:
+            body["summary"] = summary
+        if description:
+            body["description"] = description
+        return service.events().patch(calendarId="primary", eventId=event_id, body=body).execute()
+    except Exception as e:
+        print(f"[calendar] update_calendar_event failed: {e}")
+        raise
+
+
 def get_event_status(event_id: str) -> dict:
     """
     Fetch a Calendar event and return its status and attendee responses.

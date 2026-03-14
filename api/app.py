@@ -435,6 +435,27 @@ def _get_customer_thread_id(log_id: int) -> str | None:
         return existing_thread[0] if existing_thread else None
 
 
+def _get_customer_thread_id_by_customer(customer_id: int) -> str | None:
+    """
+    Return the gmail_thread_id to use when replying to a customer, given only customer_id.
+    Only looks at outbound threads (critical: never use inbound thread_id).
+    """
+    with get_db() as db:
+        existing_thread = (
+            db.query(OutreachLog.gmail_thread_id)
+            .filter(
+                OutreachLog.customer_id == customer_id,
+                OutreachLog.operator_id == OPERATOR_ID,
+                OutreachLog.gmail_thread_id != None,
+                OutreachLog.direction == "outbound",
+                OutreachLog.dry_run == False,
+            )
+            .order_by(OutreachLog.sent_at.desc())
+            .first()
+        )
+        return existing_thread[0] if existing_thread else None
+
+
 def _deliver_outreach_log(
     log_id: int,
     *,
@@ -3439,6 +3460,15 @@ class ConfirmBookingRequest(BaseModel):
     thread_reply_body: str | None = None  # Optional short reply sent in the existing email thread
 
 
+class EditBookingRequest(BaseModel):
+    slot_start: str
+    slot_end: str
+    service_type: str | None = None
+    notes: str | None = None
+    email_body: str | None = None
+    thread_reply_body: str | None = None
+
+
 class BookingNotesRequest(BaseModel):
     notes: str = ""
     estimated_value: float | None = None        # legacy single-value field
@@ -3796,6 +3826,110 @@ def cancel_booking(booking_id: int):
             raise HTTPException(status_code=400, detail="Booking cannot be cancelled")
         booking.status = "cancelled"
     return {"status": "cancelled"}
+
+
+@app.post("/api/booking/{booking_id}/edit")
+def edit_booking(booking_id: int, req: EditBookingRequest):
+    """Edit a confirmed or tentative booking: update time, service, notes; patch GCal; optionally re-send email."""
+    try:
+        slot_start = datetime.fromisoformat(req.slot_start)
+        slot_end = datetime.fromisoformat(req.slot_end)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid slot_start or slot_end")
+
+    with get_db() as db:
+        booking = db.query(Booking).filter_by(id=booking_id, operator_id=OPERATOR_ID).first()
+        if not booking:
+            raise HTTPException(status_code=404, detail="Booking not found")
+        customer = db.query(Customer).filter_by(id=booking.customer_id).first()
+        operator = db.query(Operator).filter_by(id=OPERATOR_ID).first()
+        mode = (operator.outreach_mode or "dry_run").strip().lower() if operator else "dry_run"
+
+        booking.slot_start = slot_start
+        booking.slot_end = slot_end
+        if req.service_type:
+            booking.service_type = req.service_type
+        if req.notes is not None:
+            booking.notes = req.notes
+
+        customer_email = customer.email if customer else None
+        customer_name = customer.name if customer else ""
+        customer_id = booking.customer_id
+        gcal_event_id = booking.google_cal_event_id
+
+    # Update GCal event (best-effort)
+    gcal_updated = False
+    gcal_error = None
+    if gcal_event_id:
+        try:
+            from integrations.calendar import update_calendar_event
+            update_calendar_event(
+                gcal_event_id,
+                slot_start,
+                slot_end,
+                summary=f"{req.service_type or 'Service'} — {customer_name}",
+                description=f"Rescheduled via Foreman.\nCustomer: {customer_name}" + (f"\nNotes: {req.notes}" if req.notes else ""),
+            )
+            gcal_updated = True
+        except Exception as e:
+            gcal_error = str(e)
+
+    # Re-send confirmation email (production mode only, if body provided)
+    email_sent = False
+    send_error = None
+    if mode == "production" and req.email_body and customer_email:
+        try:
+            existing_thread_id = _get_customer_thread_id_by_customer(customer_id)
+            inbound_rfc_id = _get_customer_inbound_rfc_id(customer_id)
+            subject = f"Updated: your appointment on {slot_start.strftime('%a %b %-d')}"
+            thread_id = _gmail_send_message(
+                to=customer_email,
+                subject=subject,
+                body=req.email_body,
+                thread_id=existing_thread_id,
+                in_reply_to=inbound_rfc_id,
+            )
+            email_sent = bool(thread_id)
+            # Log the re-send
+            with get_db() as db:
+                log = OutreachLog(
+                    operator_id=OPERATOR_ID,
+                    customer_id=customer_id,
+                    direction="outbound",
+                    content=req.email_body,
+                    subject=subject,
+                    dry_run=False,
+                    approval_status="sent",
+                    sent_at=datetime.utcnow(),
+                    response_classification="booking_confirmed",
+                )
+                if thread_id:
+                    log.gmail_thread_id = thread_id
+                db.add(log)
+        except Exception as e:
+            send_error = str(e)
+
+    # Optional short thread reply
+    if mode == "production" and req.thread_reply_body and req.thread_reply_body.strip() and customer_email:
+        try:
+            existing_thread_id = _get_customer_thread_id_by_customer(customer_id)
+            _gmail_send_message(
+                to=customer_email,
+                subject="Re: appointment update",
+                body=req.thread_reply_body.strip(),
+                thread_id=existing_thread_id,
+            )
+        except Exception:
+            pass
+
+    return {
+        "status": "updated",
+        "booking_id": booking_id,
+        "gcal_updated": gcal_updated,
+        "gcal_error": gcal_error,
+        "email_sent": email_sent,
+        "send_error": send_error,
+    }
 
 
 @app.get("/api/nav-counts")
@@ -4721,7 +4855,7 @@ def agents_page(request: Request):
         "queue_count": queued_count,
         "meetings_queue_count": meetings_queue_count_agents,
         "conversations_attention_count": conversations_attention_count,
-        "agents": [
+        "agents": sorted([
             {
                 "key": "tone_profiler",
                 "name": "Tone Profiler",
@@ -4734,6 +4868,11 @@ def agents_page(request: Request):
                 "stat_value": str(len(operator_data.get("voice_profiles") or [])) if tone_profile_set else "—",
                 "cli": "python -m agents.tone_profiler --operator-id 1",
                 "phase": "Phase 2",
+                "group": "intake_scoring",
+                "group_label": "Intake & Scoring",
+                "group_desc": "Profile and rank customers before outreach",
+                "group_order": 1,
+                "agent_order": 2,
             },
             {
                 "key": "reactivation",
@@ -4747,6 +4886,11 @@ def agents_page(request: Request):
                 "stat_value": str(total_reactivation_drafts),
                 "cli": "python -m agents.reactivation --operator-id 1 --limit 10",
                 "phase": "Phase 3",
+                "group": "outreach",
+                "group_label": "Outreach",
+                "group_desc": "Generate and send initial outreach sequences",
+                "group_order": 2,
+                "agent_order": 1,
             },
             {
                 "key": "scoring",
@@ -4761,6 +4905,11 @@ def agents_page(request: Request):
                 "stat_meta": f"{high_priority_count} high priority",
                 "cli": "python -m core.scoring",
                 "phase": "Phase 5",
+                "group": "intake_scoring",
+                "group_label": "Intake & Scoring",
+                "group_desc": "Profile and rank customers before outreach",
+                "group_order": 1,
+                "agent_order": 3,
             },
             {
                 "key": "customer_analyzer",
@@ -4775,6 +4924,11 @@ def agents_page(request: Request):
                 "stat_meta": f"{with_history} with prior email history",
                 "cli": "python -m agents.customer_analyzer --operator-id 1 --all",
                 "phase": "Phase 4",
+                "group": "intake_scoring",
+                "group_label": "Intake & Scoring",
+                "group_desc": "Profile and rank customers before outreach",
+                "group_order": 1,
+                "agent_order": 1,
             },
             {
                 "key": "reply_detector",
@@ -4789,6 +4943,11 @@ def agents_page(request: Request):
                 "stat_meta": f"{tracked_threads} tracked Gmail thread(s)",
                 "cli": "python -m agents.reply_detector --operator-id 1",
                 "phase": "Phase 4",
+                "group": "conversation",
+                "group_label": "Conversation",
+                "group_desc": "Detect replies, classify intent, and draft responses",
+                "group_order": 3,
+                "agent_order": 1,
             },
             {
                 "key": "response_generator",
@@ -4803,6 +4962,11 @@ def agents_page(request: Request):
                 "stat_meta": f"{pending_response_gen} awaiting generation" if pending_response_gen else "Queue empty",
                 "cli": "python -m agents.response_generator --operator-id 1",
                 "phase": "Phase 4",
+                "group": "conversation",
+                "group_label": "Conversation",
+                "group_desc": "Detect replies, classify intent, and draft responses",
+                "group_order": 3,
+                "agent_order": 3,
             },
             {
                 "key": "follow_up",
@@ -4817,6 +4981,11 @@ def agents_page(request: Request):
                 "stat_meta": f"{active_sequences} customers in active sequence",
                 "cli": "python -m agents.follow_up --operator-id 1 --limit 20",
                 "phase": "Phase 4",
+                "group": "conversation",
+                "group_label": "Conversation",
+                "group_desc": "Detect replies, classify intent, and draft responses",
+                "group_order": 3,
+                "agent_order": 5,
             },
             {
                 "key": "response_classifier",
@@ -4831,6 +5000,11 @@ def agents_page(request: Request):
                 "stat_meta": f"{booking_intents} booking intent(s)",
                 "cli": "python -m agents.response_classifier",
                 "phase": "Phase 6",
+                "group": "conversation",
+                "group_label": "Conversation",
+                "group_desc": "Detect replies, classify intent, and draft responses",
+                "group_order": 3,
+                "agent_order": 2,
             },
             {
                 "key": "conversation_agent",
@@ -4845,6 +5019,11 @@ def agents_page(request: Request):
                 "stat_meta": "One draft per classified reply",
                 "cli": None,
                 "phase": "Phase 6",
+                "group": "conversation",
+                "group_label": "Conversation",
+                "group_desc": "Detect replies, classify intent, and draft responses",
+                "group_order": 3,
+                "agent_order": 4,
             },
             {
                 "key": "post_visit",
@@ -4859,6 +5038,11 @@ def agents_page(request: Request):
                 "stat_meta": "Customers needing Quote Given, Job Won, or No Show" if post_visit_flagged else "All appointments logged",
                 "cli": "python -m agents.post_visit --operator-id 1",
                 "phase": "Phase 8",
+                "group": "scheduling",
+                "group_label": "Scheduling",
+                "group_desc": "Calendar sync and appointment follow-up",
+                "group_order": 4,
+                "agent_order": 2,
             },
             {
                 "key": "state_reconciler",
@@ -4873,6 +5057,11 @@ def agents_page(request: Request):
                 "stat_meta": "Runs automatically",
                 "cli": "python -m agents.state_reconciler --operator-id 1",
                 "phase": "Phase 8",
+                "group": "maintenance",
+                "group_label": "Maintenance",
+                "group_desc": "Background health checks and state reconciliation",
+                "group_order": 5,
+                "agent_order": 1,
             },
             {
                 "key": "gcal_sync",
@@ -4887,6 +5076,11 @@ def agents_page(request: Request):
                 "stat_meta": "Bookings with linked GCal event",
                 "cli": "python -m agents.gcal_sync --operator-id 1",
                 "phase": "Phase 8",
+                "group": "scheduling",
+                "group_label": "Scheduling",
+                "group_desc": "Calendar sync and appointment follow-up",
+                "group_order": 4,
+                "agent_order": 1,
             },
             {
                 "key": "sms_outreach",
@@ -4900,8 +5094,13 @@ def agents_page(request: Request):
                 "stat_value": None,
                 "cli": None,
                 "phase": "Phase 9",
+                "group": "outreach",
+                "group_label": "Outreach",
+                "group_desc": "Generate and send initial outreach sequences",
+                "group_order": 2,
+                "agent_order": 2,
             },
-        ],
+        ], key=lambda a: (a["group_order"], a["agent_order"])),
     })
 
 
