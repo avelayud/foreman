@@ -626,7 +626,12 @@
 
       label.textContent = msg;
       label.style.display = 'inline';
-      setTimeout(() => window.location.reload(), 1800);
+      if (data.booking_id && data.customer_id) {
+        sessionStorage.setItem('booking_sent_' + data.booking_id, '1');
+        setTimeout(() => window.location.href = '/conversations/' + data.customer_id, 1800);
+      } else {
+        setTimeout(() => window.location.reload(), 1800);
+      }
     } catch (e) {
       btn.disabled = false;
       btn.textContent = 'Confirm Booking + Send Invite';

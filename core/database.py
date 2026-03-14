@@ -59,6 +59,8 @@ SCHEMA_PATCHES = {
     },
     "bookings": {
         "estimated_value": "FLOAT",
+        "estimated_value_low": "INTEGER",
+        "estimated_value_high": "INTEGER",
         "estimate_unknown": "BOOLEAN",
         "awaiting_estimate": "BOOLEAN",
         "visit_outcome": "VARCHAR",

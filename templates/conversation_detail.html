@@ -85,6 +85,7 @@
 
   /* Right column */
   .right-col{display:flex;flex-direction:column;gap:14px}
+  .right-col .confirmed-first{order:-1}
 
   /* Draft panel */
   .draft-body-textarea{width:100%;min-height:145px;border:1px solid var(--border);border-radius:7px;padding:9px 11px;font-size:13px;font-family:'IBM Plex Sans',sans-serif;color:var(--text);line-height:1.65;background:var(--bg);outline:none;resize:vertical;transition:border-color 0.15s;box-sizing:border-box}
@@ -225,21 +226,6 @@
     </div>
     {% endif %}
 
-    {# ── Awaiting Estimate Banner (shown only after invite is sent, not while tentative) ── #}
-    {% if active_booking and active_booking.awaiting_estimate and active_booking.status == 'confirmed' %}
-    <div id="estimate-banner" style="background:#eff6ff;border:1px solid #93c5fd;border-radius:8px;padding:14px 16px;margin-bottom:2px">
-      <div style="font-size:12px;font-weight:700;color:var(--blue);margin-bottom:4px">Booking created for {{ active_booking.slot_start.strftime('%a %b %-d') if active_booking.slot_start else 'upcoming date' }}. What's the estimated job value?</div>
-      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-        <div style="display:flex;align-items:center;gap:0;border:1px solid var(--border);border-radius:7px;overflow:hidden;background:#fff">
-          <span style="padding:7px 8px;font-size:13px;color:var(--text-3);background:var(--bg);border-right:1px solid var(--border)">$</span>
-          <input type="number" id="estimate-input" placeholder="850" min="0" step="50" style="border:none;padding:7px 10px;font-size:13px;width:110px;outline:none;background:#fff">
-        </div>
-        <label style="font-size:12px;color:var(--text-3);display:flex;align-items:center;gap:5px"><input type="checkbox" id="estimate-unknown-cb" onchange="toggleEstimateUnknown()"> Value Unknown</label>
-        <button onclick="saveEstimate({{ active_booking.id }})" class="btn-primary" style="font-size:12px;padding:7px 14px">Save</button>
-        <span id="estimate-status" style="font-size:12px"></span>
-      </div>
-    </div>
-    {% endif %}
 
     {# ── Job Won Banner (shown after quote given, before close) ── #}
     {% if active_booking and active_booking.visit_outcome == 'confirmed' and active_booking.quote_given and not active_booking.job_won %}
@@ -376,7 +362,7 @@
     </div>
 
     {# ── Schedule Appointment panel ── #}
-    <div class="panel" id="schedule-panel">
+    <div class="panel{% if active_booking and active_booking.status == 'confirmed' %} confirmed-first{% endif %}" id="schedule-panel">
       <div class="panel-head">
         <span class="panel-title" style="display:flex;align-items:center;gap:6px">
           <span style="color:{% if active_booking and active_booking.status == 'confirmed' %}var(--green){% elif active_booking and active_booking.status == 'tentative' %}var(--amber){% else %}var(--navy){% endif %}">📅</span>
@@ -495,10 +481,17 @@
             <textarea id="post-notes" placeholder="Scope of work, what was discussed, access info…" style="min-height:80px">{{ active_booking.notes }}</textarea>
           </div>
           <div class="booking-field" style="margin-bottom:16px">
-            <label>Opportunity value</label>
-            <div style="display:flex;align-items:center;gap:0;border:1px solid var(--border);border-radius:7px;overflow:hidden;background:#fff;max-width:180px">
-              <span style="padding:7px 8px;font-size:13px;color:var(--text-3);background:var(--bg);border-right:1px solid var(--border)">$</span>
-              <input type="number" id="post-value" placeholder="850" min="0" step="50" style="border:none;padding:7px 10px;font-size:13px;width:140px;outline:none;background:#fff" value="{{ active_booking.estimated_value or '' }}">
+            <label>Opportunity value range</label>
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+              <div style="display:flex;align-items:center;gap:0;border:1px solid var(--border);border-radius:7px;overflow:hidden;background:#fff">
+                <span style="padding:7px 8px;font-size:13px;color:var(--text-3);background:var(--bg);border-right:1px solid var(--border)">$</span>
+                <input type="number" id="post-value-low" placeholder="Low" min="0" step="50" style="border:none;padding:7px 10px;font-size:13px;width:80px;outline:none;background:#fff" value="{{ active_booking.estimated_value_low or '' }}">
+              </div>
+              <span style="font-size:12px;color:var(--text-3)">–</span>
+              <div style="display:flex;align-items:center;gap:0;border:1px solid var(--border);border-radius:7px;overflow:hidden;background:#fff">
+                <span style="padding:7px 8px;font-size:13px;color:var(--text-3);background:var(--bg);border-right:1px solid var(--border)">$</span>
+                <input type="number" id="post-value-high" placeholder="High" min="0" step="50" style="border:none;padding:7px 10px;font-size:13px;width:80px;outline:none;background:#fff" value="{{ active_booking.estimated_value_high or '' }}">
+              </div>
             </div>
           </div>
           <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
@@ -529,10 +522,17 @@
             <textarea id="post-notes" placeholder="Scope of work, what was discussed, access info…" style="min-height:80px">{{ active_booking.notes }}</textarea>
           </div>
           <div class="booking-field" style="margin-bottom:16px">
-            <label>Opportunity value</label>
-            <div style="display:flex;align-items:center;gap:0;border:1px solid var(--border);border-radius:7px;overflow:hidden;background:#fff;max-width:180px">
-              <span style="padding:7px 8px;font-size:13px;color:var(--text-3);background:var(--bg);border-right:1px solid var(--border)">$</span>
-              <input type="number" id="post-value" placeholder="850" min="0" step="50" style="border:none;padding:7px 10px;font-size:13px;width:140px;outline:none;background:#fff" value="{{ active_booking.estimated_value or '' }}">
+            <label>Opportunity value range</label>
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+              <div style="display:flex;align-items:center;gap:0;border:1px solid var(--border);border-radius:7px;overflow:hidden;background:#fff">
+                <span style="padding:7px 8px;font-size:13px;color:var(--text-3);background:var(--bg);border-right:1px solid var(--border)">$</span>
+                <input type="number" id="post-value-low" placeholder="Low" min="0" step="50" style="border:none;padding:7px 10px;font-size:13px;width:80px;outline:none;background:#fff" value="{{ active_booking.estimated_value_low or '' }}">
+              </div>
+              <span style="font-size:12px;color:var(--text-3)">–</span>
+              <div style="display:flex;align-items:center;gap:0;border:1px solid var(--border);border-radius:7px;overflow:hidden;background:#fff">
+                <span style="padding:7px 8px;font-size:13px;color:var(--text-3);background:var(--bg);border-right:1px solid var(--border)">$</span>
+                <input type="number" id="post-value-high" placeholder="High" min="0" step="50" style="border:none;padding:7px 10px;font-size:13px;width:80px;outline:none;background:#fff" value="{{ active_booking.estimated_value_high or '' }}">
+              </div>
             </div>
           </div>
           <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
@@ -553,10 +553,17 @@
             <textarea id="post-notes" placeholder="Scope of work, what was discussed, access info…" style="min-height:80px"></textarea>
           </div>
           <div class="booking-field" style="margin-bottom:16px">
-            <label>Opportunity value</label>
-            <div style="display:flex;align-items:center;gap:0;border:1px solid var(--border);border-radius:7px;overflow:hidden;background:#fff;max-width:180px">
-              <span style="padding:7px 8px;font-size:13px;color:var(--text-3);background:var(--bg);border-right:1px solid var(--border)">$</span>
-              <input type="number" id="post-value" placeholder="850" min="0" step="50" style="border:none;padding:7px 10px;font-size:13px;width:140px;outline:none;background:#fff">
+            <label>Opportunity value range</label>
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+              <div style="display:flex;align-items:center;gap:0;border:1px solid var(--border);border-radius:7px;overflow:hidden;background:#fff">
+                <span style="padding:7px 8px;font-size:13px;color:var(--text-3);background:var(--bg);border-right:1px solid var(--border)">$</span>
+                <input type="number" id="post-value-low" placeholder="Low" min="0" step="50" style="border:none;padding:7px 10px;font-size:13px;width:80px;outline:none;background:#fff">
+              </div>
+              <span style="font-size:12px;color:var(--text-3)">–</span>
+              <div style="display:flex;align-items:center;gap:0;border:1px solid var(--border);border-radius:7px;overflow:hidden;background:#fff">
+                <span style="padding:7px 8px;font-size:13px;color:var(--text-3);background:var(--bg);border-right:1px solid var(--border)">$</span>
+                <input type="number" id="post-value-high" placeholder="High" min="0" step="50" style="border:none;padding:7px 10px;font-size:13px;width:80px;outline:none;background:#fff">
+              </div>
             </div>
           </div>
           <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
@@ -852,6 +859,19 @@
 
   // Pre-seed booking id if one already exists on page load
   let _bookingId = {{ active_booking.id if active_booking else 'null' }};
+
+  // One-time "Booking sent!" toast after redirect from Meetings Queue
+  (function() {
+    if (!_bookingId) return;
+    const key = 'booking_sent_' + _bookingId;
+    if (!sessionStorage.getItem(key)) return;
+    sessionStorage.removeItem(key);
+    const toast = document.createElement('div');
+    toast.textContent = '✓ Booking sent!';
+    toast.style.cssText = 'position:fixed;bottom:24px;right:24px;background:var(--green);color:#fff;font-size:13px;font-family:"IBM Plex Mono",monospace;padding:10px 18px;border-radius:8px;box-shadow:0 2px 8px rgba(0,0,0,0.15);z-index:9999;transition:opacity 0.4s';
+    document.body.appendChild(toast);
+    setTimeout(() => { toast.style.opacity = '0'; setTimeout(() => toast.remove(), 400); }, 3000);
+  })();
   const _pendingBookingLogId = {{ pending_booking_log_id or 'null' }};
   const _pendingBookingSubject = {{ ('"' + pending_booking_subject|replace('"','\\\"') + '"') if pending_booking_subject else 'null' }};
   const _pendingBookingBody = {{ ('"' + pending_booking_body|replace('"','\\\"')|replace('\n','\\n') + '"') if pending_booking_body else 'null' }};
@@ -1163,38 +1183,6 @@
     } catch (e) { alert('Error: ' + e.message); }
   }
 
-  // ── Awaiting Estimate flow ─────────────────────────────────────────────────
-
-  function toggleEstimateUnknown() {
-    const cb = document.getElementById('estimate-unknown-cb');
-    const input = document.getElementById('estimate-input');
-    if (cb && input) input.disabled = cb.checked;
-  }
-
-  async function saveEstimate(bookingId) {
-    const statusEl = document.getElementById('estimate-status');
-    const cb = document.getElementById('estimate-unknown-cb');
-    const input = document.getElementById('estimate-input');
-    const isUnknown = cb && cb.checked;
-    const value = input ? parseFloat(input.value) : null;
-    if (!isUnknown && (!value || value <= 0)) {
-      if (statusEl) { statusEl.style.color = 'var(--red)'; statusEl.textContent = 'Enter an amount or check Value Unknown.'; }
-      return;
-    }
-    try {
-      const res = await fetch(`/api/booking/${bookingId}/estimate`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ estimated_value: isUnknown ? null : value, estimate_unknown: isUnknown }),
-      });
-      if (!res.ok) throw new Error('Save failed');
-      if (statusEl) { statusEl.style.color = 'var(--green)'; statusEl.textContent = '✓ Saved'; }
-      setTimeout(() => window.location.reload(), 700);
-    } catch (e) {
-      if (statusEl) { statusEl.style.color = 'var(--red)'; statusEl.textContent = e.message; }
-    }
-  }
-
   // Close modals on backdrop click
   document.addEventListener('click', function(e) {
     const quoteModal = document.getElementById('quote-modal');
@@ -1208,8 +1196,10 @@
     const btn = document.getElementById('save-notes-btn');
     const statusEl = document.getElementById('notes-status');
     const notes = document.getElementById('post-notes').value.trim();
-    const valueStr = document.getElementById('post-value').value.trim();
-    const estimated_value = valueStr ? parseFloat(valueStr) : null;
+    const lowStr = document.getElementById('post-value-low')?.value.trim();
+    const highStr = document.getElementById('post-value-high')?.value.trim();
+    const estimated_value_low = lowStr ? parseInt(lowStr, 10) : null;
+    const estimated_value_high = highStr ? parseInt(highStr, 10) : null;
 
     btn.disabled = true;
     btn.textContent = 'Saving…';
@@ -1219,7 +1209,7 @@
       const res = await fetch(`/api/booking/${_bookingId}/notes`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ notes, estimated_value }),
+        body: JSON.stringify({ notes, estimated_value_low, estimated_value_high }),
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));

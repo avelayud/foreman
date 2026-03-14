@@ -2319,6 +2319,8 @@ def conversation_detail(request: Request, customer_id: int):
                 "service_type": active_booking_raw.service_type or "",
                 "notes": active_booking_raw.notes or "",
                 "estimated_value": active_booking_raw.estimated_value,
+                "estimated_value_low": active_booking_raw.estimated_value_low,
+                "estimated_value_high": active_booking_raw.estimated_value_high,
                 "estimate_unknown": bool(active_booking_raw.estimate_unknown),
                 "awaiting_estimate": bool(active_booking_raw.awaiting_estimate),
                 "source": active_booking_raw.source or "manual",
@@ -3236,7 +3238,9 @@ class ConfirmBookingRequest(BaseModel):
 
 class BookingNotesRequest(BaseModel):
     notes: str = ""
-    estimated_value: float | None = None
+    estimated_value: float | None = None        # legacy single-value field
+    estimated_value_low: int | None = None      # low end of range
+    estimated_value_high: int | None = None     # high end of range
 
 
 class BookingEstimateRequest(BaseModel):
@@ -3383,15 +3387,32 @@ def get_post_visit_updates():
 
 @app.post("/api/booking/{booking_id}/notes")
 def save_booking_notes(booking_id: int, req: BookingNotesRequest):
-    """Save post-booking notes and estimated job value."""
+    """Save post-booking notes and estimated job value (single or low/high range)."""
     with get_db() as db:
         booking = db.query(Booking).filter_by(id=booking_id, operator_id=OPERATOR_ID).first()
         if not booking:
             raise HTTPException(status_code=404, detail="Booking not found")
         if req.notes.strip():
             booking.notes = req.notes.strip()
-        if req.estimated_value is not None:
-            booking.estimated_value = req.estimated_value
+
+        # Compute midpoint from range if provided; fall back to legacy single value
+        midpoint: float | None = None
+        if req.estimated_value_low is not None or req.estimated_value_high is not None:
+            booking.estimated_value_low = req.estimated_value_low
+            booking.estimated_value_high = req.estimated_value_high
+            low = req.estimated_value_low or 0
+            high = req.estimated_value_high or req.estimated_value_low or 0
+            midpoint = (low + high) / 2.0
+            booking.estimated_value = midpoint
+        elif req.estimated_value is not None:
+            midpoint = req.estimated_value
+            booking.estimated_value = midpoint
+
+        if midpoint is not None:
+            # Keep customer.estimated_job_value in sync for pipeline/scoring
+            customer = db.query(Customer).filter_by(id=booking.customer_id).first()
+            if customer:
+                customer.estimated_job_value = midpoint
             # Also store on the OutreachLog as converted_job_value for pipeline tracking
             outreach_log = (
                 db.query(OutreachLog)
@@ -3405,7 +3426,7 @@ def save_booking_notes(booking_id: int, req: BookingNotesRequest):
                 .first()
             )
             if outreach_log:
-                outreach_log.converted_job_value = req.estimated_value
+                outreach_log.converted_job_value = midpoint
                 outreach_log.converted_to_job = True
                 outreach_log.converted_at = datetime.utcnow()
     return {"status": "saved"}
@@ -3552,6 +3573,7 @@ def confirm_booking(log_id: int, req: ConfirmBookingRequest):
     return {
         "status": "confirmed" if email_sent else "tentative",
         "booking_id": booking_id,
+        "customer_id": customer_id,
         "gcal_event_id": gcal_event_id,
         "gcal_error": gcal_error,
         "email_sent": email_sent,

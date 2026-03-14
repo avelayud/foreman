@@ -242,7 +242,9 @@ class Booking(Base):
 
     service_type = Column(String)
     notes = Column(Text)
-    estimated_value = Column(Float, nullable=True)  # Operator's estimate of job value ($)
+    estimated_value = Column(Float, nullable=True)  # Operator's estimate of job value ($) — midpoint of range
+    estimated_value_low = Column(Integer, nullable=True)   # Low end of estimate range ($)
+    estimated_value_high = Column(Integer, nullable=True)  # High end of estimate range ($)
     estimate_unknown = Column(Boolean, default=False)  # True if operator explicitly marked value unknown
     awaiting_estimate = Column(Boolean, default=False)  # True if auto-created and estimate not yet captured
 
