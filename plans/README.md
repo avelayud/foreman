@@ -13,17 +13,21 @@ Plans are authored in Claude app and executed in Claude Code.
 ```
 plans/
 ├── README.md
-├── job_05_operator_config_page/    # Phase 8 — next up
+├── job_05_operator_config_page/         # Phase 8 — active
 │   └── plan.md
-├── job_06_prompt_quality/          # Phase 8 — depends on 05
+├── job_06_prompt_quality/               # Phase 8 — depends on 05
 │   └── plan.md
-├── job_07_sms_send_path/           # Phase 9
+├── job_07_sms_send_path/                # Phase 9
 │   └── plan.md
-├── job_08_sms_ux/                  # Phase 9 — depends on 07
+├── job_08_sms_ux/                       # Phase 9 — depends on 07
 │   └── plan.md
-├── job_09_revenue_data_integrity/  # Phase 8 — parallel with 05
+├── job_09_revenue_data_integrity/       # Phase 8 — parallel with 05
 │   └── plan.md
-└── job_10_jobber_integration/      # Phase 10
+├── job_10_jobber_integration/           # Phase 10
+│   └── plan.md
+├── job_24_conversation_state_agent/     # Phase 8 — state reconciler + health override
+│   └── plan.md
+└── job_25_gcal_sync_agent/              # Phase 8 — depends on 24
     └── plan.md
 ```
 
@@ -74,12 +78,15 @@ Any gotchas, design decisions, or watch-outs.
 |-----|------|-------|--------|------------|
 | 05 | Operator Config Page | 8 | ⬜ Not started | — |
 | 09 | Revenue Data Integrity | 8 | ⬜ Not started | — *(parallel with 05)* |
+| 24 | Conversation State Agent + Health Override | 8 | ⬜ Not started | — *(parallel with 05/09)* |
+| 25 | Google Calendar Sync Agent | 8 | ⬜ Not started | Job 24 (`health_override` field) |
 | 06 | Prompt Quality Sprint | 8 | ⬜ Not started | Job 05 |
 | 07 | Twilio SMS Send Path | 9 | ⬜ Not started | — |
 | 08 | SMS Draft Pipeline + UX | 9 | ⬜ Not started | Job 07 |
 | 10 | Jobber / HousecallPro Integration | 10 | ⬜ Not started | Phases 8+9 stable |
 
-> Jobs 05 and 09 are fully independent — run them in parallel (two Claude Code sessions).
+> Jobs 05, 09, and 24 are fully independent — can run in parallel (separate Claude Code sessions).
+> Job 25 depends on Job 24 for the `health_override` Customer field.
 > Job 06 requires Job 05 (`core/operator_config.py`) to exist first.
 > Job 07 and 08 are sequential. Job 10 is standalone once Phases 8+9 are done.
 
