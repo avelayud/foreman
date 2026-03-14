@@ -25,9 +25,19 @@ plans/
 │   └── plan.md
 ├── job_10_jobber_integration/           # Phase 10
 │   └── plan.md
-├── job_24_conversation_state_agent/     # Phase 8 — state reconciler + health override
+├── job_24_conversation_state_agent/     # Phase 8 — state reconciler + health override ✅ Done
 │   └── plan.md
-└── job_25_gcal_sync_agent/              # Phase 8 — depends on 24
+├── job_25_gcal_sync_agent/              # Phase 8 — depends on 24 ✅ Done
+│   └── plan.md
+├── job_26_edit_meeting_invite/          # Phase 8 — edit/reschedule confirmed appointment
+│   └── plan.md
+├── job_27_agents_page_polish/           # Phase 8 — group agents + fix UTC timestamps
+│   └── plan.md
+├── job_28_meeting_queue_status/         # Phase 8 — fix "Meeting Confirmed" on drafts
+│   └── plan.md
+├── job_29_conversations_layout/         # Phase 8 — compact rows + distribution donut
+│   └── plan.md
+└── job_30_updates_page_redesign/        # Phase 8 — notification feed + compact quadrants
     └── plan.md
 ```
 
@@ -76,17 +86,22 @@ Any gotchas, design decisions, or watch-outs.
 
 | Job | Name | Phase | Status | Depends On |
 |-----|------|-------|--------|------------|
+| 24 | Conversation State Agent + Health Override | 8 | ✅ Done | — |
+| 25 | Google Calendar Sync Agent | 8 | ✅ Done | Job 24 |
+| 26 | Edit / Reschedule Meeting Invite | 8 | ⬜ Not started | — |
+| 27 | Agents Page: Grouping + Timezone Fix | 8 | ⬜ Not started | — |
+| 28 | Fix Meeting Queue Status Tag | 8 | ⬜ Not started | — |
+| 29 | Conversations Page: Compact Layout + Donut | 8 | ⬜ Not started | — |
+| 30 | Updates Page Redesign | 8 | ⬜ Not started | — |
 | 05 | Operator Config Page | 8 | ⬜ Not started | — |
 | 09 | Revenue Data Integrity | 8 | ⬜ Not started | — *(parallel with 05)* |
-| 24 | Conversation State Agent + Health Override | 8 | ⬜ Not started | — *(parallel with 05/09)* |
-| 25 | Google Calendar Sync Agent | 8 | ⬜ Not started | Job 24 (`health_override` field) |
 | 06 | Prompt Quality Sprint | 8 | ⬜ Not started | Job 05 |
 | 07 | Twilio SMS Send Path | 9 | ⬜ Not started | — |
 | 08 | SMS Draft Pipeline + UX | 9 | ⬜ Not started | Job 07 |
 | 10 | Jobber / HousecallPro Integration | 10 | ⬜ Not started | Phases 8+9 stable |
 
-> Jobs 05, 09, and 24 are fully independent — can run in parallel (separate Claude Code sessions).
-> Job 25 depends on Job 24 for the `health_override` Customer field.
+> Jobs 26–30 are fully independent — any can run in parallel.
+> Jobs 05 and 09 are independent of each other and of 26–30.
 > Job 06 requires Job 05 (`core/operator_config.py`) to exist first.
 > Job 07 and 08 are sequential. Job 10 is standalone once Phases 8+9 are done.
 

@@ -85,7 +85,6 @@
 
   /* Right column */
   .right-col{display:flex;flex-direction:column;gap:14px}
-  .right-col .confirmed-first{order:-1}
 
   /* Draft panel */
   .draft-body-textarea{width:100%;min-height:145px;border:1px solid var(--border);border-radius:7px;padding:9px 11px;font-size:13px;font-family:'IBM Plex Sans',sans-serif;color:var(--text);line-height:1.65;background:var(--bg);outline:none;resize:vertical;transition:border-color 0.15s;box-sizing:border-box}
@@ -311,76 +310,12 @@
     {% endif %}
     {% endif %}
 
-    {# ── Draft / Reply panel ── #}
-    <div class="panel" id="draft-panel">
-      <div class="panel-head">
-        <div style="display:flex;align-items:baseline;gap:8px;flex-wrap:wrap">
-          <span class="panel-title">
-            {% if health.needs_response %}Reply to Customer{% elif health.needs_follow_up %}Follow-up Due{% else %}Draft Message{% endif %}
-          </span>
-        </div>
-        <button class="btn-ghost" onclick="regenerateDraft()" id="regen-btn" style="font-size:11px;padding:5px 11px;display:none">↺ Regenerate</button>
-      </div>
-      <div class="panel-body">
-
-        {# State A: draft already in queue #}
-        {% if has_pending_draft %}
-        <div id="pending-notice" style="border:1px solid var(--blue);background:var(--blue-pale);border-radius:8px;padding:12px 14px;margin-bottom:10px">
-          <div style="font-size:12px;font-weight:700;color:var(--blue);margin-bottom:4px">Draft already in queue</div>
-          <div style="font-size:12px;color:var(--text-2);margin-bottom:8px">{{ pending_draft_summary }}</div>
-          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-            <a href="/{{ pending_draft_queue }}" class="btn-primary" style="font-size:12px;padding:6px 14px;text-decoration:none">View in {{ 'Meetings' if pending_draft_queue == 'meetings' else 'Outreach' }} Queue →</a>
-            <button class="btn-ghost" onclick="showGeneratePanel()" style="font-size:12px;padding:6px 12px">Generate different draft</button>
-          </div>
-        </div>
-        {% endif %}
-
-        {# State B: no draft — show generate button #}
-        <div id="generate-prompt" {% if has_pending_draft %}style="display:none"{% endif %}>
-          <div style="font-size:13px;color:var(--text-3);margin-bottom:12px">
-            {% if latest_classification == 'booking_confirmed' and not active_booking and health.key == 'needs_response' %}Customer confirmed availability — generate a new meeting invite draft to queue for review in the Meetings Queue.
-            {% elif health.needs_response %}Customer replied — generate a response draft to review before queuing.
-            {% elif health.needs_follow_up %}Follow-up is overdue. Generate a draft to review before queuing.
-            {% else %}No reply yet. Generate a follow-up draft if you want to reach out before the agent's next scheduled run.{% endif %}
-          </div>
-          {% if latest_classification == 'booking_confirmed' and not active_booking and health.key == 'needs_response' %}
-          <button class="btn-primary" onclick="redraftMeetingInvite(this)" style="font-size:13px;padding:8px 20px">Redraft Meeting Invite</button>
-          {% else %}
-          <button class="btn-primary" onclick="showGeneratePanel()" style="font-size:13px;padding:8px 20px">Generate Draft</button>
-          {% endif %}
-        </div>
-
-        {# State C: loading / form #}
-        <div id="draft-loading" class="draft-spinner" style="display:none">
-          <div class="spinner"></div>
-          <span>Agent is drafting…</span>
-        </div>
-        <div id="draft-form" style="display:none">
-          <div style="margin-bottom:10px">
-            <textarea class="draft-body-textarea" id="draft-body" placeholder="Email body"></textarea>
-          </div>
-          <div style="margin-bottom:12px">
-            <div style="font-size:10px;font-family:'IBM Plex Mono',monospace;letter-spacing:1px;text-transform:uppercase;color:var(--text-3);margin-bottom:4px">Revision Notes <span style="font-weight:400;opacity:0.7">(optional)</span></div>
-            <textarea id="revision-notes" rows="2" style="width:100%;border:1px solid var(--border);border-radius:6px;padding:7px 10px;font-size:12px;font-family:'IBM Plex Sans',sans-serif;color:var(--text);background:var(--surface);outline:none;resize:vertical;box-sizing:border-box" placeholder="E.g. Make it shorter, mention the seasonal discount…"></textarea>
-          </div>
-          <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-            <button class="btn-success" onclick="approveDraft()" id="approve-btn" style="font-size:13px">Approve &amp; Queue →</button>
-            <span id="draft-status" style="font-size:12px"></span>
-          </div>
-        </div>
-        <div id="draft-error" style="display:none;font-size:12.5px;color:var(--red);padding:6px 0"></div>
-
-      </div>
-    </div>
-
     {# ── Schedule Appointment panel ── #}
-    <div class="panel{% if active_booking and active_booking.status == 'confirmed' %} confirmed-first{% endif %}" id="schedule-panel">
+    <div class="panel" id="schedule-panel">
       <div class="panel-head">
         <span class="panel-title" style="display:flex;align-items:center;gap:6px">
           <span style="color:{% if active_booking and active_booking.status == 'confirmed' %}var(--green){% elif active_booking and active_booking.status == 'tentative' %}var(--amber){% else %}var(--navy){% endif %}">📅</span>
-          {% if active_booking and active_booking.status == 'confirmed' %}Appointment Confirmed
-          {% elif active_booking and active_booking.status == 'tentative' %}Pending — Invite Not Sent
-          {% else %}Schedule Appointment{% endif %}
+          Appointment
         </span>
         <button class="btn-ghost" onclick="resetSchedulePanel()" id="schedule-reset-btn" style="font-size:11px;padding:5px 11px;display:none">↺ New Booking</button>
       </div>
@@ -489,10 +424,6 @@
             </div>
           </div>
           <div class="booking-field" style="margin-bottom:12px">
-            <label>Job notes</label>
-            <textarea id="post-notes" placeholder="Scope of work, what was discussed, access info…" style="min-height:80px">{{ active_booking.notes }}</textarea>
-          </div>
-          <div class="booking-field" style="margin-bottom:16px">
             <label>Opportunity value range</label>
             <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
               <div style="display:flex;align-items:center;gap:0;border:1px solid var(--border);border-radius:7px;overflow:hidden;background:#fff">
@@ -504,11 +435,13 @@
                 <span style="padding:7px 8px;font-size:13px;color:var(--text-3);background:var(--bg);border-right:1px solid var(--border)">$</span>
                 <input type="number" id="post-value-high" placeholder="High" min="0" step="50" style="border:none;padding:7px 10px;font-size:13px;width:80px;outline:none;background:#fff" value="{{ active_booking.estimated_value_high or '' }}">
               </div>
+              <button class="book-send-btn" id="save-notes-btn" onclick="saveBookingNotes()" style="padding:7px 16px;font-size:12.5px">Save Notes</button>
+              <span id="notes-status" style="font-size:12px"></span>
             </div>
           </div>
-          <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
-            <button class="book-send-btn" id="save-notes-btn" onclick="saveBookingNotes()">Save Notes</button>
-            <span id="notes-status" style="font-size:12px"></span>
+          <div class="booking-field" style="margin-bottom:12px">
+            <label>Job notes</label>
+            <textarea id="post-notes" placeholder="Scope of work, what was discussed, access info…" style="min-height:80px">{{ active_booking.notes }}</textarea>
           </div>
         </div>
 
@@ -528,12 +461,7 @@
               </div>
             </div>
           </div>
-          <div style="font-size:12.5px;color:var(--text-2);margin-bottom:14px;line-height:1.5">Capture the opportunity value and any scope notes to track revenue from this outreach.</div>
           <div class="booking-field" style="margin-bottom:12px">
-            <label>Job notes</label>
-            <textarea id="post-notes" placeholder="Scope of work, what was discussed, access info…" style="min-height:80px">{{ active_booking.notes }}</textarea>
-          </div>
-          <div class="booking-field" style="margin-bottom:16px">
             <label>Opportunity value range</label>
             <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
               <div style="display:flex;align-items:center;gap:0;border:1px solid var(--border);border-radius:7px;overflow:hidden;background:#fff">
@@ -545,11 +473,13 @@
                 <span style="padding:7px 8px;font-size:13px;color:var(--text-3);background:var(--bg);border-right:1px solid var(--border)">$</span>
                 <input type="number" id="post-value-high" placeholder="High" min="0" step="50" style="border:none;padding:7px 10px;font-size:13px;width:80px;outline:none;background:#fff" value="{{ active_booking.estimated_value_high or '' }}">
               </div>
+              <button class="book-send-btn" id="save-notes-btn" onclick="saveBookingNotes()" style="padding:7px 16px;font-size:12.5px">Update Value</button>
+              <span id="notes-status" style="font-size:12px"></span>
             </div>
           </div>
-          <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
-            <button class="book-send-btn" id="save-notes-btn" onclick="saveBookingNotes()">Update Value</button>
-            <span id="notes-status" style="font-size:12px"></span>
+          <div class="booking-field" style="margin-bottom:12px">
+            <label>Job notes</label>
+            <textarea id="post-notes" placeholder="Scope of work, what was discussed, access info…" style="min-height:80px">{{ active_booking.notes }}</textarea>
           </div>
         </div>
 
@@ -588,6 +518,68 @@
           </div>
         </div>
         {% endif %}
+
+      </div>
+    </div>
+
+    {# ── Draft / Reply panel ── #}
+    <div class="panel" id="draft-panel">
+      <div class="panel-head">
+        <div style="display:flex;align-items:baseline;gap:8px;flex-wrap:wrap">
+          <span class="panel-title">
+            {% if health.needs_response %}Reply to Customer{% elif health.needs_follow_up %}Follow-up Due{% else %}Draft Message{% endif %}
+          </span>
+        </div>
+        <button class="btn-ghost" onclick="regenerateDraft()" id="regen-btn" style="font-size:11px;padding:5px 11px;display:none">↺ Regenerate</button>
+      </div>
+      <div class="panel-body">
+
+        {# State A: draft already in queue #}
+        {% if has_pending_draft %}
+        <div id="pending-notice" style="border:1px solid var(--blue);background:var(--blue-pale);border-radius:8px;padding:12px 14px;margin-bottom:10px">
+          <div style="font-size:12px;font-weight:700;color:var(--blue);margin-bottom:4px">Draft already in queue</div>
+          <div style="font-size:12px;color:var(--text-2);margin-bottom:8px">{{ pending_draft_summary }}</div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+            <a href="/{{ pending_draft_queue }}" class="btn-primary" style="font-size:12px;padding:6px 14px;text-decoration:none">View in {{ 'Meetings' if pending_draft_queue == 'meetings' else 'Outreach' }} Queue →</a>
+            <button class="btn-ghost" onclick="showGeneratePanel()" style="font-size:12px;padding:6px 12px">Generate different draft</button>
+          </div>
+        </div>
+        {% endif %}
+
+        {# State B: no draft — show generate button #}
+        <div id="generate-prompt" {% if has_pending_draft %}style="display:none"{% endif %}>
+          <div style="font-size:13px;color:var(--text-3);margin-bottom:12px">
+            {% if latest_classification == 'booking_confirmed' and not active_booking and health.key == 'needs_response' %}Customer confirmed availability — generate a new meeting invite draft to queue for review in the Meetings Queue.
+            {% elif health.needs_response %}Customer replied — generate a response draft to review before queuing.
+            {% elif health.needs_follow_up %}Follow-up is overdue. Generate a draft to review before queuing.
+            {% else %}No reply yet. Generate a follow-up draft if you want to reach out before the agent's next scheduled run.{% endif %}
+          </div>
+          {% if latest_classification == 'booking_confirmed' and not active_booking and health.key == 'needs_response' %}
+          <button class="btn-primary" onclick="redraftMeetingInvite(this)" style="font-size:13px;padding:8px 20px">Redraft Meeting Invite</button>
+          {% else %}
+          <button class="btn-primary" onclick="showGeneratePanel()" style="font-size:13px;padding:8px 20px">Generate Draft</button>
+          {% endif %}
+        </div>
+
+        {# State C: loading / form #}
+        <div id="draft-loading" class="draft-spinner" style="display:none">
+          <div class="spinner"></div>
+          <span>Agent is drafting…</span>
+        </div>
+        <div id="draft-form" style="display:none">
+          <div style="margin-bottom:10px">
+            <textarea class="draft-body-textarea" id="draft-body" placeholder="Email body"></textarea>
+          </div>
+          <div style="margin-bottom:12px">
+            <div style="font-size:10px;font-family:'IBM Plex Mono',monospace;letter-spacing:1px;text-transform:uppercase;color:var(--text-3);margin-bottom:4px">Revision Notes <span style="font-weight:400;opacity:0.7">(optional)</span></div>
+            <textarea id="revision-notes" rows="2" style="width:100%;border:1px solid var(--border);border-radius:6px;padding:7px 10px;font-size:12px;font-family:'IBM Plex Sans',sans-serif;color:var(--text);background:var(--surface);outline:none;resize:vertical;box-sizing:border-box" placeholder="E.g. Make it shorter, mention the seasonal discount…"></textarea>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+            <button class="btn-success" onclick="approveDraft()" id="approve-btn" style="font-size:13px">Approve &amp; Queue →</button>
+            <span id="draft-status" style="font-size:12px"></span>
+          </div>
+        </div>
+        <div id="draft-error" style="display:none;font-size:12.5px;color:var(--red);padding:6px 0"></div>
 
       </div>
     </div>
@@ -698,6 +690,30 @@
       <button onclick="submitClose()" class="btn-primary" style="font-size:13px;padding:7px 16px;background:var(--green)">Mark as Won</button>
     </div>
     <div id="close-modal-status" style="font-size:12px;margin-top:8px;color:var(--red)"></div>
+  </div>
+</div>
+
+{# ── Opportunity value prompt modal ── #}
+<div id="opp-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:1000;align-items:center;justify-content:center">
+  <div style="background:#fff;border-radius:10px;padding:24px;width:380px;max-width:90vw;box-shadow:0 8px 32px rgba(0,0,0,0.18)">
+    <div style="font-size:14px;font-weight:700;color:var(--navy);margin-bottom:4px">What's the opportunity value?</div>
+    <div style="font-size:12px;color:var(--text-3);margin-bottom:16px">Enter a low–high estimate to track pipeline revenue. You can update this any time.</div>
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:16px;flex-wrap:wrap">
+      <div style="display:flex;align-items:center;gap:0;border:1px solid var(--border);border-radius:7px;overflow:hidden;background:#fff">
+        <span style="padding:7px 8px;font-size:13px;color:var(--text-3);background:var(--bg);border-right:1px solid var(--border)">$</span>
+        <input type="number" id="opp-modal-low" placeholder="Low" min="0" step="50" style="border:none;padding:7px 10px;font-size:13px;width:90px;outline:none">
+      </div>
+      <span style="font-size:12px;color:var(--text-3)">–</span>
+      <div style="display:flex;align-items:center;gap:0;border:1px solid var(--border);border-radius:7px;overflow:hidden;background:#fff">
+        <span style="padding:7px 8px;font-size:13px;color:var(--text-3);background:var(--bg);border-right:1px solid var(--border)">$</span>
+        <input type="number" id="opp-modal-high" placeholder="High" min="0" step="50" style="border:none;padding:7px 10px;font-size:13px;width:90px;outline:none">
+      </div>
+    </div>
+    <div style="display:flex;gap:8px;justify-content:flex-end">
+      <button onclick="closeOppModal()" class="btn-ghost" style="font-size:13px;padding:7px 16px">Skip</button>
+      <button onclick="saveOppModal()" class="btn-primary" style="font-size:13px;padding:7px 16px">Save</button>
+    </div>
+    <div id="opp-modal-status" style="font-size:12px;margin-top:8px;color:var(--red)"></div>
   </div>
 </div>
 
@@ -1254,6 +1270,50 @@
       btn.textContent = 'Save Notes';
     }
   }
+
+  // ── Opportunity value prompt modal ─────────────────────────────────────────
+  function closeOppModal() {
+    document.getElementById('opp-modal').style.display = 'none';
+    sessionStorage.setItem('opp_prompt_shown_' + CUSTOMER_ID, '1');
+  }
+
+  async function saveOppModal() {
+    const low = document.getElementById('opp-modal-low').value;
+    const high = document.getElementById('opp-modal-high').value;
+    if (!low && !high) { closeOppModal(); return; }
+    const statusEl = document.getElementById('opp-modal-status');
+    statusEl.textContent = 'Saving…';
+    statusEl.style.color = 'var(--text-3)';
+    try {
+      const res = await fetch(`/api/booking/${ACTIVE_BOOKING_ID}/update-notes`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({estimated_value_low: low ? parseFloat(low) : null, estimated_value_high: high ? parseFloat(high) : null}),
+      });
+      if (!res.ok) throw new Error('Save failed');
+      // Also update the inline fields if visible
+      const lowEl = document.getElementById('post-value-low');
+      const highEl = document.getElementById('post-value-high');
+      if (lowEl && low) lowEl.value = low;
+      if (highEl && high) highEl.value = high;
+      closeOppModal();
+    } catch (e) {
+      statusEl.textContent = 'Error saving — try again';
+      statusEl.style.color = 'var(--red)';
+    }
+  }
+
+  // Show opportunity value prompt on first visit if booking exists without a value
+  {% if active_booking and not active_booking.estimated_value_low and not active_booking.estimated_value_high and not active_booking.estimated_value %}
+  window.addEventListener('DOMContentLoaded', function() {
+    const key = 'opp_prompt_shown_' + CUSTOMER_ID;
+    if (!sessionStorage.getItem(key)) {
+      setTimeout(function() {
+        document.getElementById('opp-modal').style.display = 'flex';
+      }, 600);
+    }
+  });
+  {% endif %}
 
 </script>
 {% endblock %}
