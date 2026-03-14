@@ -493,9 +493,12 @@ def generate_response(
     classification: str,
     inbound_log_id: int = None,
     verbose: bool = True,
+    revision_notes: str = "",
 ) -> int | None:
     """
     Generate a context-rich draft reply and queue it for operator review.
+
+    revision_notes: optional operator instructions for regeneration (e.g. "make it shorter").
 
     Returns the OutreachLog.id of the queued draft, or None on failure.
     """
@@ -702,6 +705,10 @@ def generate_response(
             thread_text=thread_text,
             reply_text=inbound_reply_text or "(see thread above)",
         )
+
+    # -- Append operator revision notes if provided ----------------------------
+    if revision_notes and revision_notes.strip():
+        user_prompt += f"\n\nOperator revision notes: {revision_notes.strip()}\nPlease incorporate these changes into the draft."
 
     # -- Generate draft --------------------------------------------------------
     client = anthropic.Anthropic(api_key=config.ANTHROPIC_API_KEY)

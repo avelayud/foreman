@@ -2764,10 +2764,15 @@ Do not repeat the first email word-for-word. Be natural, not pushy. Match the op
 
 class DraftRequest(BaseModel):
     voice_id: str = None
+    revision_notes: str = ""
+
+
+class RegenerateRequest(BaseModel):
+    revision_notes: str = ""
 
 
 @app.post("/api/conversation/{customer_id}/draft")
-def generate_conversation_draft(customer_id: int):
+def generate_conversation_draft(customer_id: int, req: DraftRequest = None):
     """Generate a context-aware reply (if customer replied) or follow-up (if overdue) draft."""
     with get_db() as db:
         customer = db.query(Customer).filter_by(id=customer_id, operator_id=OPERATOR_ID).first()
@@ -2835,6 +2840,8 @@ def generate_conversation_draft(customer_id: int):
     )
     days = days_since(cust_last_service_date)
 
+    revision_notes = (req.revision_notes or "").strip() if req else ""
+
     try:
         client = anthropic.Anthropic(api_key=config.ANTHROPIC_API_KEY)
         if is_reply:
@@ -2861,6 +2868,8 @@ def generate_conversation_draft(customer_id: int):
                 total_spend=cust_total_spend,
                 thread=thread,
             )
+        if revision_notes:
+            user_content += f"\n\nOperator revision notes: {revision_notes}\nPlease incorporate these changes into the draft."
         message = client.messages.create(
             model=config.CLAUDE_MODEL,
             max_tokens=800,
@@ -4142,7 +4151,7 @@ def action_book_call(customer_id: int):
 
 
 @app.post("/api/outreach/{log_id}/regenerate")
-def regenerate_outreach(log_id: int):
+def regenerate_outreach(log_id: int, req: RegenerateRequest = None):
     """Delete the existing draft and regenerate a fresh one for the same customer.
 
     If the draft is a conversation reply (has response_classification), it re-runs
@@ -4170,6 +4179,8 @@ def regenerate_outreach(log_id: int):
         inbound_log_id = latest_inbound.id if latest_inbound else None
         db.delete(log)
 
+    revision_notes = (req.revision_notes or "").strip() if req else ""
+
     # Route to conversation agent if this is a reply draft, else cold reactivation
     if classification and classification not in ("", "unsubscribe_request"):
         from agents.conversation_agent import generate_response
@@ -4179,6 +4190,7 @@ def regenerate_outreach(log_id: int):
             classification=classification,
             inbound_log_id=inbound_log_id,
             verbose=True,
+            revision_notes=revision_notes,
         )
         if not new_id:
             raise HTTPException(status_code=500, detail="Failed to regenerate reply draft")
@@ -4221,21 +4233,25 @@ def regenerate_outreach(log_id: int):
 
 
 @app.post("/api/meetings/{log_id}/regenerate")
-def regenerate_meeting(log_id: int):
-    """Delete the existing meeting draft and regenerate a booking proposal."""
+def regenerate_meeting(log_id: int, req: RegenerateRequest = None):
+    """Delete the existing meeting draft and regenerate a booking confirmation."""
     with get_db() as db:
         log = db.query(OutreachLog).filter_by(id=log_id, operator_id=OPERATOR_ID, dry_run=True).first()
         if not log:
             raise HTTPException(status_code=404, detail="Draft not found")
         customer_id = log.customer_id
+        classification = log.response_classification or "booking_confirmed"
         db.delete(log)
+
+    revision_notes = (req.revision_notes or "").strip() if req else ""
 
     from agents.conversation_agent import generate_response
     draft_id = generate_response(
         operator_id=OPERATOR_ID,
         customer_id=customer_id,
-        classification="booking_intent",
+        classification=classification,
         verbose=True,
+        revision_notes=revision_notes,
     )
     if not draft_id:
         raise HTTPException(status_code=500, detail="Failed to regenerate booking proposal")

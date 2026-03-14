@@ -348,8 +348,12 @@
           <span>Agent is drafting…</span>
         </div>
         <div id="draft-form" style="display:none">
-          <div style="margin-bottom:12px">
+          <div style="margin-bottom:10px">
             <textarea class="draft-body-textarea" id="draft-body" placeholder="Email body"></textarea>
+          </div>
+          <div style="margin-bottom:12px">
+            <div style="font-size:10px;font-family:'IBM Plex Mono',monospace;letter-spacing:1px;text-transform:uppercase;color:var(--text-3);margin-bottom:4px">Revision Notes <span style="font-weight:400;opacity:0.7">(optional)</span></div>
+            <textarea id="revision-notes" rows="2" style="width:100%;border:1px solid var(--border);border-radius:6px;padding:7px 10px;font-size:12px;font-family:'IBM Plex Sans',sans-serif;color:var(--text);background:var(--surface);outline:none;resize:vertical;box-sizing:border-box" placeholder="E.g. Make it shorter, mention the seasonal discount…"></textarea>
           </div>
           <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
             <button class="btn-success" onclick="approveDraft()" id="approve-btn" style="font-size:13px">Approve &amp; Queue →</button>
@@ -775,8 +779,14 @@
     if (genPrompt) genPrompt.style.display = 'none';
     if (regenBtn) regenBtn.disabled = true;
     document.getElementById('draft-status').textContent = '';
+    const revisionEl = document.getElementById('revision-notes');
+    const revision_notes = revisionEl ? revisionEl.value.trim() : '';
     try {
-      const res = await fetch(`/api/conversation/${CUSTOMER_ID}/draft`, { method: 'POST' });
+      const res = await fetch(`/api/conversation/${CUSTOMER_ID}/draft`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({revision_notes}),
+      });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
         throw new Error(data.detail || `Server error ${res.status}`);

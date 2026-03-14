@@ -189,6 +189,13 @@
               <label class="field-label">Body</label>
               <textarea id="body-{{ item.log_id }}" rows="7" class="field-textarea">{{ item.content or '' }}</textarea>
             </div>
+            <div class="field-block" style="margin-top:8px;margin-bottom:0">
+              <label class="field-label" style="color:var(--text-3)">Revision Notes <span style="font-weight:400;opacity:0.7">(optional — describe changes for regeneration)</span></label>
+              <textarea id="revision-{{ item.log_id }}" rows="2" class="field-textarea" style="min-height:unset;font-size:12px" placeholder="E.g. Change the tone, mention they can reschedule if needed…"></textarea>
+            </div>
+            <div style="margin-top:8px">
+              <button class="btn-ghost" style="color:var(--text-3);font-size:11px;padding:5px 10px" onclick="regenerateMeeting({{ item.log_id }}, this)">&#8635; Regenerate with Notes</button>
+            </div>
           </div>
         </div>
 
@@ -230,7 +237,6 @@
             {% endif %}
             <span id="action-label-{{ item.log_id }}" class="inline-status" style="display:none;color:var(--green)"></span>
             <span id="action-error-{{ item.log_id }}" class="inline-status" style="display:none;color:var(--red)"></span>
-            <button class="btn-ghost action-btn" style="color:var(--text-3);font-size:11px" onclick="regenerateMeeting({{ item.log_id }}, this)">&#8635; Regenerate Email</button>
             <button onclick="removeFromQueue({{ item.log_id }})" class="btn-ghost action-btn" style="color:var(--red);border-color:#fecaca" id="remove-btn-{{ item.log_id }}">
               Discard
             </button>
@@ -546,14 +552,21 @@
   }
 
   async function regenerateMeeting(logId, btn) {
-    if (!confirm('Regenerate this invite draft? Calendar slots will be refreshed.')) return;
+    if (!confirm('Regenerate this invite draft? The current text will be replaced.')) return;
+    const origText = btn.textContent;
     btn.disabled = true;
     btn.textContent = 'Regenerating…';
+    const revisionEl = document.getElementById('revision-' + logId);
+    const revision_notes = revisionEl ? revisionEl.value.trim() : '';
     try {
-      const res = await fetch(`/api/meetings/${logId}/regenerate`, {method: 'POST'});
+      const res = await fetch(`/api/meetings/${logId}/regenerate`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({revision_notes}),
+      });
       if (res.ok) { window.location.reload(); }
-      else { btn.disabled = false; btn.textContent = '↺ Regenerate'; alert('Could not regenerate'); }
-    } catch(e) { btn.disabled = false; btn.textContent = '↺ Regenerate'; }
+      else { btn.disabled = false; btn.textContent = origText; alert('Could not regenerate'); }
+    } catch(e) { btn.disabled = false; btn.textContent = origText; }
   }
 </script>
 {% endblock %}
