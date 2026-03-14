@@ -264,7 +264,7 @@ def _get_conversations_attention_count(db) -> int:
         last_inbound_at = max((l.sent_at or l.created_at for l in inbound), default=None)
         # Override status if inbound logs exist but status wasn't updated yet
         effective = status
-        if inbound and effective not in ("booked", "sequence_complete", "unsubscribed", "replied"):
+        if inbound and effective not in ("booked", "invite_sent", "sequence_complete", "unsubscribed", "replied"):
             effective = "replied"
         health = _conversation_health(effective, last_outbound_at, last_inbound_at)
         if health["needs_response"] or health["needs_follow_up"]:
@@ -804,7 +804,7 @@ def categorize_from_dict(cd: dict, days: int, status: str) -> str:
         return "unsubscribed"
     if status in ("outreach_sent", "sequence_step_2", "sequence_step_3"):
         return "in_sequence"
-    if status in ("replied", "booked", "sequence_complete"):
+    if status in ("replied", "booked", "invite_sent", "sequence_complete"):
         return "converted"
     if days >= 365:
         return "prime"
@@ -820,7 +820,7 @@ def categorize(customer) -> str:
         return "unsubscribed"
     if status in ("outreach_sent", "sequence_step_2", "sequence_step_3"):
         return "in_sequence"
-    if status in ("replied", "booked", "sequence_complete"):
+    if status in ("replied", "booked", "invite_sent", "sequence_complete"):
         return "converted"
     if days >= 365:
         return "prime"
@@ -855,7 +855,7 @@ SEGMENT_INFO = {
 }
 
 def get_segment_key(c: dict) -> str:
-    if c['reactivation_status'] in ('replied', 'booked'):
+    if c['reactivation_status'] in ('replied', 'booked', 'invite_sent'):
         return 'referral'
     if c['total_spend'] >= 1500:
         return 'high_value'
@@ -893,6 +893,7 @@ CONVERSATION_STAGE_META = {
     "sequence_step_2": {"label": "Follow-up 1 Sent", "progress_pct": 50, "status_cls": "s-warm"},
     "sequence_step_3": {"label": "Follow-up 2 Sent", "progress_pct": 75, "status_cls": "s-warm"},
     "replied": {"label": "Customer Replied", "progress_pct": 100, "status_cls": "s-ok"},
+    "invite_sent": {"label": "Invite Sent", "progress_pct": 100, "status_cls": "s-booked"},
     "booked": {"label": "Booked", "progress_pct": 100, "status_cls": "s-ok"},
     "sequence_complete": {"label": "Sequence Complete", "progress_pct": 100, "status_cls": "s-none"},
     "unsubscribed": {"label": "Unsubscribed", "progress_pct": 0, "status_cls": "s-none"},
@@ -903,7 +904,8 @@ CONVERSATION_HEALTH_META = {
     "needs_response": {"label": "Needs Response", "chip_cls": "needs-response", "rank": 0},
     "needs_follow_up": {"label": "Needs Follow-up", "chip_cls": "needs-follow-up", "rank": 1},
     "awaiting_reply": {"label": "Awaiting Reply", "chip_cls": "awaiting-reply", "rank": 2},
-    "closed": {"label": "Closed", "chip_cls": "closed", "rank": 3},
+    "invite_sent": {"label": "Invite Sent", "chip_cls": "invite-sent", "rank": 3},
+    "closed": {"label": "Closed", "chip_cls": "closed", "rank": 4},
 }
 
 
@@ -955,6 +957,18 @@ def _conversation_stage(status: str) -> dict:
 def _conversation_health(status: str, last_outbound_at, last_inbound_at):
     if status in ("booked", "sequence_complete", "unsubscribed"):
         key = "closed"
+        meta = CONVERSATION_HEALTH_META[key]
+        return {
+            "key": key,
+            "label": meta["label"],
+            "chip_cls": meta["chip_cls"],
+            "rank": meta["rank"],
+            "needs_response": False,
+            "needs_follow_up": False,
+        }
+
+    if status == "invite_sent":
+        key = "invite_sent"
         meta = CONVERSATION_HEALTH_META[key]
         return {
             "key": key,
@@ -1121,7 +1135,7 @@ def _auto_next_steps(status: str, last_outbound_at, last_inbound_at):
             {"title": "Tag conversation as warm opportunity", "timing": "After response", "owner": "Agent"},
         ]
 
-    if status == "booked":
+    if status in ("booked", "invite_sent"):
         return [
             {"title": "Confirm appointment details", "timing": "Now", "owner": "Human"},
             {"title": "Trigger reminder sequence", "timing": "24h before visit", "owner": "Agent"},
@@ -1418,7 +1432,10 @@ def _get_enriched_customers(operator_id: int) -> list[dict]:
         cat = categorize_from_dict(cd, days, status)
         cd["days_dormant"] = days
         cd["category"] = cat
-        if status == "booked":
+        if status == "invite_sent":
+            cd["outreach_status"] = "Invite Sent"
+            cd["outreach_status_cls"] = "s-booked"
+        elif status == "booked":
             cd["outreach_status"] = "Booked"
             cd["outreach_status_cls"] = "s-booked"
         elif status == "replied":
@@ -1483,7 +1500,7 @@ def dashboard(request: Request):
 
     # Partition into 4 groups
     group_upcoming = sorted(
-        [c for c in enriched if c["reactivation_status"] == "booked"],
+        [c for c in enriched if c["reactivation_status"] in ("booked", "invite_sent")],
         key=lambda x: -x["score"],
     )
     group_attention = sorted(
@@ -2017,7 +2034,7 @@ def updates_page(request: Request):
             last_inbound_at = max((_l.sent_at or _l.created_at for _l in inbound), default=None)
 
             effective = cust.reactivation_status
-            if inbound and effective not in ("booked", "sequence_complete", "unsubscribed", "replied"):
+            if inbound and effective not in ("booked", "invite_sent", "sequence_complete", "unsubscribed", "replied"):
                 effective = "replied"
             health = _conversation_health(effective, last_outbound_at, last_inbound_at)
 
@@ -2157,7 +2174,7 @@ def conversations(request: Request):
             # Derive effective status from actual log activity — handles race where
             # reply_detector logged the inbound message but didn't yet update reactivation_status
             effective_status = customer.reactivation_status
-            if inbound_logs and effective_status not in ("booked", "sequence_complete", "unsubscribed", "replied"):
+            if inbound_logs and effective_status not in ("booked", "invite_sent", "sequence_complete", "unsubscribed", "replied"):
                 effective_status = "replied"
             stage = _conversation_stage(effective_status)
             health = _conversation_health(effective_status, last_outbound_at, last_inbound_at)
@@ -2213,6 +2230,7 @@ def conversations(request: Request):
         "awaiting_reply_count": health_counts["awaiting_reply"],
         "needs_response_count": health_counts["needs_response"],
         "needs_follow_up_count": health_counts["needs_follow_up"],
+        "invite_sent_count": health_counts["invite_sent"],
         "closed_count": health_counts["closed"],
     })
 
@@ -2341,7 +2359,7 @@ def conversation_detail(request: Request, customer_id: int):
         # Derive effective status from actual log activity so chips stay consistent
         # with the timeline even if reactivation_status wasn't updated yet
         effective_status = customer.reactivation_status
-        if latest_inbound and effective_status not in ("booked", "sequence_complete", "unsubscribed", "replied"):
+        if latest_inbound and effective_status not in ("booked", "invite_sent", "sequence_complete", "unsubscribed", "replied"):
             effective_status = "replied"
         stage = _conversation_stage(effective_status)
         health = _conversation_health(effective_status, last_outbound_at, last_inbound_at)
@@ -2491,10 +2509,9 @@ def delete_outreach(log_id: int):
             )
             for b in stale_bookings:
                 b.status = "cancelled"
-            # Always reset customer to "replied" — covers stale "booked" status set by
-            # old code that didn't distinguish tentative vs confirmed bookings.
+            # Always reset customer to "replied" — covers stale "booked"/"invite_sent" status
             cust = db.query(Customer).filter_by(id=customer_id, operator_id=OPERATOR_ID).first()
-            if cust and cust.reactivation_status == "booked":
+            if cust and cust.reactivation_status in ("booked", "invite_sent"):
                 cust.reactivation_status = "replied"
             # Do NOT reset draft_queued — prevents auto-regeneration by response_generator.
             # Operator uses "Redraft Meeting Invite" on the conversation page to re-queue on demand.
@@ -2793,7 +2810,7 @@ def generate_conversation_draft(customer_id: int):
         thread = "\n\n".join(thread_lines)
         has_thread = bool(thread_lines)
         effective_status = customer.reactivation_status
-        if inbound_logs and effective_status not in ("booked", "sequence_complete", "unsubscribed", "replied"):
+        if inbound_logs and effective_status not in ("booked", "invite_sent", "sequence_complete", "unsubscribed", "replied"):
             effective_status = "replied"
         is_reply = bool(last_inbound and (not last_outbound_at or last_inbound_at > last_outbound_at))
         # Serialize ORM attributes before session closes to avoid DetachedInstanceError
@@ -3500,13 +3517,13 @@ def confirm_booking(log_id: int, req: ConfirmBookingRequest):
                     log.sent_at = datetime.utcnow()
                     if thread_id:
                         log.gmail_thread_id = thread_id
-                # Promote booking to confirmed + mark customer as booked now that email is sent
+                # Promote booking to confirmed + mark customer as invite_sent now that email is sent
                 b = db.query(Booking).filter_by(id=booking_id).first()
                 if b:
                     b.status = "confirmed"
                 c = db.query(Customer).filter_by(id=customer_id).first()
                 if c:
-                    c.reactivation_status = "booked"
+                    c.reactivation_status = "invite_sent"
             # Send thread reply if provided — short casual note in the existing email chain
             thread_reply_sent = False
             if email_sent and req.thread_reply_body and req.thread_reply_body.strip():
@@ -3743,13 +3760,13 @@ def book_and_invite(customer_id: int, req: ConfirmBookingRequest):
                     response_classification="booking_confirmed",
                 )
                 db.add(log)
-                # Promote booking to confirmed + mark customer as booked
+                # Promote booking to confirmed + mark customer as invite_sent
                 b = db.query(Booking).filter_by(id=booking_id).first()
                 if b:
                     b.status = "confirmed"
                 c = db.query(Customer).filter_by(id=customer_id).first()
                 if c:
-                    c.reactivation_status = "booked"
+                    c.reactivation_status = "invite_sent"
         except Exception as e:
             send_error = str(e)
     # Dry run: booking stays tentative, customer stays replied, no email sent

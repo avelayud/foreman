@@ -12,12 +12,14 @@
   .conv-card.needs-response{border-left-color:var(--red)}
   .conv-card.needs-follow-up{border-left-color:var(--amber)}
   .conv-card.awaiting-reply{border-left-color:var(--blue)}
+  .conv-card.invite-sent{border-left-color:#6d28d9}
   .conv-card.closed{border-left-color:var(--green)}
 
   .health-chip{display:inline-flex;align-items:center;gap:6px;font-size:11px;font-family:'IBM Plex Mono',monospace;padding:3px 10px;border-radius:20px;border:1px solid}
   .chip-needs-response{background:var(--red-pale);color:var(--red);border-color:#fecaca}
   .chip-needs-follow-up{background:var(--amber-pale);color:var(--amber);border-color:#fde68a}
   .chip-awaiting-reply{background:var(--blue-pale);color:var(--blue);border-color:#bfdbfe}
+  .chip-invite-sent{background:#ede9fe;color:#6d28d9;border-color:#c4b5fd}
   .chip-closed{background:var(--green-pale);color:var(--green);border-color:#a7f3d0}
 
   .conv-layout{display:grid;grid-template-columns:minmax(0,1fr) minmax(220px,25%);gap:14px;align-items:stretch}
@@ -81,6 +83,7 @@
     <button onclick="setStatusFilter('needs-response', this)" id="filter-needs-response" class="conv-filter-btn" style="--fc:var(--red);--fbc:#fee2e2;--fbc2:#fecaca">Needs Response <span class="filter-count">{{ needs_response_count }}</span></button>
     <button onclick="setStatusFilter('needs-follow-up', this)" id="filter-needs-follow-up" class="conv-filter-btn" style="--fc:var(--amber);--fbc:#fef3c7;--fbc2:#fde68a">Needs Follow-up <span class="filter-count">{{ needs_follow_up_count }}</span></button>
     <button onclick="setStatusFilter('awaiting-reply', this)" id="filter-awaiting-reply" class="conv-filter-btn" style="--fc:var(--blue);--fbc:var(--blue-pale);--fbc2:#bfdbfe">Awaiting Reply <span class="filter-count">{{ awaiting_reply_count }}</span></button>
+    <button onclick="setStatusFilter('invite-sent', this)" id="filter-invite-sent" class="conv-filter-btn" style="--fc:#6d28d9;--fbc:#ede9fe;--fbc2:#c4b5fd">Invite Sent <span class="filter-count">{{ invite_sent_count }}</span></button>
     <button onclick="setStatusFilter('closed', this)" id="filter-closed" class="conv-filter-btn" style="--fc:var(--green);--fbc:var(--green-pale);--fbc2:#a7f3d0">Closed <span class="filter-count">{{ closed_count }}</span></button>
   </div>
 </div>
