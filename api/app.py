@@ -154,6 +154,8 @@ _agent_last_run: dict[str, datetime | None] = {
     "reply_detector": None,
     "response_generator": None,
     "follow_up": None,
+    "state_reconciler": None,
+    "gcal_sync": None,
 }
 
 
@@ -692,6 +694,30 @@ def _run_post_visit_job():
         print(f"[post_visit] error: {exc}", flush=True)
 
 
+def _run_state_reconciler_job():
+    """Reconcile drifted conversation state — runs every 15 minutes."""
+    global _agent_last_run
+    try:
+        from agents.state_reconciler import run as run_state_reconciler
+        count = run_state_reconciler(operator_id=OPERATOR_ID)
+        _agent_last_run["state_reconciler"] = datetime.utcnow()
+        print(f"[state_reconciler] Run complete. {count} correction(s) made.", flush=True)
+    except Exception as exc:
+        print(f"[state_reconciler] error: {exc}", flush=True)
+
+
+def _run_gcal_sync_job():
+    """Sync GCal attendee responses for all tracked bookings — runs every 6 hours."""
+    global _agent_last_run
+    try:
+        from agents.gcal_sync import run as run_gcal_sync
+        result = run_gcal_sync(operator_id=OPERATOR_ID)
+        _agent_last_run["gcal_sync"] = datetime.utcnow()
+        print(f"[gcal_sync] Run complete. {result}", flush=True)
+    except Exception as exc:
+        print(f"[gcal_sync] error: {exc}", flush=True)
+
+
 def _refresh_queued_drafts():
     """
     Scans pending queue drafts. If a customer replied after a draft was created,
@@ -761,12 +787,16 @@ def _start_scoring_scheduler():
     _run_scoring_job()  # run once immediately
     _run_customer_analyzer_job()
     _run_post_visit_job()  # flag any past-due appointments on startup
+    _run_state_reconciler_job()  # reconcile any drifted state on startup
+    _run_gcal_sync_job()  # sync GCal events on startup
     scheduler = BackgroundScheduler(daemon=True)
     scheduler.add_job(_run_scoring_job, "interval", hours=24, id="daily_scoring")
     scheduler.add_job(_run_customer_analyzer_job, "interval", hours=24, id="daily_analyzer")
     scheduler.add_job(_run_follow_up_job, "interval", hours=24, id="daily_follow_up")
     scheduler.add_job(_run_post_visit_job, "interval", hours=24, id="daily_post_visit")
     scheduler.add_job(_refresh_queued_drafts, "interval", minutes=15, id="queue_refresh")
+    scheduler.add_job(_run_state_reconciler_job, "interval", minutes=15, id="state_reconciler")
+    scheduler.add_job(_run_gcal_sync_job, "interval", hours=6, id="gcal_sync")
     scheduler.start()
     _scoring_scheduler = scheduler
     print("✅ Scoring scheduler started (daily).", flush=True)
@@ -956,7 +986,12 @@ def _conversation_stage(status: str) -> dict:
     )
 
 
-def _conversation_health(status: str, last_outbound_at, last_inbound_at):
+def _conversation_health(status: str, last_outbound_at, last_inbound_at, health_override: str | None = None):
+    if health_override:
+        meta = CONVERSATION_HEALTH_META.get(health_override, CONVERSATION_HEALTH_META["awaiting_reply"])
+        return {"key": health_override, "label": meta["label"], "chip_cls": meta["chip_cls"],
+                "rank": meta["rank"], "needs_response": False, "needs_follow_up": False}
+
     if status in ("booked", "sequence_complete", "unsubscribed"):
         key = "closed"
         meta = CONVERSATION_HEALTH_META[key]
@@ -2128,6 +2163,31 @@ def updates_page(request: Request):
                 "booking_id": booking.id if booking else None,
             })
 
+        # Calendar updates: orphaned or time-changed bookings
+        calendar_updates_raw = (
+            db.query(Booking, Customer)
+            .join(Customer, Booking.customer_id == Customer.id)
+            .filter(
+                Booking.operator_id == OPERATOR_ID,
+                (Booking.orphaned == True) | (Booking.time_changed == True),
+            )
+            .order_by(Booking.created_at.desc())
+            .all()
+        )
+        calendar_updates = []
+        for booking, customer in calendar_updates_raw:
+            if getattr(booking, "orphaned", False):
+                issue = "Calendar event was deleted"
+            else:
+                issue = "Appointment time changed"
+            calendar_updates.append({
+                "customer_id": customer.id,
+                "customer_name": customer.name,
+                "issue": issue,
+                "slot_start": booking.slot_start,
+                "booking_id": booking.id,
+            })
+
     return templates.TemplateResponse("updates.html", {
         "request": request,
         "active": "updates",
@@ -2140,6 +2200,7 @@ def updates_page(request: Request):
         "follow_up_overdue": follow_up_overdue,
         "follow_up_upcoming": follow_up_upcoming,
         "post_visit_updates": post_visit_updates,
+        "calendar_updates": calendar_updates,
     })
 
 
@@ -2306,6 +2367,7 @@ def conversation_detail(request: Request, customer_id: int):
         conversations_attention_count = _get_conversations_attention_count(db)
         customer_data = add_segment(enrich(customer))
         customer_data["customer_profile"] = _normalize_customer_profile(customer.customer_profile)
+        customer_data["health_override"] = getattr(customer, "health_override", None)
         log_page_view(db, request, f"conversations/{customer_id}", operator_id=OPERATOR_ID, properties={"customer_id": customer_id})
 
         # Most recent non-cancelled booking for this customer (serialized inside with block)
@@ -2344,6 +2406,8 @@ def conversation_detail(request: Request, customer_id: int):
         )
         # Pass needs_post_visit_update flag from customer for banner logic
         customer_needs_post_visit = bool(getattr(customer, "needs_post_visit_update", False))
+        # Read health_override before session closes (serialize to avoid DetachedInstanceError)
+        customer_health_override = getattr(customer, "health_override", None)
 
         log_entries = []
         for log in logs:
@@ -2381,7 +2445,7 @@ def conversation_detail(request: Request, customer_id: int):
         if latest_actionable_inbound and effective_status not in ("booked", "invite_sent", "sequence_complete", "unsubscribed", "replied"):
             effective_status = "replied"
         stage = _conversation_stage(effective_status)
-        health = _conversation_health(effective_status, last_outbound_at, last_inbound_at)
+        health = _conversation_health(effective_status, last_outbound_at, last_inbound_at, health_override=customer_health_override)
         next_steps = _auto_next_steps(effective_status, last_outbound_at, last_inbound_at)
 
         timeline_events = []
@@ -2614,6 +2678,51 @@ def mark_booked_by_customer(customer_id: int, req: MarkBookedRequest):
             customer.notes = (customer.notes or "") + f"\n[Booked {now_utc.strftime('%Y-%m-%d')}] {req.notes}"
 
     return {"status": "booked", "customer_id": customer_id, "job_value": req.job_value}
+
+
+@app.post("/api/conversation/{customer_id}/dismiss-health")
+def dismiss_conversation_health(customer_id: int):
+    """Set health_override = awaiting_reply to suppress false-positive health chips."""
+    now_utc = datetime.utcnow()
+    with get_db() as db:
+        customer = db.query(Customer).filter_by(id=customer_id, operator_id=OPERATOR_ID).first()
+        if not customer:
+            raise HTTPException(status_code=404, detail="Customer not found")
+        customer.health_override = "awaiting_reply"
+        customer.health_override_set_at = now_utc
+    return {"status": "ok", "health_override": "awaiting_reply"}
+
+
+@app.post("/api/conversation/{customer_id}/clear-health-override")
+def clear_health_override(customer_id: int):
+    """Clear health_override — restores computed health chip."""
+    with get_db() as db:
+        customer = db.query(Customer).filter_by(id=customer_id, operator_id=OPERATOR_ID).first()
+        if not customer:
+            raise HTTPException(status_code=404, detail="Customer not found")
+        customer.health_override = None
+        customer.health_override_set_at = None
+    return {"status": "ok"}
+
+
+@app.post("/api/agent/run-state-reconciler")
+def run_agent_state_reconciler():
+    """Run conversation state reconciler synchronously."""
+    global _agent_last_run
+    from agents.state_reconciler import run as run_state_reconciler
+    count = run_state_reconciler(operator_id=OPERATOR_ID)
+    _agent_last_run["state_reconciler"] = datetime.utcnow()
+    return {"status": "ok", "corrections": count or 0}
+
+
+@app.post("/api/agent/run-gcal-sync")
+def run_agent_gcal_sync():
+    """Run GCal sync synchronously."""
+    global _agent_last_run
+    from agents.gcal_sync import run as run_gcal_sync
+    result = run_gcal_sync(operator_id=OPERATOR_ID)
+    _agent_last_run["gcal_sync"] = datetime.utcnow()
+    return {"status": "ok", "result": result}
 
 
 @app.get("/health")
@@ -4528,6 +4637,11 @@ def agents_page(request: Request):
             .filter(Customer.operator_id == OPERATOR_ID, Customer.needs_post_visit_update == True)
             .count()
         )
+        gcal_tracked_events = (
+            db.query(Booking)
+            .filter(Booking.operator_id == OPERATOR_ID, Booking.google_cal_event_id != None)
+            .count()
+        )
         meetings_queue_count_agents = _get_meetings_queue_count(db)
         log_page_view(db, request, "agents", operator_id=OPERATOR_ID)
 
@@ -4675,6 +4789,34 @@ def agents_page(request: Request):
                 "stat_value": str(post_visit_flagged),
                 "stat_meta": "Customers needing Quote Given, Job Won, or No Show" if post_visit_flagged else "All appointments logged",
                 "cli": "python -m agents.post_visit --operator-id 1",
+                "phase": "Phase 8",
+            },
+            {
+                "key": "state_reconciler",
+                "name": "Conversation State Reconciler",
+                "icon": "🔄",
+                "description": "Runs every 15 minutes. Scans all active conversations and fixes drifted state: orphaned invite_sent/booked statuses, stale draft_queued flags, calendar acceptances that weren't confirmed. The safety net that keeps health chips accurate without operator intervention.",
+                "status": "active",
+                "status_label": "Active (every 15 min)",
+                "last_run_at": _agent_last_run.get("state_reconciler"),
+                "stat_label": "Corrections today",
+                "stat_value": "—",
+                "stat_meta": "Runs automatically",
+                "cli": "python -m agents.state_reconciler --operator-id 1",
+                "phase": "Phase 8",
+            },
+            {
+                "key": "gcal_sync",
+                "name": "Google Calendar Sync",
+                "icon": "📅",
+                "description": "Runs every 6 hours. Checks attendee response status on every tracked calendar event. Catches acceptances and declines that arrive via GCal system emails (different thread). Also detects event deletions and time changes.",
+                "status": "active",
+                "status_label": "Active (every 6h)",
+                "last_run_at": _agent_last_run.get("gcal_sync"),
+                "stat_label": "Events tracked",
+                "stat_value": str(gcal_tracked_events),
+                "stat_meta": "Bookings with linked GCal event",
+                "cli": "python -m agents.gcal_sync --operator-id 1",
                 "phase": "Phase 8",
             },
             {

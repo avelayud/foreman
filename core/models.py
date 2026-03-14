@@ -162,6 +162,11 @@ class Customer(Base):
     service_interval_days = Column(Integer, nullable=True)  # avg days between jobs
     predicted_next_service = Column(DateTime, nullable=True)  # last_job + interval
 
+    # Phase 8: health override — operator can dismiss false-positive health chips
+    # valid values: awaiting_reply | invite_sent | closed
+    health_override = Column(String, nullable=True)
+    health_override_set_at = Column(DateTime, nullable=True)
+
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -257,6 +262,11 @@ class Booking(Base):
     closed_at = Column(DateTime, nullable=True)
 
     google_cal_event_id = Column(String)  # Populated if synced to Google Cal
+
+    # Phase 8: GCal sync flags
+    orphaned = Column(Boolean, default=False)      # True when GCal event was deleted
+    time_changed = Column(Boolean, default=False)  # True when GCal event time was modified
+
     created_at = Column(DateTime, default=datetime.utcnow)
 
     # Relationships

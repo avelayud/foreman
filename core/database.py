@@ -56,6 +56,8 @@ SCHEMA_PATCHES = {
         "service_interval_days": "INTEGER",
         "predicted_next_service": "TIMESTAMP",
         "needs_post_visit_update": "BOOLEAN",
+        "health_override": "VARCHAR(50)",
+        "health_override_set_at": "TIMESTAMP",
     },
     "bookings": {
         "estimated_value": "FLOAT",
@@ -69,6 +71,8 @@ SCHEMA_PATCHES = {
         "job_won": "BOOLEAN",
         "final_invoice_value": "FLOAT",
         "closed_at": "TIMESTAMP",
+        "orphaned": "BOOLEAN DEFAULT FALSE",
+        "time_changed": "BOOLEAN DEFAULT FALSE",
     },
     "outreach_logs": {
         "gmail_thread_id": "VARCHAR",

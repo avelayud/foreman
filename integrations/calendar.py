@@ -302,6 +302,37 @@ def create_calendar_event(
     return result
 
 
+def get_event_status(event_id: str) -> dict:
+    """
+    Fetch a Calendar event and return its status and attendee responses.
+    Returns {"exists": False} if event is 404 or cancelled.
+    Returns {"exists": True, "status": str, "start": datetime|None, "end": datetime|None, "attendees": list}
+    """
+    try:
+        service = _get_calendar_service()
+        event = service.events().get(calendarId='primary', eventId=event_id).execute()
+        if event.get('status') == 'cancelled':
+            return {"exists": False}
+        start_raw = event.get('start', {})
+        end_raw = event.get('end', {})
+        start_dt = None
+        end_dt = None
+        if 'dateTime' in start_raw:
+            start_dt = datetime.fromisoformat(start_raw['dateTime'].replace('Z', '+00:00')).replace(tzinfo=None)
+        if 'dateTime' in end_raw:
+            end_dt = datetime.fromisoformat(end_raw['dateTime'].replace('Z', '+00:00')).replace(tzinfo=None)
+        attendees = [
+            {"email": a.get("email", ""), "responseStatus": a.get("responseStatus", "needsAction")}
+            for a in event.get("attendees", [])
+        ]
+        return {"exists": True, "status": event.get("status", "confirmed"), "start": start_dt, "end": end_dt, "attendees": attendees}
+    except Exception as e:
+        err_str = str(e).lower()
+        if "404" in err_str or "not found" in err_str:
+            return {"exists": False}
+        raise
+
+
 def format_slots_for_email(slots: list[dict], max_proposals: int = 3) -> str:
     """
     Format 2–3 slots as a natural-language list for inclusion in an email.

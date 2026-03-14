@@ -131,6 +131,14 @@
         <button class="btn-primary" id="runBtn-{{ agent.key }}" onclick="runAgent('post_visit', '/api/agent/run-post-visit')" style="font-size:11.5px;padding:7px 16px">
           Run Now
         </button>
+        {% elif agent.key == 'state_reconciler' %}
+        <button class="btn-primary" id="runBtn-{{ agent.key }}" onclick="runAgent('state_reconciler', '/api/agent/run-state-reconciler')" style="font-size:11.5px;padding:7px 16px">
+          Run Now
+        </button>
+        {% elif agent.key == 'gcal_sync' %}
+        <button class="btn-primary" id="runBtn-{{ agent.key }}" onclick="runAgent('gcal_sync', '/api/agent/run-gcal-sync')" style="font-size:11.5px;padding:7px 16px">
+          Run Now
+        </button>
         {% endif %}
       </div>
     </div>

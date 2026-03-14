@@ -128,7 +128,7 @@
   </div>
   <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
     <span class="status-pill {{ stage.status_cls }}" style="font-size:11px">{{ stage.label }}</span>
-    <span class="stage-chip stage-{{ health.chip_cls }}">{{ health.label }}</span>
+    <span class="stage-chip stage-{{ health.chip_cls }}">{{ health.label }}{% if health.key in ('needs_response', 'needs_follow_up') %} <button onclick="dismissHealth()" style="all:unset;cursor:pointer;margin-left:4px;font-size:10px;opacity:0.6" title="Dismiss — mark as handled">✕</button>{% endif %}{% if customer.health_override %} <button onclick="clearHealthOverride()" style="all:unset;cursor:pointer;margin-left:4px;font-size:9px;font-family:'IBM Plex Mono',monospace;opacity:0.5" title="Clear manual override — restore auto detection">◎ auto</button>{% endif %}</span>
     <a href="/customer/{{ customer.id }}" class="btn-ghost" style="text-decoration:none;font-size:12px;margin-left:4px">Customer Page</a>
     <a href="/conversations" class="btn-ghost" style="text-decoration:none;font-size:12px">All Conversations</a>
   </div>
@@ -1210,6 +1210,15 @@
     if (e.target === quoteModal) closeQuoteModal();
     if (e.target === closeModal) closeCloseModal();
   });
+
+  async function dismissHealth() {
+    await fetch(`/api/conversation/{{ customer.id }}/dismiss-health`, {method: 'POST'});
+    window.location.reload();
+  }
+  async function clearHealthOverride() {
+    await fetch(`/api/conversation/{{ customer.id }}/clear-health-override`, {method: 'POST'});
+    window.location.reload();
+  }
 
   async function saveBookingNotes() {
     if (!_bookingId) { window.location.reload(); return; }

@@ -43,6 +43,30 @@
   <div style="font-size:12px;color:var(--text-3);font-family:'IBM Plex Mono',monospace">What needs attention right now</div>
 </div>
 
+{# ── Calendar Updates (orphaned or time-changed bookings) ── #}
+{% if calendar_updates %}
+<div class="updates-section">
+  <div class="updates-section-title">
+    <span>📅 Calendar Updates</span>
+    <span class="badge badge-amber">{{ calendar_updates|length }}</span>
+  </div>
+  {% for item in calendar_updates %}
+  <div class="update-card warning">
+    <div>
+      <div class="update-name">
+        <a href="/conversations/{{ item.customer_id }}" style="text-decoration:none;color:var(--navy)">{{ item.customer_name }}</a>
+      </div>
+      <div class="update-meta">
+        {% if item.slot_start %}Appointment · {{ item.slot_start | est }}{% else %}Booking date unknown{% endif %}
+      </div>
+      <div class="update-preview" style="color:var(--amber);font-size:11.5px;font-weight:500">{{ item.issue }}</div>
+    </div>
+    <a href="/conversations/{{ item.customer_id }}" class="btn-ghost" style="text-decoration:none;font-size:12px;flex-shrink:0">View Conversation →</a>
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
 {# ── Needs Post-Visit Update (blocking — shown first) ── #}
 {% if post_visit_updates %}
 <div class="updates-section">
