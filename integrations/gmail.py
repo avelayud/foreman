@@ -358,9 +358,12 @@ def send_email(
     # When replying, set RFC 2822 threading headers so the recipient's mail
     # client groups this message in the same thread.
     #
-    # Strategy: fetch each message individually with format="metadata" +
-    # metadataHeaders=["Message-ID"] — more reliable than threads().get(format="full")
-    # which doesn't guarantee Message-ID appears in payload.headers.
+    # IMPORTANT: also lock the subject to the original thread's subject.
+    # Changing the subject on a reply causes Gmail (and most clients) to start a
+    # new conversation on the recipient's side even when In-Reply-To is set.
+    #
+    # Strategy: fetch each message individually with format="metadata" so we can
+    # grab both Message-ID and Subject headers reliably.
     if thread_id:
         try:
             # Step 1: get ordered list of message IDs in the thread
@@ -369,25 +372,40 @@ def send_email(
             ).execute()
             thread_messages = thread_result.get("messages", [])
 
-            # Step 2: fetch each message's Message-ID header individually
+            # Step 2: fetch each message's headers (Message-ID + Subject)
             all_rfc_ids = []
-            for m in thread_messages:
+            original_subject = None
+            for idx, m in enumerate(thread_messages):
                 m_data = service.users().messages().get(
                     userId="me",
                     id=m["id"],
                     format="metadata",
-                    metadataHeaders=["Message-ID"],
+                    metadataHeaders=["Message-ID", "Subject"],
                 ).execute()
-                rfc_id = _get_header(
-                    m_data.get("payload", {}).get("headers", []), "Message-ID"
-                )
+                headers = m_data.get("payload", {}).get("headers", [])
+                rfc_id = _get_header(headers, "Message-ID")
                 if rfc_id:
                     all_rfc_ids.append(rfc_id)
+                # Capture original thread subject from the first message
+                if idx == 0:
+                    original_subject = _get_header(headers, "Subject") or None
 
             print(
                 f"[gmail] Thread {thread_id}: {len(thread_messages)} msgs, "
                 f"rfc_ids={all_rfc_ids}"
             )
+
+            # Lock subject to the original thread's subject so the recipient's
+            # mail client keeps this reply in the same conversation. Prefix "Re: "
+            # only if the original didn't already have it.
+            if original_subject:
+                canonical_subject = (
+                    original_subject
+                    if original_subject.lower().startswith("re:")
+                    else f"Re: {original_subject}"
+                )
+                msg.replace_header("Subject", canonical_subject)
+                print(f"[gmail] Subject locked to thread original: {canonical_subject!r}")
 
             if all_rfc_ids:
                 # If caller supplied an explicit in_reply_to (the customer's reply

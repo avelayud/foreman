@@ -3521,9 +3521,10 @@ def confirm_booking(log_id: int, req: ConfirmBookingRequest):
                 try:
                     _gmail_send_message(
                         to=customer_email,
-                        subject=f"Re: {email_subject}",
+                        subject=email_subject,
                         body=req.thread_reply_body.strip(),
                         thread_id=thread_id or existing_thread_id,
+                        in_reply_to=inbound_rfc_id,
                     )
                     thread_reply_sent = True
                 except Exception as tre:
