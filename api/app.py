@@ -1996,14 +1996,17 @@ def updates_page(request: Request):
         recent_replies = []
         for log in recent_inbound_raw:
             cust = customers_by_id.get(log.customer_id)
+            ts = log.sent_at or log.created_at
             recent_replies.append({
                 "customer_id": log.customer_id,
                 "customer_name": cust.name if cust else "Unknown",
                 "classification": log.response_classification or "unclear",
                 "preview": (log.content or "")[:200],
-                "sent_at": log.sent_at,
+                "sent_at": ts,
+                "created_at": ts,
                 "subject": log.subject or "(no subject)",
             })
+        recent_replies.sort(key=lambda x: x["created_at"] or datetime.min, reverse=True)
 
         # Build conversations needing attention
         active_statuses = set(FOLLOW_UP_DUE_DAYS.keys()) | {"replied"}
@@ -2061,6 +2064,7 @@ def updates_page(request: Request):
                     "customer_id": cust.id,
                     "customer_name": cust.name,
                     "last_inbound_at": last_inbound_at,
+                    "created_at": last_inbound_at,
                     "classification": classification or "unclear",
                     "hours_waiting": round((now - last_inbound_at).total_seconds() / 3600) if last_inbound_at else None,
                 })
@@ -2087,7 +2091,7 @@ def updates_page(request: Request):
                         "sequence_step": effective,
                     })
 
-        needs_response.sort(key=lambda x: x["hours_waiting"] or 0, reverse=True)
+        needs_response.sort(key=lambda x: x["created_at"] or datetime.min, reverse=True)
         follow_up_overdue.sort(key=lambda x: x["days_overdue"], reverse=True)
         follow_up_upcoming.sort(key=lambda x: x["days_until_due"])
 
