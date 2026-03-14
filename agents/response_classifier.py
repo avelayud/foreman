@@ -65,6 +65,10 @@ Categories:
                          Signals: "remove me from your list", "stop emailing me", "unsubscribe",
                          "don't contact me again", "please take me off your list".
                          Do NOT use for any soft decline.
+  calendar_accepted    — An automated Google Calendar acceptance notification ("Accepted: …",
+                         "has accepted your invitation"). No human text. No response needed.
+  calendar_declined    — An automated Google Calendar decline notification ("Declined: …",
+                         "has declined your invitation"). No human text. No response needed.
   unclear              — Reply is genuinely ambiguous or could reasonably fit multiple categories.
 
 Return ONLY a JSON object — no markdown, no explanation:

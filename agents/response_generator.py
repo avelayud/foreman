@@ -128,7 +128,9 @@ def run(operator_id: int) -> int:
                 OutreachLog.classified_at != None,
                 # draft_queued may be NULL on old rows — treat NULL as not yet processed
                 (OutreachLog.draft_queued == False) | (OutreachLog.draft_queued == None),
-                OutreachLog.response_classification != "unsubscribe_request",
+                OutreachLog.response_classification.notin_(
+                    ["unsubscribe_request", "calendar_accepted", "calendar_declined"]
+                ),
             )
             .order_by(OutreachLog.created_at.asc())
             .all()

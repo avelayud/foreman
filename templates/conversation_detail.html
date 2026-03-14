@@ -173,6 +173,10 @@
                   <span class="cls-badge cls-declined">✗ Not interested</span>
                 {% elif event.response_classification == 'unsubscribe_request' %}
                   <span class="cls-badge cls-declined">⊘ Unsubscribe</span>
+                {% elif event.response_classification == 'calendar_accepted' %}
+                  <span class="cls-badge" style="background:#dcfce7;color:#15803d;border-color:#a7f3d0">✓ Customer Accepted Invite</span>
+                {% elif event.response_classification == 'calendar_declined' %}
+                  <span class="cls-badge cls-declined">✗ Customer Declined Invite</span>
                 {% elif event.response_classification == 'unclear' %}
                   <span class="cls-badge cls-unclear">? Unclear</span>
                 {% endif %}

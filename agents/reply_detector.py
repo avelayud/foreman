@@ -18,12 +18,40 @@ Usage:
 """
 
 import argparse
+import re
 import time
 from datetime import datetime, timedelta
 
 from core.config import config
 from core.database import get_db
 from core.models import Booking, Customer, OutreachLog
+
+
+# ── Calendar notification detection ──────────────────────────────────────────
+# These automated emails must not trigger draft generation or status changes.
+
+_CAL_ACCEPTED_PATTERNS = [
+    re.compile(r"^accepted:", re.IGNORECASE),
+    re.compile(r"has accepted your invitation", re.IGNORECASE),
+    re.compile(r"accepted this invitation", re.IGNORECASE),
+]
+_CAL_DECLINED_PATTERNS = [
+    re.compile(r"^declined:", re.IGNORECASE),
+    re.compile(r"has declined your invitation", re.IGNORECASE),
+    re.compile(r"declined this invitation", re.IGNORECASE),
+]
+
+
+def _calendar_notification_type(subject: str, body: str) -> str | None:
+    """Return 'calendar_accepted' or 'calendar_declined' if this is a GCal auto-email, else None."""
+    text = subject + " " + body
+    for pat in _CAL_ACCEPTED_PATTERNS:
+        if pat.search(subject) or pat.search(text):
+            return "calendar_accepted"
+    for pat in _CAL_DECLINED_PATTERNS:
+        if pat.search(subject) or pat.search(text):
+            return "calendar_declined"
+    return None
 
 try:
     from integrations.gmail import get_inbox_replies, search_inbox_by_sender
@@ -169,7 +197,11 @@ def _log_and_process_reply(operator_id: int, customer_id: int, customer_name: st
     reply_subject = reply.get("subject", "Re: outreach")
     sent_at = reply.get("sent_at") or datetime.utcnow()
 
-    print(f"  → Reply detected from {customer_name}: {reply_subject[:60]}")
+    # Pre-classify calendar notifications — skip status change + LLM classification
+    cal_type = _calendar_notification_type(reply_subject, reply_body)
+
+    print(f"  → Reply detected from {customer_name}: {reply_subject[:60]}"
+          + (f" [auto: {cal_type}]" if cal_type else ""))
 
     with get_db() as db:
         log = OutreachLog(
@@ -184,12 +216,27 @@ def _log_and_process_reply(operator_id: int, customer_id: int, customer_name: st
             sequence_step=0,
             gmail_thread_id=thread_id,
             rfc_message_id=rfc_id,
-            draft_queued=False,
+            # Calendar notifications need no response — mark as already processed
+            draft_queued=bool(cal_type),
         )
         db.add(log)
-        customer = db.query(Customer).filter_by(id=customer_id).first()
-        if customer:
-            customer.reactivation_status = "replied"
+        db.flush()
+        inbound_log_id = log.id
+
+        if cal_type:
+            # Store classification inline — no LLM needed, no status change
+            from datetime import timezone as _tz
+            log.response_classification = cal_type
+            log.classified_at = datetime.now(_tz.utc).replace(tzinfo=None)
+        else:
+            # Normal reply — mark customer as replied
+            customer = db.query(Customer).filter_by(id=customer_id).first()
+            if customer:
+                customer.reactivation_status = "replied"
+
+    if cal_type:
+        print(f"  [reply_detector] Calendar notification logged ({cal_type}) — no action required")
+        return True
 
     # Update customer profile with reply context (force=True so new reply data is included)
     try:
@@ -201,14 +248,6 @@ def _log_and_process_reply(operator_id: int, customer_id: int, customer_name: st
     # Classify the reply — response_generator will pick it up from here
     try:
         from agents.response_classifier import classify_reply
-        with get_db() as _db:
-            inbound_log = (
-                _db.query(OutreachLog)
-                .filter_by(customer_id=customer_id, direction="inbound")
-                .order_by(OutreachLog.created_at.desc())
-                .first()
-            )
-            inbound_log_id = inbound_log.id if inbound_log else None
         if inbound_log_id:
             classify_reply(operator_id, inbound_log_id, verbose=True)
     except Exception as e:
