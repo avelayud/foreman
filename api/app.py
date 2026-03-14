@@ -2188,7 +2188,106 @@ def updates_page(request: Request):
                 "booking_id": booking.id,
             })
 
-    return templates.TemplateResponse("updates.html", {
+        # ── Cookie-based "last viewed" tracking ──────────────────────
+        last_viewed_str = request.cookies.get("last_updates_viewed")
+        last_viewed_dt = None
+        if last_viewed_str:
+            try:
+                last_viewed_dt = datetime.fromisoformat(last_viewed_str)
+            except Exception:
+                pass
+
+        # ── Build unified feed_items (inside db context) ──────────────
+        feed_items = []
+
+        # 1. Needs Response
+        for item in needs_response:
+            ts = item["last_inbound_at"] or item.get("created_at")
+            feed_items.append({
+                "ts": ts,
+                "customer_id": item["customer_id"],
+                "customer_name": item["customer_name"],
+                "category": "needs_response",
+                "category_label": "Needs Response",
+                "category_color": "#ef4444",
+                "description": "Needs a response",
+                "seen": bool(last_viewed_dt and ts and ts < last_viewed_dt),
+            })
+
+        # 2. Follow-up overdue
+        for item in follow_up_overdue:
+            ts_base = item.get("last_outbound_at")
+            due_days = FOLLOW_UP_DUE_DAYS.get(item.get("sequence_step", ""), 3)
+            ts = (ts_base + timedelta(days=due_days)) if ts_base else ts_base
+            days_ov = item.get("days_overdue", 0)
+            feed_items.append({
+                "ts": ts,
+                "customer_id": item["customer_id"],
+                "customer_name": item["customer_name"],
+                "category": "needs_follow_up",
+                "category_label": "Needs Follow-up",
+                "category_color": "#f59e0b",
+                "description": f"Follow-up overdue — {days_ov} day{'s' if days_ov != 1 else ''}",
+                "seen": bool(last_viewed_dt and ts and ts < last_viewed_dt),
+            })
+
+        # 3. Invite sent (no health issue — skip customers already in feed)
+        already_in_feed_ids = {fi["customer_id"] for fi in feed_items}
+        invite_sent_customers = [
+            c for c in all_active_customers
+            if getattr(c, "reactivation_status", None) == "invite_sent"
+            and c.id not in already_in_feed_ids
+        ]
+        for cust in invite_sent_customers:
+            logs = (
+                db.query(OutreachLog.direction, OutreachLog.sent_at, OutreachLog.created_at)
+                .filter_by(operator_id=OPERATOR_ID, customer_id=cust.id, dry_run=False)
+                .all()
+            )
+            outbound = [l for l in logs if l.direction == "outbound"]
+            ts = max((_l.sent_at or _l.created_at for _l in outbound), default=None) if outbound else None
+            feed_items.append({
+                "ts": ts,
+                "customer_id": cust.id,
+                "customer_name": cust.name,
+                "category": "invite_sent",
+                "category_label": "Invite Sent",
+                "category_color": "#7c3aed",
+                "description": "Invite sent — awaiting response",
+                "seen": bool(last_viewed_dt and ts and ts < last_viewed_dt),
+            })
+
+        # 4. Calendar updates
+        for item in calendar_updates:
+            ts = item.get("slot_start")
+            feed_items.append({
+                "ts": ts,
+                "customer_id": item["customer_id"],
+                "customer_name": item["customer_name"],
+                "category": "calendar",
+                "category_label": "Calendar",
+                "category_color": "#3b82f6",
+                "description": item["issue"],
+                "seen": bool(last_viewed_dt and ts and ts < last_viewed_dt),
+            })
+
+        # Sort by ts desc (items without ts go to the bottom)
+        feed_items.sort(key=lambda x: x["ts"] or datetime.min, reverse=True)
+        feed_total = len(feed_items)
+
+        # ── Build quadrant_data ───────────────────────────────────────
+        def _quad(category):
+            items = [fi for fi in feed_items if fi["category"] == category]
+            return {"count": len(items), "items": items[:3]}
+
+        quadrant_data = {
+            "needs_response": _quad("needs_response"),
+            "needs_follow_up": _quad("needs_follow_up"),
+            "invite_sent": _quad("invite_sent"),
+            "calendar": _quad("calendar"),
+        }
+
+    response = templates.TemplateResponse("updates.html", {
         "request": request,
         "active": "updates",
         "operator": operator_data,
@@ -2201,7 +2300,13 @@ def updates_page(request: Request):
         "follow_up_upcoming": follow_up_upcoming,
         "post_visit_updates": post_visit_updates,
         "calendar_updates": calendar_updates,
+        "feed_items": feed_items[:50],
+        "feed_total": feed_total,
+        "quadrant_data": quadrant_data,
+        "last_viewed": last_viewed_dt,
     })
+    response.set_cookie("last_updates_viewed", datetime.utcnow().isoformat(), max_age=30 * 24 * 3600)
+    return response
 
 
 @app.get("/conversations", response_class=HTMLResponse)
