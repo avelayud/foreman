@@ -244,6 +244,7 @@ def _get_conversations_attention_count(db) -> int:
             OutreachLog.direction,
             OutreachLog.sent_at,
             OutreachLog.created_at,
+            OutreachLog.response_classification,
         )
         .filter(
             OutreachLog.operator_id == OPERATOR_ID,
