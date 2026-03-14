@@ -25,6 +25,40 @@ from core.database import get_db
 from core.models import Booking, Customer, OutreachLog
 
 
+def _handle_calendar_declined(operator_id: int, customer_id: int, inbound_log_id: int | None):
+    """
+    Called when a customer declines a calendar invite.
+    - Cancels the associated confirmed booking
+    - Resets reactivation_status → 'replied' (back in active conversation)
+    """
+    now_utc = datetime.utcnow()
+    with get_db() as db:
+        # Cancel any confirmed bookings from the AI outreach flow
+        stale = (
+            db.query(Booking)
+            .filter(
+                Booking.customer_id == customer_id,
+                Booking.operator_id == operator_id,
+                Booking.status == "confirmed",
+                Booking.source == "ai_outreach",
+            )
+            .all()
+        )
+        for b in stale:
+            b.status = "cancelled"
+
+        customer = db.query(Customer).filter_by(id=customer_id).first()
+        if customer and customer.reactivation_status in ("invite_sent", "booked"):
+            customer.reactivation_status = "replied"
+
+        if inbound_log_id:
+            log = db.query(OutreachLog).filter_by(id=inbound_log_id).first()
+            if log:
+                log.converted_at = now_utc
+
+    print(f"  [response_generator] calendar_declined: booking cancelled, status reset to replied")
+
+
 def _auto_create_booking(operator_id: int, customer_id: int, inbound_log_id: int | None):
     """
     Called when classifier returns booking_confirmed.
@@ -129,7 +163,7 @@ def run(operator_id: int) -> int:
                 # draft_queued may be NULL on old rows — treat NULL as not yet processed
                 (OutreachLog.draft_queued == False) | (OutreachLog.draft_queued == None),
                 OutreachLog.response_classification.notin_(
-                    ["unsubscribe_request", "calendar_accepted", "calendar_declined"]
+                    ["unsubscribe_request", "calendar_accepted"]
                 ),
             )
             .order_by(OutreachLog.created_at.asc())
@@ -155,6 +189,13 @@ def run(operator_id: int) -> int:
         inbound_log_id = item["id"]
         customer_id = item["customer_id"]
         classification = item["classification"]
+
+        # calendar_declined: cancel booking + reset status before generating draft
+        if classification == "calendar_declined":
+            try:
+                _handle_calendar_declined(operator_id, customer_id, inbound_log_id)
+            except Exception as e:
+                print(f"  [response_generator] calendar_declined handler failed for customer {customer_id}: {e}")
 
         try:
             from agents.conversation_agent import generate_response

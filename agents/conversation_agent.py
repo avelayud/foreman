@@ -185,6 +185,26 @@ Their message is a bit ambiguous. Read it carefully:
 Write a brief, natural reply. Sound like a real person. Do not propose booking times unless
 they specifically asked for them."""
 
+CALENDAR_DECLINED_PROMPT = """Operator tone:
+{tone}
+
+{voice_section}{profile_section}Customer: {name}
+Service history: {service_summary}
+
+The customer declined the calendar invite for their appointment.
+
+Full conversation so far:
+{thread_text}
+
+Write a brief, warm reply that:
+1. Acknowledges no problem at all — no pressure, completely relaxed tone
+2. Asks if there's a day or time that would work better for them — suggest 2 options as flexible
+   ranges (e.g. "sometime next week", "a morning or afternoon") NOT hard specific times
+3. Keeps the door open without being pushy — they may have simply had a schedule change
+4. 2-3 sentences max — keep it genuinely casual
+
+Do NOT propose specific times or slots. Keep it open and easy."""
+
 BOOKING_CONFIRMATION_PROMPT = """Operator tone:
 {tone}
 
@@ -478,9 +498,9 @@ def generate_response(
 
     Returns the OutreachLog.id of the queued draft, or None on failure.
     """
-    if classification == "unsubscribe_request":
+    if classification in ("unsubscribe_request", "calendar_accepted"):
         if verbose:
-            print(f"  [conversation_agent] Skipping draft -- customer requested unsubscribe")
+            print(f"  [conversation_agent] Skipping draft -- {classification}")
         return None
 
     if classification == "booking_confirmed":
@@ -659,6 +679,16 @@ def generate_response(
             service_summary=service_summary,
             thread_text=thread_text,
             reply_text=inbound_reply_text or "(see thread above)",
+        )
+    elif classification == "calendar_declined":
+        user_prompt = _fmt(
+            CALENDAR_DECLINED_PROMPT,
+            tone=op_tone,
+            voice_section=voice_section,
+            profile_section=profile_section,
+            name=cust_name,
+            service_summary=service_summary,
+            thread_text=thread_text,
         )
     else:  # unclear
         user_prompt = _fmt(
