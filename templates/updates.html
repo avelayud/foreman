@@ -100,16 +100,16 @@
   {% if feed_items %}
   <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow-sm);overflow:hidden">
     {# Column headers #}
-    <div style="display:grid;grid-template-columns:12px 110px 140px 1fr 120px 24px;gap:12px;padding:8px 16px;background:var(--bg);border-bottom:1px solid var(--border);align-items:center">
+    <div style="display:grid;grid-template-columns:12px 130px 160px 1fr 110px 24px;gap:12px;padding:8px 16px;background:var(--bg);border-bottom:1px solid var(--border);align-items:center">
       <div></div>
       <div style="font-size:9px;font-family:'IBM Plex Mono',monospace;letter-spacing:1.2px;text-transform:uppercase;color:var(--text-4)">Time</div>
       <div style="font-size:9px;font-family:'IBM Plex Mono',monospace;letter-spacing:1.2px;text-transform:uppercase;color:var(--text-4)">Customer</div>
-      <div style="font-size:9px;font-family:'IBM Plex Mono',monospace;letter-spacing:1.2px;text-transform:uppercase;color:var(--text-4)">What To Do</div>
-      <div style="font-size:9px;font-family:'IBM Plex Mono',monospace;letter-spacing:1.2px;text-transform:uppercase;color:var(--text-4)">Category</div>
+      <div style="font-size:9px;font-family:'IBM Plex Mono',monospace;letter-spacing:1.2px;text-transform:uppercase;color:var(--text-4)">What Happened · Next Step</div>
+      <div style="font-size:9px;font-family:'IBM Plex Mono',monospace;letter-spacing:1.2px;text-transform:uppercase;color:var(--text-4)">Status</div>
       <div></div>
     </div>
     {% for item in feed_items %}
-    <a href="/conversations/{{ item.customer_id }}" style="text-decoration:none;color:inherit;display:grid;grid-template-columns:12px 110px 140px 1fr 120px 24px;gap:12px;padding:11px 16px;border-bottom:1px solid var(--border);align-items:center;transition:background 0.1s" onmouseenter="this.style.background='var(--navy-soft)'" onmouseleave="this.style.background=''">
+    <a href="/conversations/{{ item.customer_id }}" class="feed-row" data-customer-id="{{ item.customer_id }}" style="text-decoration:none;color:inherit;display:grid;grid-template-columns:12px 130px 160px 1fr 110px 24px;gap:12px;padding:11px 16px;border-bottom:1px solid var(--border);align-items:center;transition:background 0.1s" onclick="markFeedVisited('{{ item.customer_id }}')" onmouseenter="this.style.background='var(--navy-soft)'" onmouseleave="this.style.background=this.classList.contains('feed-read') ? '' : 'var(--bg)'">
       <span style="width:8px;height:8px;border-radius:50%;flex-shrink:0;background:{% if item.seen %}transparent;border:1.5px solid var(--border){% else %}{{ item.category_color }}{% endif %}"></span>
       <span style="font-size:10.5px;font-family:'IBM Plex Mono',monospace;color:var(--text-3);white-space:nowrap">{{ item.ts | est if item.ts else '—' }}</span>
       <span style="font-size:13px;font-weight:600;color:var(--navy);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ item.customer_name }}</span>
@@ -132,4 +132,28 @@
   {% endif %}
 </div>
 
+{% endblock %}
+
+{% block scripts %}
+<script>
+const _FEED_VISITED_KEY = 'foreman_feed_visited';
+function _getFeedVisited() {
+  try { return JSON.parse(localStorage.getItem(_FEED_VISITED_KEY) || '{}'); } catch(e) { return {}; }
+}
+function markFeedVisited(customerId) {
+  const v = _getFeedVisited(); v[customerId] = Date.now();
+  localStorage.setItem(_FEED_VISITED_KEY, JSON.stringify(v));
+}
+function applyFeedReadState() {
+  const v = _getFeedVisited();
+  document.querySelectorAll('.feed-row').forEach(row => {
+    if (v[row.dataset.customerId]) row.classList.add('feed-read');
+  });
+}
+document.addEventListener('DOMContentLoaded', applyFeedReadState);
+</script>
+<style>
+.feed-row { background: var(--bg); }
+.feed-row.feed-read { background: transparent; }
+</style>
 {% endblock %}

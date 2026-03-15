@@ -30,7 +30,7 @@ Foreman identifies dormant customers, scores them by rebooking probability, reac
 
 ## Product State (2026-03-14)
 
-> **Phases 1–7 + 6b complete. Jobs 05, 09, 11–31 complete.** Full booking flow live end-to-end. Priority Dashboard redesigned (revenue vs outreach tile split), Operator Config page (`/settings`), Revenue Data Integrity (booking outcome logging), Command Center with By Category first + enriched activity feed, Conversations inline status tags + horizontal info row. Active: Phase 8 Job 06 (Prompt Quality Sprint). Job 32 (Analytics — backlog).
+> **Phases 1–7 + 6b complete. Jobs 05, 09, 11–31 complete.** Full booking flow live end-to-end. UI polish sprint complete: Command Center read/unread feed, Outreach Queue type-based filters (Send Pending first), Conversations job type + call/on-site badge, booking invite now queues to Meetings Queue instead of sending directly, booking_intent correctly routes to Outreach Queue. Active: Phase 8 Job 06 (Prompt Quality Sprint). Job 32 (Analytics — backlog).
 
 ## Feature Status
 
@@ -95,6 +95,13 @@ Foreman identifies dormant customers, scores them by rebooking probability, reac
 | Conversations page — status tag inline, horizontal info row, legend | ✅ |
 | Outreach Queue — inline regenerate, 3-dot menu, filter bar with donut | ✅ |
 | Command Center — By Category first, enriched activity descriptions, 5-row quadrants | ✅ |
+| Conversations page — job type + call/on-site badge, status pill inline with opportunity | ✅ |
+| Outreach Queue — type-based filters, Send Pending section first | ✅ |
+| Command Center — read/unread state (localStorage), wider Time/Customer columns, Status column | ✅ |
+| Booking invite queues to Meetings Queue (no longer sends directly from conversation page) | ✅ |
+| booking_intent draft routing fixed → Outreach Queue (not Meetings Queue) | ✅ |
+| Draft Learning Agent — backlog plan | ⬜ Backlog |
+| Conversation page redesign (opportunity snapshot, recap, operator prep) — backlog plan | ⬜ Backlog |
 | Analytics Dashboard overhaul | ⬜ Backlog (Job 32 — design discussion first) |
 | Prompt Quality Sprint — HVAC-native agent voices using config values | ⬜ Phase 8 (Job 06) |
 | SMS channel (Twilio) — send path + inbound webhook | ⬜ Phase 9 (Job 07) |

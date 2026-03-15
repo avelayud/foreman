@@ -21,7 +21,7 @@
 ## Current Status
 
 - **Active Phase:** Phase 8 — Operator Config + Agent Quality
-- **State:** Phases 1–7 and 6b all complete. Jobs 05, 09, 11–31 complete. Latest: Priority Dashboard redesign (revenue/outreach tile split), Operator Config page, Revenue data integrity (booking outcomes), UI polish across Conversations/Queue/Dashboard/Command Center. Next: Job 06 (Prompt Quality Sprint). Job 32 (Analytics — backlog).
+- **State:** Phases 1–7 and 6b all complete. Jobs 05, 09, 11–31 complete. Latest: UI polish sprint 2 — Conversations job type badge (call/on-site), Outreach Queue type-based filters (Send Pending first), Command Center read/unread state, booking invite queues to Meetings Queue, booking_intent routing fix. Next: Job 06 (Prompt Quality Sprint). Job 32 (Analytics — backlog).
 - **Last Updated:** 2026-03-14
 - **Live URL:** https://web-production-3df3a.up.railway.app
 - **Repo:** https://github.com/avelayud/foreman
@@ -29,6 +29,16 @@
 ---
 
 ## Recently Completed
+
+### 2026-03-14 — UI Polish Sprint 2 (Job Type, Queue Filters, Read/Unread, Booking Flow Fixes)
+
+- **Conversations page:** Job type + call/on-site badge added to info row. Status pill moved from header to inline with opportunity. Info row order: Job Type | Messages | Last Interaction | Status · Opportunity. Legend updated.
+- **Outreach Queue:** Filter buttons changed from approval-status (Needs Approval/Send Pending) to outreach type (sequence_label). Send Pending section now renders first (if any), Needs Approval below. `data-type` attribute on cards enables type filtering.
+- **Command Center:** Time and Customer columns widened (110→130px, 140→160px). "Category" column renamed "Status". "What To Do" renamed "What Happened · Next Step". Read/unread state: unread rows get subtle bg tint; first click marks as read in localStorage, row goes white.
+- **Booking flow fix:** "Set Up Appointment" → "Queue for Review →" — now calls new `POST /api/customer/{id}/queue-booking-invite` endpoint (creates tentative Booking + GCal event + queues confirmation email to Meetings Queue as pending review). No longer sends directly.
+- **booking_intent routing fix:** `pending_draft_queue` now uses `_MEETINGS_CLASSIFICATIONS = ("booking_confirmed",)` only — `booking_intent` drafts correctly route to Outreach Queue, not Meetings Queue. Action banner text updated accordingly.
+- **Nav icons:** Agents → 🤖, Settings → ⚙️, Dev Tools → 🛠️ (removed `font-size:11px` wrappers for consistent vertical alignment).
+- **New backlog plans:** `plans/backlog_draft_learning_agent.md` (learns operator edits, improves future drafts). `plans/backlog_conversation_page_redesign.md` (opportunity snapshot, recap/talking points, operator prep for upcoming jobs).
 
 ### 2026-03-14 — UI Polish Sprint (Conversations, Queue, Dashboard, Command Center)
 

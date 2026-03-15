@@ -292,7 +292,7 @@
       {% endif %}
     {% else %}
     {% set ab_map = {
-      'booking_intent': ('ab-booking', '📅', 'Booking Intent Detected', 'This customer wants to schedule. A slot proposal draft has been queued — review and send it from the Meetings Queue.'),
+      'booking_intent': ('ab-booking', '📅', 'Booking Intent Detected', 'This customer wants to schedule. A slot proposal draft has been queued — review and send it from the Outreach Queue.'),
       'price_inquiry':  ('ab-price',   '💰', 'Price Inquiry', 'Customer is asking about cost. A pricing response draft has been queued in the Outreach Queue.'),
       'callback_request': ('ab-callback', '📞', 'Callback Requested', 'Customer prefers to talk. A response draft has been queued — or call them directly.'),
       'unclear':        ('ab-unclear',  '❓', 'Intent Unclear', 'Reply is ambiguous. A clarifying draft has been queued for your review.'),
@@ -403,7 +403,7 @@
             <textarea id="book-body" placeholder="Confirmation message…"></textarea>
           </div>
           <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
-            <button class="book-send-btn" id="book-send-btn" onclick="sendBookingInvite()">Send Invite + Confirmation Email</button>
+            <button class="book-send-btn" id="book-send-btn" onclick="sendBookingInvite()">Queue for Review →</button>
             <span id="book-status" style="font-size:12.5px"></span>
           </div>
         </div>
@@ -1200,16 +1200,14 @@
       return;
     }
 
-    if (!window.confirm('Confirm this booking? This will:\n• Create a Google Calendar event\n• Auto-send a .ics invite to the customer\n• Send a confirmation email')) return;
-
     btn.disabled = true;
-    btn.textContent = 'Sending…';
+    btn.textContent = 'Queuing…';
     statusEl.textContent = '';
 
     try {
       const estimUnknown = document.getElementById('book-estimate-unknown')?.checked || false;
       const estimVal = estimUnknown ? null : (parseFloat(document.getElementById('book-estimated-value')?.value) || null);
-      const res = await fetch(`/api/customer/${CUSTOMER_ID}/book-and-invite`, {
+      const res = await fetch(`/api/customer/${CUSTOMER_ID}/queue-booking-invite`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1226,16 +1224,16 @@
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.detail || 'Server error');
 
-      // Reload page to show correct confirmed/tentative state
-      btn.textContent = data.email_sent ? 'Sent ✓' : 'Saved ✓';
+      btn.textContent = 'Queued ✓';
       statusEl.style.color = 'var(--green)';
-      statusEl.textContent = data.email_sent ? 'Invite sent!' : 'Booking saved (dry-run — switch to Production to send email).';
-      setTimeout(() => window.location.reload(), 1000);
+      statusEl.textContent = 'Added to Meetings Queue for review.';
+      refreshNavCounts();
+      setTimeout(() => { window.location.href = '/meetings'; }, 1000);
     } catch (e) {
       statusEl.style.color = 'var(--red)';
       statusEl.textContent = '⚠ ' + e.message;
       btn.disabled = false;
-      btn.textContent = 'Send Invite + Confirmation Email';
+      btn.textContent = 'Queue for Review →';
     }
   }
 

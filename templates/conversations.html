@@ -119,13 +119,13 @@
 <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap">
   <span style="font-size:9.5px;font-family:'IBM Plex Mono',monospace;letter-spacing:1px;text-transform:uppercase;color:var(--text-4)">Key:</span>
   <div style="display:flex;align-items:center;gap:5px">
-    <span class="health-chip chip-needs-response" style="font-size:9px;padding:1px 6px">Needs Response</span>
-    <span style="font-size:10px;color:var(--text-3)">= action state</span>
+    <span style="display:inline-block;width:36px;height:15px;border-radius:20px;background:var(--bg);border:1px solid var(--border)"></span>
+    <span style="font-size:10px;color:var(--text-3)">action state</span>
   </div>
   <span style="color:var(--border);font-size:12px">·</span>
   <div style="display:flex;align-items:center;gap:5px">
-    <span class="status-pill s-sent" style="font-size:9px;padding:1px 6px">Outreach Sent</span>
-    <span style="font-size:10px;color:var(--text-3)">= conversation stage</span>
+    <span style="display:inline-block;width:36px;height:15px;border-radius:3px;background:var(--bg);border:1px solid var(--border)"></span>
+    <span style="font-size:10px;color:var(--text-3)">conversation stage (inline with opportunity)</span>
   </div>
 </div>
 
@@ -139,7 +139,6 @@
       <a href="/conversations/{{ item.customer_id }}" style="font-size:15px;font-family:'Playfair Display',serif;color:var(--navy);font-weight:700;text-decoration:none;white-space:nowrap" onmouseenter="this.style.textDecoration='underline'" onmouseleave="this.style.textDecoration='none'">{{ item.customer_name }}</a>
       <span style="width:1px;height:14px;background:var(--border);flex-shrink:0"></span>
       <span class="health-chip chip-{{ item.health_chip_cls }}">{{ item.health_label }}</span>
-      <span class="status-pill {{ item.status_cls }}" style="font-size:10px;padding:2px 8px">{{ item.status_label }}</span>
     </div>
     {# 3-dot menu #}
     <div class="conv-menu-wrap" style="flex-shrink:0">
@@ -157,7 +156,7 @@
   <div class="conv-body-row" style="display:flex;align-items:center;gap:12px">
 
     {# Email preview — one line, half width #}
-    <div class="conv-preview-wrap" style="flex:0 0 46%;max-width:46%;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:7px 10px;min-width:0">
+    <div class="conv-preview-wrap" style="flex:0 0 46%;max-width:46%;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:10px 12px;min-width:0;min-height:72px">
       <div style="font-size:10.5px;color:var(--text-3);font-family:'IBM Plex Mono',monospace;margin-bottom:3px">
         {% if item.last_message_is_inbound %}<span style="color:var(--red);font-weight:600">Customer</span>{% else %}Outbound{% endif %} · {{ item.last_message_at | est }}
       </div>
@@ -165,21 +164,29 @@
       <div style="font-size:11px;color:var(--text-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ item.last_message_preview }}</div>
     </div>
 
-    {# Info row: Last Interaction | Opportunity | Messages #}
+    {# Info row: Job Type | Messages | Last Interaction | Status · Opportunity #}
     <div style="flex:1;display:flex;align-items:center;gap:10px;min-width:0;flex-wrap:wrap">
       <div style="min-width:0">
-        <div class="right-label">Last Interaction</div>
-        <div class="right-value" style="white-space:nowrap">{{ item.last_interaction_label }} · {{ item.last_touch_at | est }}</div>
-      </div>
-      <div style="width:1px;height:22px;background:var(--border);flex-shrink:0"></div>
-      <div style="min-width:0">
-        <div class="right-label">Opportunity</div>
-        <span class="opp-chip">{{ item.opp_est }}{% if item.opp_label %} · {{ item.opp_label }}{% endif %}</span>
+        <div class="right-label">Job Type</div>
+        <div style="display:flex;align-items:center;gap:5px;white-space:nowrap">
+          <span style="font-size:10.5px;font-family:'IBM Plex Mono',monospace;color:var(--text-2);font-weight:500">{{ item.service_type if item.service_type else '—' }}</span>
+          <span style="font-size:9.5px;font-family:'IBM Plex Mono',monospace;padding:1px 6px;border-radius:3px;{% if item.engagement_type == 'Call' %}background:#eff6ff;color:var(--blue);border:1px solid #bfdbfe{% else %}background:var(--green-pale);color:var(--green);border:1px solid #a7f3d0{% endif %}">{{ '📞 Call' if item.engagement_type == 'Call' else '🔧 On-site' }}</span>
+        </div>
       </div>
       <div style="width:1px;height:22px;background:var(--border);flex-shrink:0"></div>
       <div style="white-space:nowrap">
         <div class="right-label">Messages</div>
         <div class="right-value">↑{{ item.outbound_count }} · ↓{{ item.inbound_count }}</div>
+      </div>
+      <div style="width:1px;height:22px;background:var(--border);flex-shrink:0"></div>
+      <div style="min-width:0">
+        <div class="right-label">Last Interaction</div>
+        <div class="right-value" style="white-space:nowrap">{{ item.last_interaction_label }} · {{ item.last_touch_at | est }}</div>
+      </div>
+      <div style="width:1px;height:22px;background:var(--border);flex-shrink:0"></div>
+      <div style="min-width:0;display:flex;align-items:center;gap:7px;flex-wrap:nowrap">
+        <span class="status-pill {{ item.status_cls }}" style="font-size:9.5px;padding:1px 7px;flex-shrink:0">{{ item.status_label }}</span>
+        <span class="opp-chip">{{ item.opp_est }}{% if item.opp_label %} · {{ item.opp_label }}{% endif %}</span>
       </div>
     </div>
 

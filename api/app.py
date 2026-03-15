@@ -2527,6 +2527,12 @@ def conversations(request: Request):
                     last_contact_display = f"{days_ago}d ago"
                 else:
                     last_contact_display = last_touch_ts.strftime("%-m/%-d")
+            # Derive engagement type: callback_request reply → Call, else On-site
+            latest_cls = latest_inbound.response_classification if latest_inbound else None
+            is_callback = latest_cls == "callback_request"
+            engagement_type = "Call" if is_callback else "On-site"
+            service_type = customer.last_service_type or ""
+
             conversations_data.append({
                 "customer_id": customer.id,
                 "customer_name": customer.name,
@@ -2558,6 +2564,8 @@ def conversations(request: Request):
                 "days_dormant": summary.get("days_dormant"),
                 "total_spend": summary.get("total_spend"),
                 "score": customer.score,
+                "service_type": service_type,
+                "engagement_type": engagement_type,
             })
 
     conversations_data.sort(key=lambda row: row["last_touch_at"] or datetime.min, reverse=True)
@@ -2627,10 +2635,9 @@ def conversation_detail(request: Request, customer_id: int):
             .first()
         )
         has_pending_draft = pending_draft_log is not None
-        _meetings_cls = ("booking_intent", "booking_confirmed")
         pending_draft_queue = (
             "meetings"
-            if pending_draft_log and pending_draft_log.response_classification in _meetings_cls
+            if pending_draft_log and pending_draft_log.response_classification in _MEETINGS_CLASSIFICATIONS
             else "outreach"
         )
         pending_draft_summary = _compact_summary(pending_draft_log.content or "", 120) if pending_draft_log else ""
@@ -4436,6 +4443,123 @@ def book_and_invite(customer_id: int, req: ConfirmBookingRequest):
         "email_sent": email_sent,
         "send_error": send_error,
         "mode": mode,
+    }
+
+
+@app.post("/api/customer/{customer_id}/queue-booking-invite")
+def queue_booking_invite(customer_id: int, req: ConfirmBookingRequest):
+    """
+    Create a tentative booking + GCal event, then queue the confirmation email
+    to the Meetings Queue (approval_status='pending') for operator review before sending.
+    """
+    if not req.estimate_unknown and req.estimated_value is None:
+        raise HTTPException(
+            status_code=400,
+            detail="estimated_value is required. Provide a dollar amount or set estimate_unknown=true.",
+        )
+    try:
+        slot_start = datetime.fromisoformat(req.slot_start)
+        slot_end = datetime.fromisoformat(req.slot_end)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid slot_start or slot_end — expected ISO datetime")
+
+    with get_db() as db:
+        customer = db.query(Customer).filter_by(id=customer_id, operator_id=OPERATOR_ID).first()
+        if not customer:
+            raise HTTPException(status_code=404, detail="Customer not found")
+        customer_name = customer.name
+        existing_thread = (
+            db.query(OutreachLog.gmail_thread_id)
+            .filter(
+                OutreachLog.customer_id == customer_id,
+                OutreachLog.operator_id == OPERATOR_ID,
+                OutreachLog.gmail_thread_id != None,
+                OutreachLog.direction == "outbound",
+                OutreachLog.dry_run == False,
+            )
+            .order_by(OutreachLog.sent_at.desc())
+            .first()
+        )
+        existing_thread_id = existing_thread[0] if existing_thread else None
+
+    # Create tentative booking
+    with get_db() as db:
+        booking = Booking(
+            operator_id=OPERATOR_ID,
+            customer_id=customer_id,
+            slot_start=slot_start,
+            slot_end=slot_end,
+            status="tentative",
+            source="ai_outreach",
+            service_type=req.service_type,
+            notes=req.notes,
+            estimated_value=req.estimated_value,
+            estimate_unknown=req.estimate_unknown,
+        )
+        db.add(booking)
+        db.flush()
+        booking_id = booking.id
+
+    # Create GCal event
+    gcal_event_id = None
+    gcal_error = None
+    try:
+        from integrations.calendar import create_calendar_event
+        event = create_calendar_event(
+            summary=f"{req.service_type} — {customer_name}",
+            start_dt=slot_start,
+            end_dt=slot_end,
+            description=(
+                f"Booked via Foreman.\nCustomer: {customer_name}"
+                + (f"\nNotes: {req.notes}" if req.notes else "")
+            ),
+        )
+        gcal_event_id = event.get("id")
+        if gcal_event_id:
+            with get_db() as db:
+                b = db.query(Booking).filter_by(id=booking_id).first()
+                if b:
+                    b.google_cal_event_id = gcal_event_id
+    except Exception as e:
+        gcal_error = str(e)
+        print(f"[queue_booking_invite] GCal event creation failed: {e}")
+
+    # Queue confirmation email to Meetings Queue (pending review, not sent)
+    email_subject = req.email_subject or f"Your appointment is confirmed — {req.service_type}"
+    email_body = req.email_body or (
+        f"Hi {customer_name},\n\nJust confirming your appointment for {req.service_type} on "
+        f"{slot_start.strftime('%A, %B %-d at %-I:%M %p')}.\n\n"
+        "Let me know if you need to reschedule.\n\nBest,\nArjuna"
+    )
+    with get_db() as db:
+        log = OutreachLog(
+            operator_id=OPERATOR_ID,
+            customer_id=customer_id,
+            channel="email",
+            direction="outbound",
+            subject=email_subject,
+            content=email_body,
+            dry_run=True,
+            approval_status="pending",
+            sequence_step=0,
+            gmail_thread_id=existing_thread_id,
+            response_classification="booking_confirmed",
+            booking_slot_start=slot_start,
+            booking_slot_end=slot_end,
+        )
+        db.add(log)
+        db.flush()
+        log_id = log.id
+        c = db.query(Customer).filter_by(id=customer_id).first()
+        if c:
+            c.reactivation_status = "invite_sent"
+
+    return {
+        "status": "queued",
+        "booking_id": booking_id,
+        "log_id": log_id,
+        "gcal_event_id": gcal_event_id,
+        "gcal_error": gcal_error,
     }
 
 

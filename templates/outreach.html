@@ -105,10 +105,11 @@
 {% set total_q = pending|length %}
 {% set na_count = needs_approval|length %}
 {% set sp_count = send_pending|length %}
+{% set label_set = namespace(labels=[]) %}
+{% for item in pending %}{% if item.sequence_label not in label_set.labels %}{% set label_set.labels = label_set.labels + [item.sequence_label] %}{% endif %}{% endfor %}
 <div style="display:flex;align-items:center;gap:16px;margin-bottom:14px;padding:10px 16px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow-sm);flex-wrap:wrap">
   {% if total_q > 0 %}
-  {% set na_pct = (na_count / total_q * 100)|round(1) %}
-  {% set circ = 88 %}{% set r = 14 %}{% set pi_val = 3.14159 %}
+  {% set circ = 88 %}{% set r = 14 %}
   {% set sp_dash = (sp_count / total_q * circ)|round(2) %}
   {% set na_dash = (na_count / total_q * circ)|round(2) %}
   <svg width="40" height="40" viewBox="0 0 40 40" style="flex-shrink:0">
@@ -124,8 +125,9 @@
   {% endif %}
   <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
     <button onclick="setQueueFilter('all', this)" id="qf-all" class="q-filter-btn active-filter">All <span class="q-filter-count">{{ total_q }}</span></button>
-    <button onclick="setQueueFilter('pending', this)" id="qf-pending" class="q-filter-btn" style="--fc:var(--amber);--fbc:#fef3c7;--fbc2:#fde68a">Needs Approval <span class="q-filter-count">{{ na_count }}</span></button>
-    <button onclick="setQueueFilter('approved', this)" id="qf-approved" class="q-filter-btn" style="--fc:var(--blue);--fbc:var(--blue-pale);--fbc2:#bfdbfe">Send Pending <span class="q-filter-count">{{ sp_count }}</span></button>
+    {% for lbl in label_set.labels %}
+    <button onclick="setQueueFilter('{{ lbl|lower|replace(' ', '-') }}', this)" class="q-filter-btn" style="--fc:var(--navy);--fbc:var(--navy-soft);--fbc2:var(--border)">{{ lbl }} <span class="q-filter-count">{{ pending | selectattr("sequence_label", "equalto", lbl) | list | length }}</span></button>
+    {% endfor %}
   </div>
   <div style="flex:1;min-width:200px">
     <div style="position:relative">
@@ -137,14 +139,77 @@
   </div>
 </div>
 
-{% if needs_approval %}
+{% if send_pending %}
 <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;margin-top:4px">
+  <div style="font-size:11px;font-family:'IBM Plex Mono',monospace;letter-spacing:1.2px;text-transform:uppercase;color:var(--blue);font-weight:600">Send Pending</div>
+  <div style="flex:1;height:1px;background:var(--border)"></div>
+  <div style="font-size:11px;font-family:'IBM Plex Mono',monospace;color:var(--text-3)">{{ send_pending|length }} item{{ 's' if send_pending|length != 1 }} — approved, awaiting send</div>
+</div>
+{% for item in send_pending %}
+<div class="queue-card state-{{ item.approval_chip_cls }}" id="card-{{ item.log_id }}" data-name="{{ item.customer_name|lower }}" data-email="{{ item.customer_email|lower }}" data-type="{{ item.sequence_label|lower|replace(' ', '-') }}">
+  <div class="queue-header">
+    <div class="queue-meta">
+      <span class="queue-name">{{ item.customer_name }}</span>
+      <span class="tag-status tag-{{ item.approval_chip_cls }}">{{ item.approval_status_label }}</span>
+    </div>
+    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+      <span class="queue-info">Type</span>
+      <span class="reach-stage">{{ item.sequence_label }}</span>
+      <div class="q-menu-wrap">
+        <button onclick="toggleQMenu(this)" style="background:none;border:1px solid var(--border);border-radius:6px;cursor:pointer;padding:2px 8px;color:var(--text-3);font-size:14px;line-height:1.4" onmouseenter="this.style.background='var(--navy-soft)'" onmouseleave="this.style.background=''">⋮</button>
+        <div class="q-dropdown">
+          <a href="/conversations/{{ item.customer_id }}">Open Conversation</a>
+          <a href="/customer/{{ item.customer_id }}">Customer Page</a>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="queue-body">
+    <div class="queue-layout">
+      <div class="queue-left">
+        <div class="field-block">
+          <label class="field-label">Subject</label>
+          <input id="subject-{{ item.log_id }}" type="text" class="field-input" value="{{ item.subject or '' }}" />
+        </div>
+        <div class="field-block">
+          <label class="field-label">Body</label>
+          <textarea id="body-{{ item.log_id }}" rows="6" class="field-textarea">{{ item.content or '' }}</textarea>
+        </div>
+      </div>
+      <div class="queue-right">
+        <div class="action-panel">
+          <div class="right-title" style="margin-bottom:8px">Actions</div>
+          <div class="action-stack">
+            <button onclick="sendNow({{ item.log_id }})" class="btn-primary action-btn send-now-btn" id="send-btn-{{ item.log_id }}"
+                    {% if not operator.is_production_mode %}disabled title="Switch to Production mode to send real email"{% endif %}>
+              Send Now
+            </button>
+            {% if item.scheduled_send_at %}
+            <span class="schedule-note">Scheduled for {{ item.scheduled_send_at.strftime('%b %-d · %-I:%M %p') }}</span>
+            {% endif %}
+            {% if item.send_error %}
+            <span id="static-error-{{ item.log_id }}" class="inline-status" style="color:var(--red)">⚠ {{ item.send_error }}</span>
+            {% endif %}
+            <span id="action-label-{{ item.log_id }}" class="inline-status" style="display:none;color:var(--green)"></span>
+            <span id="action-error-{{ item.log_id }}" class="inline-status" style="display:none;color:var(--red)"></span>
+            <button onclick="removeFromQueue({{ item.log_id }})" class="btn-ghost action-btn" style="color:var(--red);border-color:#fecaca" id="remove-btn-{{ item.log_id }}">Remove</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endfor %}
+{% endif %}
+
+{% if needs_approval %}
+<div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;margin-top:{% if send_pending %}28px{% else %}4px{% endif %}">
   <div style="font-size:11px;font-family:'IBM Plex Mono',monospace;letter-spacing:1.2px;text-transform:uppercase;color:var(--amber);font-weight:600">Needs Approval</div>
   <div style="flex:1;height:1px;background:var(--border)"></div>
   <div style="font-size:11px;font-family:'IBM Plex Mono',monospace;color:var(--text-3)">{{ needs_approval|length }} item{{ 's' if needs_approval|length != 1 }}</div>
 </div>
 {% for item in needs_approval %}
-<div class="queue-card state-{{ item.approval_chip_cls }}" id="card-{{ item.log_id }}" data-name="{{ item.customer_name|lower }}" data-email="{{ item.customer_email|lower }}" data-status="pending">
+<div class="queue-card state-{{ item.approval_chip_cls }}" id="card-{{ item.log_id }}" data-name="{{ item.customer_name|lower }}" data-email="{{ item.customer_email|lower }}" data-type="{{ item.sequence_label|lower|replace(' ', '-') }}">
   <div class="queue-header">
     <div class="queue-meta">
       <span class="queue-name">{{ item.customer_name }}</span>
@@ -226,69 +291,6 @@
 {% endfor %}
 {% endif %}
 
-{% if send_pending %}
-<div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;margin-top:{% if needs_approval %}28px{% else %}4px{% endif %}">
-  <div style="font-size:11px;font-family:'IBM Plex Mono',monospace;letter-spacing:1.2px;text-transform:uppercase;color:var(--blue);font-weight:600">Send Pending</div>
-  <div style="flex:1;height:1px;background:var(--border)"></div>
-  <div style="font-size:11px;font-family:'IBM Plex Mono',monospace;color:var(--text-3)">{{ send_pending|length }} item{{ 's' if send_pending|length != 1 }} — approved, awaiting send</div>
-</div>
-{% for item in send_pending %}
-<div class="queue-card state-{{ item.approval_chip_cls }}" id="card-{{ item.log_id }}" data-name="{{ item.customer_name|lower }}" data-email="{{ item.customer_email|lower }}" data-status="approved">
-  <div class="queue-header">
-    <div class="queue-meta">
-      <span class="queue-name">{{ item.customer_name }}</span>
-      <span class="tag-status tag-{{ item.approval_chip_cls }}">{{ item.approval_status_label }}</span>
-    </div>
-    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-      <span class="queue-info">Type</span>
-      <span class="reach-stage">{{ item.sequence_label }}</span>
-      <div class="q-menu-wrap">
-        <button onclick="toggleQMenu(this)" style="background:none;border:1px solid var(--border);border-radius:6px;cursor:pointer;padding:2px 8px;color:var(--text-3);font-size:14px;line-height:1.4" onmouseenter="this.style.background='var(--navy-soft)'" onmouseleave="this.style.background=''">⋮</button>
-        <div class="q-dropdown">
-          <a href="/conversations/{{ item.customer_id }}">Open Conversation</a>
-          <a href="/customer/{{ item.customer_id }}">Customer Page</a>
-        </div>
-      </div>
-    </div>
-  </div>
-  <div class="queue-body">
-    <div class="queue-layout">
-      <div class="queue-left">
-        <div class="field-block">
-          <label class="field-label">Subject</label>
-          <input id="subject-{{ item.log_id }}" type="text" class="field-input" value="{{ item.subject or '' }}" />
-        </div>
-        <div class="field-block">
-          <label class="field-label">Body</label>
-          <textarea id="body-{{ item.log_id }}" rows="6" class="field-textarea">{{ item.content or '' }}</textarea>
-        </div>
-      </div>
-      <div class="queue-right">
-        <div class="action-panel">
-          <div class="right-title" style="margin-bottom:8px">Actions</div>
-          <div class="action-stack">
-            <button onclick="sendNow({{ item.log_id }})" class="btn-primary action-btn send-now-btn" id="send-btn-{{ item.log_id }}"
-                    {% if not operator.is_production_mode %}disabled title="Switch to Production mode to send real email"{% endif %}>
-              Send Now
-            </button>
-            {% if item.scheduled_send_at %}
-            <span class="schedule-note">Scheduled for {{ item.scheduled_send_at.strftime('%b %-d · %-I:%M %p') }}</span>
-            {% endif %}
-            {% if item.send_error %}
-            <span id="static-error-{{ item.log_id }}" class="inline-status" style="color:var(--red)">⚠ {{ item.send_error }}</span>
-            {% endif %}
-            <span id="action-label-{{ item.log_id }}" class="inline-status" style="display:none;color:var(--green)"></span>
-            <span id="action-error-{{ item.log_id }}" class="inline-status" style="display:none;color:var(--red)"></span>
-            <button onclick="removeFromQueue({{ item.log_id }})" class="btn-ghost action-btn" style="color:var(--red);border-color:#fecaca" id="remove-btn-{{ item.log_id }}">Remove</button>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
-</div>
-{% endfor %}
-{% endif %}
-
 {% else %}
 <div class="card" style="padding:72px 40px;text-align:center">
   <div style="font-size:40px;margin-bottom:16px;opacity:0.3">✉</div>
@@ -320,8 +322,8 @@
     let shown = 0;
     cards.forEach(c => {
       const textMatch = !q || c.dataset.name.includes(q) || (c.dataset.email||'').includes(q);
-      const statusMatch = _activeQFilter === 'all' || c.dataset.status === _activeQFilter;
-      const visible = textMatch && statusMatch;
+      const typeMatch = _activeQFilter === 'all' || c.dataset.type === _activeQFilter;
+      const visible = textMatch && typeMatch;
       c.style.display = visible ? '' : 'none';
       if (visible) shown++;
     });
