@@ -538,6 +538,50 @@
             <label>Job notes</label>
             <textarea id="post-notes" placeholder="Scope of work, what was discussed, access info…" style="min-height:80px">{{ active_booking.notes }}</textarea>
           </div>
+
+          {# Post-Visit Outcome — show when visit is in the past and outcome still pending #}
+          {% if active_booking.visit_outcome == 'pending' %}
+          <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border)">
+            <div style="font-size:10px;font-weight:700;font-family:'IBM Plex Mono',monospace;letter-spacing:0.8px;text-transform:uppercase;color:var(--text-3);margin-bottom:10px">Log Visit Outcome</div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap">
+              <button onclick="logOutcome('quote_given')" class="btn-ghost" style="font-size:11.5px;padding:6px 12px;border-color:var(--amber);color:var(--amber)">Quote Given</button>
+              <button onclick="logOutcome('job_won')" class="btn-primary" style="font-size:11.5px;padding:6px 12px;background:var(--green);border-color:var(--green)">Job Won ✓</button>
+              <button onclick="logOutcome('no_show')" class="btn-ghost" style="font-size:11.5px;padding:6px 12px;color:var(--text-3)">No Show</button>
+            </div>
+            <div id="outcome-inputs" style="display:none;margin-top:10px;padding:12px;background:var(--bg);border:1px solid var(--border);border-radius:8px">
+              <div id="quote-input" style="display:none">
+                <label style="font-size:11px;font-family:'IBM Plex Mono',monospace;color:var(--text-3)">Quote Amount ($)</label>
+                <div style="display:flex;gap:8px;margin-top:4px">
+                  <input type="number" id="quote-amount" placeholder="0" min="0" step="50" style="width:120px;padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-size:13px;font-family:'IBM Plex Mono',monospace">
+                  <button onclick="submitOutcome()" class="btn-primary" style="font-size:12px;padding:6px 14px">Save</button>
+                </div>
+              </div>
+              <div id="won-input" style="display:none">
+                <label style="font-size:11px;font-family:'IBM Plex Mono',monospace;color:var(--text-3)">Final Invoice Value ($) — optional</label>
+                <div style="display:flex;gap:8px;margin-top:4px">
+                  <input type="number" id="invoice-amount" placeholder="0" min="0" step="50" style="width:120px;padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-size:13px;font-family:'IBM Plex Mono',monospace">
+                  <button onclick="submitOutcome()" class="btn-primary" style="font-size:12px;padding:6px 14px;background:var(--green);border-color:var(--green)">Confirm Win</button>
+                </div>
+              </div>
+            </div>
+            <div id="outcome-status" style="font-size:12px;margin-top:8px;color:var(--text-3)"></div>
+          </div>
+          {% endif %}
+
+          {# Show logged outcome badge if already set #}
+          {% if active_booking.visit_outcome and active_booking.visit_outcome != 'pending' %}
+          <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border)">
+            <div style="font-size:10px;font-weight:700;font-family:'IBM Plex Mono',monospace;letter-spacing:0.8px;text-transform:uppercase;color:var(--text-3);margin-bottom:6px">Visit Outcome</div>
+            {% if active_booking.visit_outcome == 'job_won' %}
+            <div style="display:inline-flex;align-items:center;gap:6px;padding:4px 12px;background:var(--green-pale);border:1px solid #a7f3d0;border-radius:20px;font-size:11px;font-family:'IBM Plex Mono',monospace;color:var(--green);font-weight:700">✓ Job Won{% if active_booking.final_invoice_value %} · ${{ "{:,.0f}".format(active_booking.final_invoice_value) }}{% endif %}</div>
+            {% elif active_booking.visit_outcome == 'quote_given' or active_booking.visit_outcome == 'confirmed' %}
+            <div style="display:inline-flex;align-items:center;gap:6px;padding:4px 12px;background:var(--amber-pale, #fffbeb);border:1px solid #fde68a;border-radius:20px;font-size:11px;font-family:'IBM Plex Mono',monospace;color:var(--amber);font-weight:700">Quote Given{% if active_booking.quote_given %} · ${{ "{:,.0f}".format(active_booking.quote_given) }}{% endif %}</div>
+            {% elif active_booking.visit_outcome == 'no_show' %}
+            <div style="display:inline-flex;align-items:center;gap:6px;padding:4px 12px;background:var(--bg);border:1px solid var(--border);border-radius:20px;font-size:11px;font-family:'IBM Plex Mono',monospace;color:var(--text-3)">No Show</div>
+            {% endif %}
+          </div>
+          {% endif %}
+
         </div>
 
         {# No booking — idle + post-send JS target #}
@@ -1274,6 +1318,57 @@
       await fetch(`/api/booking/${ACTIVE_BOOKING_ID}/no-show`, { method: 'POST' });
       window.location.reload();
     } catch (e) { alert('Error: ' + e.message); }
+  }
+
+  // Outcome panel (confirmed booking panel — Log Visit Outcome section)
+  let _pendingOutcome = null;
+
+  function logOutcome(outcome) {
+    _pendingOutcome = outcome;
+    document.getElementById('outcome-inputs').style.display = 'none';
+    const quoteInput = document.getElementById('quote-input');
+    const wonInput = document.getElementById('won-input');
+    if (quoteInput) quoteInput.style.display = 'none';
+    if (wonInput) wonInput.style.display = 'none';
+
+    if (outcome === 'no_show') {
+      submitOutcome();
+      return;
+    }
+    document.getElementById('outcome-inputs').style.display = 'block';
+    if (outcome === 'quote_given' && quoteInput) quoteInput.style.display = 'block';
+    if (outcome === 'job_won' && wonInput) wonInput.style.display = 'block';
+  }
+
+  async function submitOutcome() {
+    const bookingId = {{ active_booking.id if active_booking else 'null' }};
+    if (!bookingId || !_pendingOutcome) return;
+
+    const statusEl = document.getElementById('outcome-status');
+    if (statusEl) statusEl.textContent = 'Saving…';
+
+    const payload = { visit_outcome: _pendingOutcome };
+    if (_pendingOutcome === 'quote_given') {
+      const v = document.getElementById('quote-amount')?.value;
+      if (v) payload.quote_given = parseFloat(v);
+    }
+    if (_pendingOutcome === 'job_won') {
+      const v = document.getElementById('invoice-amount')?.value;
+      if (v) payload.final_invoice_value = parseFloat(v);
+    }
+
+    try {
+      const res = await fetch(`/api/booking/${bookingId}/outcome`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) throw new Error();
+      if (statusEl) { statusEl.textContent = '✓ Logged'; statusEl.style.color = 'var(--green)'; }
+      setTimeout(() => location.reload(), 1000);
+    } catch {
+      if (statusEl) { statusEl.textContent = 'Error — try again'; statusEl.style.color = 'var(--red)'; }
+    }
   }
 
   // Close modals on backdrop click

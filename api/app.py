@@ -3687,6 +3687,61 @@ def confirm_visit_no_quote(booking_id: int):
     return {"status": "ok", "visit_outcome": "confirmed"}
 
 
+class BookingOutcomeRequest(BaseModel):
+    visit_outcome: str  # "no_show" | "quote_given" | "job_won"
+    quote_given: float | None = None
+    final_invoice_value: float | None = None
+
+
+@app.post("/api/booking/{booking_id}/outcome")
+def log_booking_outcome(booking_id: int, req: BookingOutcomeRequest):
+    """Log the outcome of a completed booking visit (consolidated endpoint)."""
+    valid_outcomes = ("no_show", "quote_given", "job_won")
+    if req.visit_outcome not in valid_outcomes:
+        raise HTTPException(status_code=400, detail=f"outcome must be one of {valid_outcomes}")
+
+    now_utc = datetime.utcnow()
+    with get_db() as db:
+        booking = db.query(Booking).filter_by(id=booking_id, operator_id=OPERATOR_ID).first()
+        if not booking:
+            raise HTTPException(status_code=404)
+
+        booking.visit_outcome = req.visit_outcome
+
+        if req.visit_outcome == "job_won":
+            booking.job_won = True
+            booking.closed_at = now_utc
+            if req.final_invoice_value is not None:
+                booking.final_invoice_value = req.final_invoice_value
+                outreach_log = (
+                    db.query(OutreachLog)
+                    .filter(
+                        OutreachLog.customer_id == booking.customer_id,
+                        OutreachLog.operator_id == OPERATOR_ID,
+                        OutreachLog.converted_to_job == True,
+                    )
+                    .order_by(OutreachLog.created_at.desc())
+                    .first()
+                )
+                if outreach_log:
+                    outreach_log.converted_job_value = req.final_invoice_value
+                    outreach_log.converted_at = now_utc
+
+        elif req.visit_outcome == "quote_given":
+            if req.quote_given is not None:
+                booking.quote_given = req.quote_given
+                booking.quote_given_at = now_utc
+
+        elif req.visit_outcome == "no_show":
+            booking.closed_at = now_utc
+
+        customer = db.query(Customer).filter_by(id=booking.customer_id).first()
+        if customer:
+            customer.needs_post_visit_update = False
+
+    return {"ok": True}
+
+
 @app.get("/api/updates/post-visit")
 def get_post_visit_updates():
     """Return customers needing post-visit update (for Updates inbox)."""
