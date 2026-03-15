@@ -34,11 +34,12 @@
   .queue-body{padding:16px 18px}
 
   /* filter bar */
-  .q-filter-btn{padding:4px 10px;border-radius:20px;font-size:11px;font-family:'IBM Plex Mono',monospace;border:1px solid var(--border);color:var(--text-3);background:var(--surface);cursor:pointer;transition:all 0.15s;white-space:nowrap;display:inline-flex;align-items:center;gap:4px}
-  .q-filter-btn:hover{border-color:var(--fc,var(--navy));color:var(--fc,var(--navy))}
-  .q-filter-btn.active-filter{background:var(--fbc,var(--navy));border-color:var(--fbc2,var(--navy));color:var(--fc,#fff);font-weight:600}
+  .q-filter-btn{padding:4px 10px;border-radius:20px;font-size:11px;font-family:'IBM Plex Mono',monospace;border:1px solid var(--fbc2,var(--border));color:var(--fc,var(--text-2));background:var(--fbc,#f1f5f9);cursor:pointer;transition:all 0.15s;white-space:nowrap;display:inline-flex;align-items:center;gap:4px;font-weight:500}
+  .q-filter-btn:hover{filter:brightness(0.94)}
+  .q-filter-btn.active-filter{background:var(--fdc,var(--navy));border-color:var(--fdc,var(--navy));color:#fff;font-weight:700}
+  .q-filter-btn#qf-all{background:#f1f5f9;color:var(--text-2);border-color:var(--border)}
   .q-filter-btn#qf-all.active-filter{background:var(--navy);border-color:var(--navy);color:#fff}
-  .q-filter-count{font-size:9.5px;opacity:0.75}
+  .q-filter-count{font-size:9.5px;opacity:0.85}
 
   /* 3-dot menu in queue cards */
   .q-menu-wrap{position:relative}
@@ -159,7 +160,7 @@
       {% for lbl in label_set.labels %}
       {% set cnt = pending | selectattr("sequence_label", "equalto", lbl) | list | length %}
       {% set _c = _color_cycle[loop.index0 % (_color_cycle|length)] %}
-      <button onclick="setQueueFilter('{{ lbl|lower|replace(' ', '-') }}', this)" class="q-filter-btn" style="--fc:{{ _c[0] }};--fbc:{{ _c[1] }};--fbc2:{{ _c[2] }}"><span class="q-filter-count" style="font-size:11px;font-weight:700;opacity:1">{{ cnt }}</span> {{ lbl }}</button>
+      <button onclick="setQueueFilter('{{ lbl|lower|replace(' ', '-') }}', this)" class="q-filter-btn" style="--fc:{{ _c[0] }};--fbc:{{ _c[1] }};--fbc2:{{ _c[2] }};--fdc:{{ _c[3] }}"><span class="q-filter-count" style="font-size:11px;font-weight:700;opacity:1">{{ cnt }}</span> {{ lbl }}</button>
       {% endfor %}
     </div>
     <div style="position:relative">
@@ -182,7 +183,7 @@
   <div class="queue-header">
     <div class="queue-meta">
       <span class="queue-name">{{ item.customer_name }}</span>
-      <span class="reach-stage" style="font-size:10.5px">{{ item.sequence_label }}</span>
+      {% set _sc = seq_colors(item.sequence_label).split('|') %}<span class="reach-stage" style="font-size:10.5px;color:{{ _sc[0] }};background:{{ _sc[1] }};border-color:{{ _sc[2] }}">{{ item.sequence_label }}</span>
     </div>
     <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
       <span class="tag-status tag-{{ item.approval_chip_cls }}">{{ item.approval_status_label }}</span>
@@ -244,7 +245,7 @@
   <div class="queue-header">
     <div class="queue-meta">
       <span class="queue-name">{{ item.customer_name }}</span>
-      <span class="reach-stage" style="font-size:10.5px">{{ item.sequence_label }}</span>
+      {% set _sc = seq_colors(item.sequence_label).split('|') %}<span class="reach-stage" style="font-size:10.5px;color:{{ _sc[0] }};background:{{ _sc[1] }};border-color:{{ _sc[2] }}">{{ item.sequence_label }}</span>
     </div>
     <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
       <span class="tag-status tag-{{ item.approval_chip_cls }}">{{ item.approval_status_label }}</span>
