@@ -60,6 +60,7 @@
   /* Customer col */
   .pt-row>.c-cell{justify-content:flex-start;text-align:left;min-width:0;padding-left:10px}
   .c-name{font-size:13px;font-weight:600;color:var(--navy);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block;width:100%;text-align:left}
+  .c-svctype{font-size:10px;color:var(--text-4);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block;width:100%;text-align:left;margin-top:1px;font-family:'IBM Plex Sans',sans-serif}
   /* Dotted separator before Status col */
   .pt-row>.sep-col,.pt-head>.sep-th{border-left:1.5px dashed #b0b8c8;padding-left:10px}
 
@@ -218,6 +219,7 @@
 
       <div class="c-cell">
         <span class="c-name">{{ c.name }}</span>
+        {% if c.last_service_type %}<span class="c-svctype">{{ c.last_service_type }}</span>{% endif %}
       </div>
 
       <div class="sep-col">
