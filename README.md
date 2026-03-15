@@ -106,6 +106,7 @@ Foreman identifies dormant customers, scores them by rebooking probability, reac
 | Outreach Queue — type tag left next to name, approval tag right | ✅ |
 | Command Center — What Happened + Next Step as separate columns, classification-aware text | ✅ |
 | Dashboard — Action column with Draft/Book Call/Follow-up/View/Re-engage buttons | ✅ |
+| Priority Dashboard — quantify calls/jobs scheduled (metric card or column showing booked count) | ⬜ Backlog |
 | Draft Learning Agent — backlog plan | ⬜ Backlog |
 | Conversation page redesign (opportunity snapshot, recap, operator prep) — backlog plan | ⬜ Backlog |
 | Analytics Dashboard overhaul | ⬜ Backlog (Job 32 — design discussion first) |
