@@ -199,10 +199,17 @@
           </div>
         </div>
 
-        {# ── Bottom: Reply in Thread (full width) ── #}
-        <div style="font-size:9px;font-family:'IBM Plex Mono',monospace;letter-spacing:1.2px;text-transform:uppercase;color:var(--text-3);margin:14px 0 6px;padding-top:12px;border-top:1px solid var(--border)">Reply in Thread <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--text-4)">(optional — casual follow-up in the existing email chain)</span></div>
-        <div class="field-block" style="margin-bottom:0">
-          <textarea id="thread-reply-{{ item.log_id }}" rows="3" class="field-textarea" placeholder="Hey {{ item.customer_name.split(' ')[0] }}, you're all set! I'll have the calendar invite over to you shortly.">Hey {{ item.customer_name.split(' ')[0] }}, you're all set on our end! I'll have the calendar invite over to you shortly. Looking forward to it!</textarea>
+        {# ── Bottom: Reply in Thread (checkbox-optional, full width) ── #}
+        <div style="padding-top:12px;border-top:1px solid var(--border);margin-top:14px">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:7px">
+            <input type="checkbox" id="thread-reply-enabled-{{ item.log_id }}" checked
+                   onchange="document.getElementById('thread-reply-wrap-{{ item.log_id }}').style.display=this.checked?'block':'none'">
+            <span style="font-size:9px;font-family:'IBM Plex Mono',monospace;letter-spacing:1.2px;text-transform:uppercase;color:var(--text-3);font-weight:600">Reply in Thread</span>
+            <span style="font-size:11px;color:var(--text-4);font-family:'IBM Plex Sans',sans-serif">— casual follow-up in existing email chain (optional)</span>
+          </div>
+          <div id="thread-reply-wrap-{{ item.log_id }}" class="field-block" style="margin-bottom:0">
+            <textarea id="thread-reply-{{ item.log_id }}" rows="3" class="field-textarea" placeholder="Hey {{ item.customer_name.split(' ')[0] }}, you're all set! I'll have the calendar invite over to you shortly.">Hey {{ item.customer_name.split(' ')[0] }}, you're all set on our end! I'll have the calendar invite over to you shortly. Looking forward to it!</textarea>
+          </div>
         </div>
       </div>
 
@@ -508,7 +515,8 @@
     const estimatedValue = estimateInput && !estimateInput.disabled && estimateInput.value ? parseFloat(estimateInput.value) : null;
     const unknownEstimate = estimateUnknown ? estimateUnknown.checked : false;
     const threadReplyEl = document.getElementById('thread-reply-' + logId);
-    const threadReplyBody = threadReplyEl ? threadReplyEl.value.trim() : null;
+    const threadReplyEnabled = document.getElementById('thread-reply-enabled-' + logId);
+    const threadReplyBody = (threadReplyEnabled?.checked !== false && threadReplyEl) ? threadReplyEl.value.trim() : null;
 
     try {
       const res = await fetch(`/api/outreach/${logId}/confirm-booking`, {
