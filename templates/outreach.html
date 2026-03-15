@@ -110,8 +110,7 @@
 {% set label_set = namespace(labels=[]) %}
 {% for item in pending %}{% if item.sequence_label not in label_set.labels %}{% set label_set.labels = label_set.labels + [item.sequence_label] %}{% endif %}{% endfor %}
 
-{# Color map for each type label #}
-{% set _lbl_colors = namespace(map={}) %}
+{# Color list indexed by label position in label_set.labels #}
 {% set _color_cycle = [
   ('var(--amber)', '#fef3c7', '#fde68a', '#f59e0b'),
   ('var(--blue)', 'var(--blue-pale)', '#bfdbfe', '#3b82f6'),
@@ -119,10 +118,6 @@
   ('var(--green)', 'var(--green-pale)', '#a7f3d0', '#10b981'),
   ('var(--gold)', 'var(--gold-pale)', 'var(--gold-rule)', '#c8922a'),
 ] %}
-{% for lbl in label_set.labels %}
-{% set _ci = loop.index0 % (_color_cycle|length) %}
-{% set _lbl_colors.map = _lbl_colors.map | combine({lbl: _color_cycle[_ci]}) %}
-{% endfor %}
 
 <div style="display:flex;align-items:center;gap:16px;margin-bottom:14px;padding:12px 16px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow-sm);flex-wrap:wrap">
   {# Donut with per-type segments #}
@@ -134,7 +129,7 @@
       {% for lbl in label_set.labels %}
       {% set cnt = pending | selectattr("sequence_label", "equalto", lbl) | list | length %}
       {% set dash = (cnt / total_q * circ)|round(2) %}
-      {% set _c = _lbl_colors.map.get(lbl, _color_cycle[0]) %}
+      {% set _c = _color_cycle[loop.index0 % (_color_cycle|length)] %}
       <circle cx="60" cy="60" r="{{ r }}" fill="none" stroke="{{ _c[3] }}" stroke-width="12"
         stroke-dasharray="{{ dash }} {{ circ - dash }}"
         stroke-dashoffset="{{ (circ * 0.25 - offset.val)|round(2) }}"
@@ -147,7 +142,7 @@
     <div style="display:flex;flex-direction:column;gap:4px">
       {% for lbl in label_set.labels %}
       {% set cnt = pending | selectattr("sequence_label", "equalto", lbl) | list | length %}
-      {% set _c = _lbl_colors.map.get(lbl, _color_cycle[0]) %}
+      {% set _c = _color_cycle[loop.index0 % (_color_cycle|length)] %}
       <div style="display:flex;align-items:center;gap:5px">
         <span style="width:7px;height:7px;border-radius:50%;background:{{ _c[3] }};flex-shrink:0"></span>
         <span style="font-size:11px;color:var(--text-2)">{{ lbl }}</span>
@@ -163,7 +158,7 @@
       <button onclick="setQueueFilter('all', this)" id="qf-all" class="q-filter-btn active-filter"><span class="q-filter-count" style="font-size:11px;font-weight:700;opacity:1">{{ total_q }}</span> All</button>
       {% for lbl in label_set.labels %}
       {% set cnt = pending | selectattr("sequence_label", "equalto", lbl) | list | length %}
-      {% set _c = _lbl_colors.map.get(lbl, _color_cycle[0]) %}
+      {% set _c = _color_cycle[loop.index0 % (_color_cycle|length)] %}
       <button onclick="setQueueFilter('{{ lbl|lower|replace(' ', '-') }}', this)" class="q-filter-btn" style="--fc:{{ _c[0] }};--fbc:{{ _c[1] }};--fbc2:{{ _c[2] }}"><span class="q-filter-count" style="font-size:11px;font-weight:700;opacity:1">{{ cnt }}</span> {{ lbl }}</button>
       {% endfor %}
     </div>
