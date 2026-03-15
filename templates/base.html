@@ -91,6 +91,7 @@
     .s-sent{background:var(--blue-pale);color:var(--blue);border:1px solid #bfdbfe}
     .s-warm{background:var(--amber-pale);color:var(--amber);border:1px solid #fde68a}
     .s-ok{background:var(--green-pale);color:var(--green);border:1px solid #a7f3d0}
+    .s-booked{background:#ede9fe;color:#6d28d9;border:1px solid #c4b5fd}
 
     /* Forms */
     .field-label{font-size:10px;font-family:'IBM Plex Mono',monospace;letter-spacing:1.2px;text-transform:uppercase;color:var(--text-3);margin-bottom:6px;display:block}
@@ -226,7 +227,7 @@
 
       <div class="sb-section">Internal</div>
       <a href="/agents" class="sb-link {% if active == 'agents' %}active{% endif %}" onclick="trackEvent('nav_to_agents', {page:'agents'})">
-        <span style="font-size:11px">⚙</span> All Agents
+        <span style="font-size:11px">⚙</span> Agents
       </a>
       <a href="/settings" class="sb-link {% if active == 'settings' %}active{% endif %}" onclick="trackEvent('nav_to_settings', {page:'settings'})">
         <span style="font-size:11px">⚙</span> Settings

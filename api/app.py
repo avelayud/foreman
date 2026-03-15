@@ -2337,8 +2337,20 @@ def updates_page(request: Request):
         feed_items = []
 
         # 1. Needs Response
+        _cls_action = {
+            "booking_intent": "Booking intent — send a time proposal",
+            "price_inquiry": "Sent a price question — send quote",
+            "callback_request": "Requested a callback — confirm timing",
+            "not_interested": "Not interested — consider closing",
+            "unsubscribe_request": "Requested unsubscribe — take action",
+            "unclear": "Replied — review and write a response",
+        }
         for item in needs_response:
             ts = item["last_inbound_at"] or item.get("created_at")
+            cls = item.get("classification", "unclear")
+            description = _cls_action.get(cls, "Replied — write a response")
+            hours = item.get("hours_waiting")
+            detail = f"Waiting {hours}h for reply" if hours and hours > 0 else "Reply when ready"
             feed_items.append({
                 "ts": ts,
                 "customer_id": item["customer_id"],
@@ -2346,7 +2358,8 @@ def updates_page(request: Request):
                 "category": "needs_response",
                 "category_label": "Needs Response",
                 "category_color": "#ef4444",
-                "description": "Needs a response",
+                "description": description,
+                "detail": detail,
                 "seen": bool(last_viewed_dt and ts and ts < last_viewed_dt),
             })
 
@@ -2356,6 +2369,8 @@ def updates_page(request: Request):
             due_days = FOLLOW_UP_DUE_DAYS.get(item.get("sequence_step", ""), 3)
             ts = (ts_base + timedelta(days=due_days)) if ts_base else ts_base
             days_ov = item.get("days_overdue", 0)
+            step = item.get("sequence_step", "outreach_sent")
+            step_label = {"outreach_sent": "initial outreach", "sequence_step_2": "follow-up 1", "sequence_step_3": "follow-up 2"}.get(step, "outreach")
             feed_items.append({
                 "ts": ts,
                 "customer_id": item["customer_id"],
@@ -2363,7 +2378,8 @@ def updates_page(request: Request):
                 "category": "needs_follow_up",
                 "category_label": "Needs Follow-up",
                 "category_color": "#f59e0b",
-                "description": f"Follow-up overdue — {days_ov} day{'s' if days_ov != 1 else ''}",
+                "description": f"Follow-up overdue by {days_ov} day{'s' if days_ov != 1 else ''}",
+                "detail": f"After {step_label} — queue next follow-up",
                 "seen": bool(last_viewed_dt and ts and ts < last_viewed_dt),
             })
 
@@ -2389,13 +2405,15 @@ def updates_page(request: Request):
                 "category": "invite_sent",
                 "category_label": "Invite Sent",
                 "category_color": "#7c3aed",
-                "description": "Invite sent — awaiting response",
+                "description": "Booking proposal sent — awaiting confirmation",
+                "detail": "Follow up if no response within 2 days",
                 "seen": bool(last_viewed_dt and ts and ts < last_viewed_dt),
             })
 
         # 4. Calendar updates
         for item in calendar_updates:
             ts = item.get("slot_start")
+            slot_label = ts.strftime("%-b %-d") if ts else "unknown date"
             feed_items.append({
                 "ts": ts,
                 "customer_id": item["customer_id"],
@@ -2404,6 +2422,7 @@ def updates_page(request: Request):
                 "category_label": "Calendar",
                 "category_color": "#3b82f6",
                 "description": item["issue"],
+                "detail": f"Appointment {slot_label} — review and confirm",
                 "seen": bool(last_viewed_dt and ts and ts < last_viewed_dt),
             })
 
@@ -2414,7 +2433,7 @@ def updates_page(request: Request):
         # ── Build quadrant_data ───────────────────────────────────────
         def _quad(category):
             items = [fi for fi in feed_items if fi["category"] == category]
-            return {"count": len(items), "items": items[:3]}
+            return {"count": len(items), "items": items[:5]}
 
         quadrant_data = {
             "needs_response": _quad("needs_response"),

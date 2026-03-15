@@ -32,6 +32,19 @@
   .tag-sent::before{background:var(--green)}
 
   .queue-body{padding:16px 18px}
+
+  /* filter bar */
+  .q-filter-btn{padding:4px 10px;border-radius:20px;font-size:11px;font-family:'IBM Plex Mono',monospace;border:1px solid var(--border);color:var(--text-3);background:var(--surface);cursor:pointer;transition:all 0.15s;white-space:nowrap;display:inline-flex;align-items:center;gap:4px}
+  .q-filter-btn:hover{border-color:var(--fc,var(--navy));color:var(--fc,var(--navy))}
+  .q-filter-btn.active-filter{background:var(--fbc,var(--navy));border-color:var(--fbc2,var(--navy));color:var(--fc,#fff);font-weight:600}
+  .q-filter-btn#qf-all.active-filter{background:var(--navy);border-color:var(--navy);color:#fff}
+  .q-filter-count{font-size:9.5px;opacity:0.75}
+
+  /* 3-dot menu in queue cards */
+  .q-menu-wrap{position:relative}
+  .q-dropdown{display:none;position:absolute;right:0;top:28px;background:var(--surface);border:1px solid var(--border);border-radius:8px;box-shadow:var(--shadow);min-width:150px;z-index:20;overflow:hidden}
+  .q-dropdown a{display:block;padding:8px 14px;font-size:12px;color:var(--text);text-decoration:none}
+  .q-dropdown a:hover{background:var(--navy-soft)}
   .queue-layout{display:grid;grid-template-columns:minmax(0,1fr) minmax(220px,25%);gap:14px;align-items:stretch}
   .queue-left{min-width:0;padding:2px 4px}
   .queue-right{border-left:1px solid var(--border);padding-left:14px;display:flex;flex-direction:column;justify-content:flex-start;gap:12px}
@@ -88,12 +101,39 @@
 {% set send_pending = pending | rejectattr("approval_status", "equalto", "pending") | list %}
 
 {% if pending %}
-<div style="margin-bottom:18px">
-  <div style="position:relative;max-width:320px">
-    <span style="position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--text-4);font-size:13px;pointer-events:none">⌕</span>
-    <input type="text" id="queueSearch" placeholder="Search by name or email…" oninput="filterQueue()"
-           style="width:100%;padding:8px 12px 8px 32px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:'IBM Plex Sans',sans-serif;color:var(--text);background:var(--surface);outline:none;transition:border-color 0.15s"
-           onfocus="this.style.borderColor='var(--navy)'" onblur="this.style.borderColor='var(--border)'" autocomplete="off">
+{# ── Filter bar with mini donut ── #}
+{% set total_q = pending|length %}
+{% set na_count = needs_approval|length %}
+{% set sp_count = send_pending|length %}
+<div style="display:flex;align-items:center;gap:16px;margin-bottom:14px;padding:10px 16px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow-sm);flex-wrap:wrap">
+  {% if total_q > 0 %}
+  {% set na_pct = (na_count / total_q * 100)|round(1) %}
+  {% set circ = 88 %}{% set r = 14 %}{% set pi_val = 3.14159 %}
+  {% set sp_dash = (sp_count / total_q * circ)|round(2) %}
+  {% set na_dash = (na_count / total_q * circ)|round(2) %}
+  <svg width="40" height="40" viewBox="0 0 40 40" style="flex-shrink:0">
+    <circle cx="20" cy="20" r="{{ r }}" fill="none" stroke="var(--border)" stroke-width="5"/>
+    <circle cx="20" cy="20" r="{{ r }}" fill="none" stroke="var(--blue)" stroke-width="5"
+      stroke-dasharray="{{ sp_dash }} {{ circ - sp_dash }}" stroke-dashoffset="{{ circ * 0.25 }}"
+      stroke-linecap="butt" transform="rotate(-90 20 20)"/>
+    <circle cx="20" cy="20" r="{{ r }}" fill="none" stroke="var(--amber)" stroke-width="5"
+      stroke-dasharray="{{ na_dash }} {{ circ - na_dash }}" stroke-dashoffset="{{ (circ * 0.25 - sp_dash)|round(2) }}"
+      stroke-linecap="butt" transform="rotate(-90 20 20)"/>
+    <text x="20" y="24" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="10" font-weight="700" fill="var(--navy)">{{ total_q }}</text>
+  </svg>
+  {% endif %}
+  <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+    <button onclick="setQueueFilter('all', this)" id="qf-all" class="q-filter-btn active-filter">All <span class="q-filter-count">{{ total_q }}</span></button>
+    <button onclick="setQueueFilter('pending', this)" id="qf-pending" class="q-filter-btn" style="--fc:var(--amber);--fbc:#fef3c7;--fbc2:#fde68a">Needs Approval <span class="q-filter-count">{{ na_count }}</span></button>
+    <button onclick="setQueueFilter('approved', this)" id="qf-approved" class="q-filter-btn" style="--fc:var(--blue);--fbc:var(--blue-pale);--fbc2:#bfdbfe">Send Pending <span class="q-filter-count">{{ sp_count }}</span></button>
+  </div>
+  <div style="flex:1;min-width:200px">
+    <div style="position:relative">
+      <span style="position:absolute;left:9px;top:50%;transform:translateY(-50%);color:var(--text-4);font-size:13px;pointer-events:none">⌕</span>
+      <input type="text" id="queueSearch" placeholder="Search by name or email…" oninput="filterQueue()"
+             style="width:100%;padding:6px 10px 6px 28px;border:1px solid var(--border);border-radius:7px;font-size:12.5px;font-family:'IBM Plex Sans',sans-serif;color:var(--text);background:var(--bg);outline:none;transition:border-color 0.15s;box-sizing:border-box"
+             onfocus="this.style.borderColor='var(--navy)'" onblur="this.style.borderColor='var(--border)'" autocomplete="off">
+    </div>
   </div>
 </div>
 
@@ -104,15 +144,22 @@
   <div style="font-size:11px;font-family:'IBM Plex Mono',monospace;color:var(--text-3)">{{ needs_approval|length }} item{{ 's' if needs_approval|length != 1 }}</div>
 </div>
 {% for item in needs_approval %}
-<div class="queue-card state-{{ item.approval_chip_cls }}" id="card-{{ item.log_id }}" data-name="{{ item.customer_name|lower }}" data-email="{{ item.customer_email|lower }}">
+<div class="queue-card state-{{ item.approval_chip_cls }}" id="card-{{ item.log_id }}" data-name="{{ item.customer_name|lower }}" data-email="{{ item.customer_email|lower }}" data-status="pending">
   <div class="queue-header">
     <div class="queue-meta">
-      <a href="/customer/{{ item.customer_id }}" class="queue-name">{{ item.customer_name }}</a>
+      <span class="queue-name">{{ item.customer_name }}</span>
       <span class="tag-status tag-{{ item.approval_chip_cls }}">{{ item.approval_status_label }}</span>
     </div>
     <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
       <span class="queue-info">Type</span>
       <span class="reach-stage">{{ item.sequence_label }}</span>
+      <div class="q-menu-wrap">
+        <button onclick="toggleQMenu(this)" style="background:none;border:1px solid var(--border);border-radius:6px;cursor:pointer;padding:2px 8px;color:var(--text-3);font-size:14px;line-height:1.4" onmouseenter="this.style.background='var(--navy-soft)'" onmouseleave="this.style.background=''">⋮</button>
+        <div class="q-dropdown">
+          <a href="/conversations/{{ item.customer_id }}">Open Conversation</a>
+          <a href="/customer/{{ item.customer_id }}">Customer Page</a>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -132,11 +179,11 @@
           <textarea id="body-{{ item.log_id }}" rows="7" class="field-textarea">{{ item.content or '' }}</textarea>
         </div>
         <div class="field-block" style="margin-top:8px">
-          <label class="field-label" style="color:var(--text-3)">Revision Notes <span style="font-weight:400;opacity:0.7">(optional — describe changes for regeneration)</span></label>
-          <textarea id="revision-{{ item.log_id }}" rows="2" class="field-textarea" style="min-height:unset;font-size:12px" placeholder="E.g. Make it shorter, mention the seasonal discount…"></textarea>
-        </div>
-        <div style="margin-top:8px">
-          <button class="btn-ghost" style="color:var(--text-3);font-size:11px;padding:5px 10px" onclick="regenerateDraft({{ item.log_id }}, this)">&#8635; Regenerate with Notes</button>
+          <label class="field-label" style="color:var(--text-3)">Revision Notes <span style="font-weight:400;opacity:0.7">(optional)</span></label>
+          <div style="display:flex;gap:8px;align-items:flex-start">
+            <textarea id="revision-{{ item.log_id }}" rows="2" class="field-textarea" style="flex:1;min-height:unset;font-size:12px" placeholder="Make it shorter, mention the seasonal discount…"></textarea>
+            <button class="btn-ghost" style="flex-shrink:0;color:var(--text-3);font-size:11px;padding:5px 10px;white-space:nowrap;margin-top:1px" onclick="regenerateDraft({{ item.log_id }}, this)">&#8635; Regen</button>
+          </div>
         </div>
       </div>
 
@@ -172,12 +219,6 @@
             </button>
           </div>
         </div>
-
-        <div class="right-title">Quick Links</div>
-        <div class="link-stack">
-          <a href="/customer/{{ item.customer_id }}" class="btn-ghost" style="text-decoration:none;text-align:center;display:flex;justify-content:center">Customer Page</a>
-          <a href="/conversations/{{ item.customer_id }}" class="btn-primary" style="text-decoration:none;display:flex;justify-content:center;padding:8px 14px">Open Conversation</a>
-        </div>
       </div>
     </div>
   </div>
@@ -192,15 +233,22 @@
   <div style="font-size:11px;font-family:'IBM Plex Mono',monospace;color:var(--text-3)">{{ send_pending|length }} item{{ 's' if send_pending|length != 1 }} — approved, awaiting send</div>
 </div>
 {% for item in send_pending %}
-<div class="queue-card state-{{ item.approval_chip_cls }}" id="card-{{ item.log_id }}" data-name="{{ item.customer_name|lower }}" data-email="{{ item.customer_email|lower }}">
+<div class="queue-card state-{{ item.approval_chip_cls }}" id="card-{{ item.log_id }}" data-name="{{ item.customer_name|lower }}" data-email="{{ item.customer_email|lower }}" data-status="approved">
   <div class="queue-header">
     <div class="queue-meta">
-      <a href="/customer/{{ item.customer_id }}" class="queue-name">{{ item.customer_name }}</a>
+      <span class="queue-name">{{ item.customer_name }}</span>
       <span class="tag-status tag-{{ item.approval_chip_cls }}">{{ item.approval_status_label }}</span>
     </div>
     <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
       <span class="queue-info">Type</span>
       <span class="reach-stage">{{ item.sequence_label }}</span>
+      <div class="q-menu-wrap">
+        <button onclick="toggleQMenu(this)" style="background:none;border:1px solid var(--border);border-radius:6px;cursor:pointer;padding:2px 8px;color:var(--text-3);font-size:14px;line-height:1.4" onmouseenter="this.style.background='var(--navy-soft)'" onmouseleave="this.style.background=''">⋮</button>
+        <div class="q-dropdown">
+          <a href="/conversations/{{ item.customer_id }}">Open Conversation</a>
+          <a href="/customer/{{ item.customer_id }}">Customer Page</a>
+        </div>
+      </div>
     </div>
   </div>
   <div class="queue-body">
@@ -234,11 +282,6 @@
             <button onclick="removeFromQueue({{ item.log_id }})" class="btn-ghost action-btn" style="color:var(--red);border-color:#fecaca" id="remove-btn-{{ item.log_id }}">Remove</button>
           </div>
         </div>
-        <div class="right-title" style="margin-top:12px">Quick Links</div>
-        <div class="link-stack">
-          <a href="/customer/{{ item.customer_id }}" class="btn-ghost" style="text-decoration:none;text-align:center;display:flex;justify-content:center">Customer Page</a>
-          <a href="/conversations/{{ item.customer_id }}" class="btn-primary" style="text-decoration:none;display:flex;justify-content:center;padding:8px 14px">Open Conversation</a>
-        </div>
       </div>
     </div>
   </div>
@@ -262,17 +305,40 @@
 
 {% block scripts %}
 <script>
+  let _activeQFilter = 'all';
+
+  function setQueueFilter(status, btn) {
+    _activeQFilter = status;
+    document.querySelectorAll('.q-filter-btn').forEach(b => b.classList.remove('active-filter'));
+    if (btn) btn.classList.add('active-filter');
+    filterQueue();
+  }
+
   function filterQueue() {
-    const q = document.getElementById('queueSearch').value.toLowerCase();
+    const q = (document.getElementById('queueSearch')?.value || '').toLowerCase();
     const cards = document.querySelectorAll('.queue-card');
     let shown = 0;
     cards.forEach(c => {
-      const match = !q || c.dataset.name.includes(q) || (c.dataset.email||'').includes(q);
-      c.style.display = match ? '' : 'none';
-      if (match) shown++;
+      const textMatch = !q || c.dataset.name.includes(q) || (c.dataset.email||'').includes(q);
+      const statusMatch = _activeQFilter === 'all' || c.dataset.status === _activeQFilter;
+      const visible = textMatch && statusMatch;
+      c.style.display = visible ? '' : 'none';
+      if (visible) shown++;
     });
-    document.getElementById('queue-no-results').style.display = (shown === 0 && q) ? '' : 'none';
+    document.getElementById('queue-no-results').style.display = (shown === 0) ? '' : 'none';
   }
+
+  function toggleQMenu(btn) {
+    const dropdown = btn.nextElementSibling;
+    const isOpen = dropdown.style.display === 'block';
+    document.querySelectorAll('.q-dropdown').forEach(d => d.style.display = 'none');
+    if (!isOpen) dropdown.style.display = 'block';
+  }
+  document.addEventListener('click', function(e) {
+    if (!e.target.closest('.q-menu-wrap')) {
+      document.querySelectorAll('.q-dropdown').forEach(d => d.style.display = 'none');
+    }
+  });
 
   async function submitQueueAction(logId, sendNowAction) {
     const approveBtn = document.getElementById('approve-btn-' + logId);

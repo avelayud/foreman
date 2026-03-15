@@ -46,23 +46,79 @@
 </div>
 {% endif %}
 
-{# ── Section A: Notification Feed ── #}
+{# ── Section A: By Category ── #}
 <div style="margin-bottom:28px">
-  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+  <div style="font-size:11px;font-weight:700;color:var(--navy);font-family:'IBM Plex Mono',monospace;letter-spacing:0.8px;text-transform:uppercase;margin-bottom:12px">By Category</div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+    {% set quadrants = [
+      ('needs_response', '🔴 Needs Response', '#ef4444'),
+      ('needs_follow_up', '🟡 Needs Follow-up', '#f59e0b'),
+      ('invite_sent', '🟣 Invite Sent', '#7c3aed'),
+      ('calendar', '📅 Calendar', '#3b82f6'),
+    ] %}
+    {% for qkey, qlabel, qcolor in quadrants %}
+    {% set qdata = quadrant_data.get(qkey, {'count': 0, 'items': []}) %}
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow-sm);overflow:hidden">
+      <div style="padding:10px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;background:var(--bg)">
+        <span style="font-size:11px;font-weight:700;font-family:'IBM Plex Mono',monospace;color:{{ qcolor }}">{{ qlabel }}</span>
+        <span style="font-size:11px;font-weight:700;font-family:'IBM Plex Mono',monospace;color:{{ qcolor }};background:{{ qcolor }}18;padding:1px 8px;border-radius:20px">{{ qdata.count }}</span>
+      </div>
+      {% if qdata['items'] %}
+      <div>
+        {% for item in qdata['items'] %}
+        <a href="/conversations/{{ item.customer_id }}" style="text-decoration:none;color:inherit;display:block;padding:8px 14px;border-bottom:1px solid var(--border)" onmouseenter="this.style.background='var(--navy-soft)'" onmouseleave="this.style.background=''">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
+            <span style="font-size:12.5px;font-weight:600;color:var(--navy);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ item.customer_name }}</span>
+            <span style="font-size:10.5px;color:var(--text-3);font-family:'IBM Plex Mono',monospace;white-space:nowrap;flex-shrink:0">{{ item.ts | est if item.ts else '' }}</span>
+          </div>
+          {% if item.detail %}
+          <div style="font-size:11px;color:var(--text-3);margin-top:2px;font-family:'IBM Plex Mono',monospace;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ item.detail }}</div>
+          {% endif %}
+        </a>
+        {% endfor %}
+        {% if qdata.count > 5 %}
+        <a href="/conversations" style="display:block;padding:8px 14px;font-size:11px;color:var(--blue);font-family:'IBM Plex Mono',monospace;text-decoration:none">+ {{ qdata.count - 5 }} more →</a>
+        {% endif %}
+      </div>
+      {% else %}
+      <div style="padding:14px;font-size:12px;color:var(--text-3)">None right now</div>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+</div>
+
+{# ── Section B: Recent Activity Feed ── #}
+<div style="margin-bottom:28px">
+  <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
     <div style="font-size:11px;font-weight:700;color:var(--navy);font-family:'IBM Plex Mono',monospace;letter-spacing:0.8px;text-transform:uppercase">Recent Activity</div>
-    {% if feed_total > 50 %}
-    <div style="font-size:11px;color:var(--text-3);font-family:'IBM Plex Mono',monospace">Showing 50 of {{ feed_total }}</div>
+    {% if feed_total > 0 %}
+    <span style="font-size:10px;font-weight:700;font-family:'IBM Plex Mono',monospace;background:var(--navy-soft);color:var(--navy);padding:1px 8px;border-radius:20px;border:1px solid var(--border)">{{ feed_total }}</span>
     {% endif %}
   </div>
 
   {% if feed_items %}
   <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow-sm);overflow:hidden">
+    {# Column headers #}
+    <div style="display:grid;grid-template-columns:12px 110px 140px 1fr 120px 24px;gap:12px;padding:8px 16px;background:var(--bg);border-bottom:1px solid var(--border);align-items:center">
+      <div></div>
+      <div style="font-size:9px;font-family:'IBM Plex Mono',monospace;letter-spacing:1.2px;text-transform:uppercase;color:var(--text-4)">Time</div>
+      <div style="font-size:9px;font-family:'IBM Plex Mono',monospace;letter-spacing:1.2px;text-transform:uppercase;color:var(--text-4)">Customer</div>
+      <div style="font-size:9px;font-family:'IBM Plex Mono',monospace;letter-spacing:1.2px;text-transform:uppercase;color:var(--text-4)">What To Do</div>
+      <div style="font-size:9px;font-family:'IBM Plex Mono',monospace;letter-spacing:1.2px;text-transform:uppercase;color:var(--text-4)">Category</div>
+      <div></div>
+    </div>
     {% for item in feed_items %}
-    <a href="/conversations/{{ item.customer_id }}" style="text-decoration:none;color:inherit;display:flex;align-items:center;gap:12px;padding:11px 16px;border-bottom:1px solid var(--border);transition:background 0.1s" onmouseenter="this.style.background='var(--navy-soft)'" onmouseleave="this.style.background=''">
+    <a href="/conversations/{{ item.customer_id }}" style="text-decoration:none;color:inherit;display:grid;grid-template-columns:12px 110px 140px 1fr 120px 24px;gap:12px;padding:11px 16px;border-bottom:1px solid var(--border);align-items:center;transition:background 0.1s" onmouseenter="this.style.background='var(--navy-soft)'" onmouseleave="this.style.background=''">
       <span style="width:8px;height:8px;border-radius:50%;flex-shrink:0;background:{% if item.seen %}transparent;border:1.5px solid var(--border){% else %}{{ item.category_color }}{% endif %}"></span>
-      <span style="font-size:10.5px;font-family:'IBM Plex Mono',monospace;color:var(--text-3);white-space:nowrap;min-width:110px">{{ item.ts | est if item.ts else '—' }}</span>
-      <span style="font-size:13px;font-weight:600;color:var(--navy);min-width:120px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ item.customer_name }}</span>
-      <span style="font-size:12px;color:var(--text-2);flex:1">{{ item.description }}</span>
+      <span style="font-size:10.5px;font-family:'IBM Plex Mono',monospace;color:var(--text-3);white-space:nowrap">{{ item.ts | est if item.ts else '—' }}</span>
+      <span style="font-size:13px;font-weight:600;color:var(--navy);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ item.customer_name }}</span>
+      <div style="min-width:0">
+        <div style="font-size:12px;color:var(--text-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ item.description }}</div>
+        {% if item.detail and item.detail != item.description %}
+        <div style="font-size:10.5px;color:var(--text-3);font-family:'IBM Plex Mono',monospace;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px">{{ item.detail }}</div>
+        {% endif %}
+      </div>
       <span style="display:inline-flex;align-items:center;padding:2px 8px;border-radius:20px;font-size:9.5px;font-weight:600;font-family:'IBM Plex Mono',monospace;white-space:nowrap;background:{{ item.category_color }}18;color:{{ item.category_color }};border:1px solid {{ item.category_color }}44">{{ item.category_label }}</span>
       <span style="font-size:14px;color:var(--text-4)">›</span>
     </a>
@@ -74,41 +130,6 @@
     <div style="font-size:13px;color:var(--text-3)">All caught up — no pending items</div>
   </div>
   {% endif %}
-</div>
-
-{# ── Section B: Four-Quadrant Summary ── #}
-<div style="font-size:11px;font-weight:700;color:var(--navy);font-family:'IBM Plex Mono',monospace;letter-spacing:0.8px;text-transform:uppercase;margin-bottom:12px">By Category</div>
-<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
-  {% set quadrants = [
-    ('needs_response', '🔴 Needs Response', '#ef4444'),
-    ('needs_follow_up', '🟡 Needs Follow-up', '#f59e0b'),
-    ('invite_sent', '🟣 Invite Sent', '#7c3aed'),
-    ('calendar', '📅 Calendar', '#3b82f6'),
-  ] %}
-  {% for qkey, qlabel, qcolor in quadrants %}
-  {% set qdata = quadrant_data.get(qkey, {'count': 0, 'items': []}) %}
-  <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow-sm);overflow:hidden">
-    <div style="padding:10px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;background:var(--bg)">
-      <span style="font-size:11px;font-weight:700;font-family:'IBM Plex Mono',monospace;color:{{ qcolor }}">{{ qlabel }}</span>
-      <span style="font-size:11px;font-weight:700;font-family:'IBM Plex Mono',monospace;color:{{ qcolor }};background:{{ qcolor }}18;padding:1px 8px;border-radius:20px">{{ qdata.count }}</span>
-    </div>
-    {% if qdata['items'] %}
-    <div>
-      {% for item in qdata['items'] %}
-      <a href="/conversations/{{ item.customer_id }}" style="text-decoration:none;color:inherit;display:flex;align-items:center;justify-content:space-between;padding:8px 14px;border-bottom:1px solid var(--border);gap:10px" onmouseenter="this.style.background='var(--navy-soft)'" onmouseleave="this.style.background=''">
-        <span style="font-size:12.5px;font-weight:600;color:var(--navy);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ item.customer_name }}</span>
-        <span style="font-size:10.5px;color:var(--text-3);font-family:'IBM Plex Mono',monospace;white-space:nowrap;flex-shrink:0">{{ item.ts | est if item.ts else '' }}</span>
-      </a>
-      {% endfor %}
-      {% if qdata.count > 3 %}
-      <a href="/conversations" style="display:block;padding:8px 14px;font-size:11px;color:var(--blue);font-family:'IBM Plex Mono',monospace;text-decoration:none">+ {{ qdata.count - 3 }} more →</a>
-      {% endif %}
-    </div>
-    {% else %}
-    <div style="padding:14px;font-size:12px;color:var(--text-3)">None right now</div>
-    {% endif %}
-  </div>
-  {% endfor %}
 </div>
 
 {% endblock %}

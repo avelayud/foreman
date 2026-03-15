@@ -21,7 +21,7 @@
 ## Current Status
 
 - **Active Phase:** Phase 8 — Operator Config + Agent Quality
-- **State:** Phases 1–7 and 6b all complete. Jobs 11–30 complete. Latest: deploy bug fixes (google_cal_event_id SCHEMA_PATCHES, invite_sent Enum, updates page AttributeError), conversation detail UI polish, navbar reorganization, Command Center redesign, Conversations compact card layout. Next: Phase 8 Jobs 05/06/09 (Operator Config, Prompt Quality, Revenue Data Integrity), Job 31 (Priority Dashboard Redesign), Job 32 (Analytics — backlog).
+- **State:** Phases 1–7 and 6b all complete. Jobs 05, 09, 11–31 complete. Latest: Priority Dashboard redesign (revenue/outreach tile split), Operator Config page, Revenue data integrity (booking outcomes), UI polish across Conversations/Queue/Dashboard/Command Center. Next: Job 06 (Prompt Quality Sprint). Job 32 (Analytics — backlog).
 - **Last Updated:** 2026-03-14
 - **Live URL:** https://web-production-3df3a.up.railway.app
 - **Repo:** https://github.com/avelayud/foreman
@@ -29,6 +29,15 @@
 ---
 
 ## Recently Completed
+
+### 2026-03-14 — UI Polish Sprint (Conversations, Queue, Dashboard, Command Center)
+
+- **Conversations page:** Status/health chips now inline with customer name (same row, with divider); faded grey separator between name row and body; info section (Last Interaction | Opportunity | Messages) now horizontal with vertical dividers. In/out counts moved from header to info row. Legend block explaining health chip vs status pill added above cards.
+- **Outreach Queue:** Regenerate button moved inline to right of revision notes textarea. Customer Page + Open Conversation moved into 3-dot menu (⋮) in card header. Quick Links section removed. Filter bar added at top: All / Needs Approval / Send Pending filters with mini donut SVG.
+- **Priority Dashboard:** Revenue Pipeline (Uncontacted / In-Flight / Booked / Converted) grouped in left half; Outreach Health (Reply Rate / Booking Rate / Needs Attention / Total Outreach) grouped in right half. Section labels added.
+- **Command Center:** By Category section moved before Recent Activity. Quadrant rows show detail sub-line (classification context, days overdue, appointment date). Feed_items enriched with action-specific descriptions. Quadrant max rows increased to 5. Recent Activity has column headers (Time / Customer / What To Do / Category). Count badge added to Recent Activity header.
+- **base.html:** `s-booked` CSS class added (purple, for invite_sent state). Nav "All Agents" renamed to "Agents".
+- **Jobs archived:** 05, 09, 24–31 moved to plans/archive.
 
 ### 2026-03-14 — Jobs 24–30 + Deploy Fixes + UI Polish
 
@@ -89,7 +98,7 @@
 | 6 | Booking Conversion Flow + Google Calendar | ✅ Complete | Classifier, calendar, meetings queue live |
 | 6b | Booking Confirmation Detection + Calendar Write-back | ✅ Complete | Auto-booking on confirmed reply; GCal write-back |
 | 7 | Customer Analytics Page + Product Analytics | ✅ Complete | Jobs 03 + 04 done; per-page analytics + error tracking |
-| 8 | Operator Config + Agent Quality | 🔵 Active | Jobs 05, 06, 09 — config, prompts, revenue integrity |
+| 8 | Operator Config + Agent Quality | 🔵 Active | Jobs 05 ✅, 09 ✅, 31 ✅ done — Job 06 (Prompt Quality) remaining |
 | 9 | SMS Channel (Twilio) | ⬜ Planned | Operator-driven channel selection |
 | 10 | Jobber / HousecallPro Integration | ⬜ Planned | After SMS channel complete |
 | 11 | Service Interval Prediction | ⬜ Planned | |
