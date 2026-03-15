@@ -43,9 +43,9 @@
   /* ── PRIORITY TABLE ── */
   /* Cols: Score | Customer | Status | Est.Value | Dormant | Last Service | Last Interaction | ··· */
   .priority-table{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;box-shadow:var(--shadow-sm)}
-  .pt-head{display:grid;grid-template-columns:64px 1.7fr 1.1fr 0.9fr 0.6fr 1.2fr 1.5fr 40px;padding:9px 16px;background:var(--navy-soft);border-bottom:1px solid var(--border);gap:10px;align-items:center}
+  .pt-head{display:grid;grid-template-columns:64px 1.7fr 1.1fr 0.9fr 0.6fr 1.2fr 1fr 120px 40px;padding:9px 16px;background:var(--navy-soft);border-bottom:1px solid var(--border);gap:10px;align-items:center}
   .pt-th{font-size:9px;font-family:'IBM Plex Mono',monospace;letter-spacing:1.4px;text-transform:uppercase;color:var(--text-3);font-weight:700;white-space:nowrap;text-align:center}
-  .pt-row{display:grid;grid-template-columns:64px 1.7fr 1.1fr 0.9fr 0.6fr 1.2fr 1.5fr 40px;padding:11px 16px;border-bottom:1px solid var(--border);align-items:center;gap:10px;transition:background 0.1s}
+  .pt-row{display:grid;grid-template-columns:64px 1.7fr 1.1fr 0.9fr 0.6fr 1.2fr 1fr 120px 40px;padding:11px 16px;border-bottom:1px solid var(--border);align-items:center;gap:10px;transition:background 0.1s}
   .pt-row>div{text-align:center;display:flex;align-items:center;justify-content:center}
   .pt-row:last-child{border-bottom:none}
   .pt-row:hover{background:var(--navy-soft)}
@@ -203,6 +203,7 @@
       <div class="pt-th">Dormant</div>
       <div class="pt-th">Last Service</div>
       <div class="pt-th">Last Interaction</div>
+      <div class="pt-th">Action</div>
       <div class="pt-th"></div>
     </div>
 
@@ -262,6 +263,22 @@
         {% endif %}
       </div>
 
+      <div style="display:flex;justify-content:center">
+        {% if c.reactivation_status == 'never_contacted' %}
+        <button class="btn-primary" style="font-size:11px;padding:5px 12px;white-space:nowrap" onclick="draftOutreach({{ c.id }}, this)">Draft →</button>
+        {% elif c.reactivation_status in ('replied',) %}
+        <a href="/conversations/{{ c.id }}" class="btn-success" style="text-decoration:none;font-size:11px;padding:5px 12px;white-space:nowrap">Book Call →</a>
+        {% elif c.reactivation_status in ('outreach_sent', 'sequence_step_2', 'sequence_step_3') %}
+        <a href="/conversations/{{ c.id }}" class="btn-secondary" style="text-decoration:none;font-size:11px;padding:5px 12px;white-space:nowrap">Follow-up →</a>
+        {% elif c.reactivation_status in ('invite_sent', 'booked') %}
+        <a href="/conversations/{{ c.id }}" class="btn-ghost" style="text-decoration:none;font-size:11px;padding:5px 12px;white-space:nowrap">View →</a>
+        {% elif c.reactivation_status == 'sequence_complete' %}
+        <a href="/conversations/{{ c.id }}" class="btn-ghost" style="text-decoration:none;font-size:11px;padding:5px 12px;white-space:nowrap;color:var(--text-3)">Re-engage →</a>
+        {% else %}
+        <span class="act-empty">—</span>
+        {% endif %}
+      </div>
+
       <div class="more-wrap" onclick="event.stopPropagation()">
         <button class="more-btn" onclick="toggleMore(event, this)" title="More options">⋯</button>
         <div class="more-dropdown">
@@ -309,6 +326,25 @@
       btn.textContent = 'Show ' + rows.length + ' more';
     } else {
       btn.textContent = 'Show less';
+    }
+  }
+
+  // ── Draft Outreach action ──────────────────────────────────────────────────
+  async function draftOutreach(customerId, btn) {
+    const origText = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = 'Drafting…';
+    try {
+      const res = await fetch(`/api/draft/${customerId}`, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({}) });
+      if (!res.ok) throw new Error('Draft failed');
+      btn.textContent = 'Queued ✓';
+      btn.style.background = 'var(--green)';
+      refreshNavCounts();
+      setTimeout(() => { window.location.href = '/outreach'; }, 900);
+    } catch(e) {
+      btn.disabled = false;
+      btn.textContent = origText;
+      alert('Could not draft: ' + e.message);
     }
   }
 

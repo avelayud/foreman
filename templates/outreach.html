@@ -72,6 +72,8 @@
 </style>
 {% endblock %}
 
+{% macro seq_colors(lbl) %}{% set l = lbl|lower %}{% if 'initial' in l %}var(--amber)|#fef3c7|#fde68a{% elif 'follow-up 1' in l %}var(--blue)|var(--blue-pale)|#bfdbfe{% elif 'follow-up 2' in l or 'follow-up 3' in l %}#7c3aed|#ede9fe|#c4b5fd{% elif 'booking' in l %}var(--green)|var(--green-pale)|#a7f3d0{% elif 'price' in l %}var(--gold)|var(--gold-pale)|var(--gold-rule){% else %}var(--text-3)|#f1f5f9|var(--border){% endif %}{% endmacro %}
+
 {% block content %}
 
 <div style="display:flex;align-items:flex-end;justify-content:space-between;margin-bottom:22px;flex-wrap:wrap;gap:12px">
@@ -101,35 +103,70 @@
 {% set send_pending = pending | rejectattr("approval_status", "equalto", "pending") | list %}
 
 {% if pending %}
-{# ── Filter bar with mini donut ── #}
+{# ── Filter bar with donut ── #}
 {% set total_q = pending|length %}
 {% set na_count = needs_approval|length %}
 {% set sp_count = send_pending|length %}
 {% set label_set = namespace(labels=[]) %}
 {% for item in pending %}{% if item.sequence_label not in label_set.labels %}{% set label_set.labels = label_set.labels + [item.sequence_label] %}{% endif %}{% endfor %}
-<div style="display:flex;align-items:center;gap:16px;margin-bottom:14px;padding:10px 16px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow-sm);flex-wrap:wrap">
+
+{# Color map for each type label #}
+{% set _lbl_colors = namespace(map={}) %}
+{% set _color_cycle = [
+  ('var(--amber)', '#fef3c7', '#fde68a', '#f59e0b'),
+  ('var(--blue)', 'var(--blue-pale)', '#bfdbfe', '#3b82f6'),
+  ('#7c3aed', '#ede9fe', '#c4b5fd', '#7c3aed'),
+  ('var(--green)', 'var(--green-pale)', '#a7f3d0', '#10b981'),
+  ('var(--gold)', 'var(--gold-pale)', 'var(--gold-rule)', '#c8922a'),
+] %}
+{% for lbl in label_set.labels %}
+{% set _ci = loop.index0 % (_color_cycle|length) %}
+{% set _lbl_colors.map = _lbl_colors.map | combine({lbl: _color_cycle[_ci]}) %}
+{% endfor %}
+
+<div style="display:flex;align-items:center;gap:16px;margin-bottom:14px;padding:12px 16px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow-sm);flex-wrap:wrap">
+  {# Donut with per-type segments #}
   {% if total_q > 0 %}
-  {% set circ = 88 %}{% set r = 14 %}
-  {% set sp_dash = (sp_count / total_q * circ)|round(2) %}
-  {% set na_dash = (na_count / total_q * circ)|round(2) %}
-  <svg width="40" height="40" viewBox="0 0 40 40" style="flex-shrink:0">
-    <circle cx="20" cy="20" r="{{ r }}" fill="none" stroke="var(--border)" stroke-width="5"/>
-    <circle cx="20" cy="20" r="{{ r }}" fill="none" stroke="var(--blue)" stroke-width="5"
-      stroke-dasharray="{{ sp_dash }} {{ circ - sp_dash }}" stroke-dashoffset="{{ circ * 0.25 }}"
-      stroke-linecap="butt" transform="rotate(-90 20 20)"/>
-    <circle cx="20" cy="20" r="{{ r }}" fill="none" stroke="var(--amber)" stroke-width="5"
-      stroke-dasharray="{{ na_dash }} {{ circ - na_dash }}" stroke-dashoffset="{{ (circ * 0.25 - sp_dash)|round(2) }}"
-      stroke-linecap="butt" transform="rotate(-90 20 20)"/>
-    <text x="20" y="24" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="10" font-weight="700" fill="var(--navy)">{{ total_q }}</text>
-  </svg>
-  {% endif %}
-  <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
-    <button onclick="setQueueFilter('all', this)" id="qf-all" class="q-filter-btn active-filter">All <span class="q-filter-count">{{ total_q }}</span></button>
-    {% for lbl in label_set.labels %}
-    <button onclick="setQueueFilter('{{ lbl|lower|replace(' ', '-') }}', this)" class="q-filter-btn" style="--fc:var(--navy);--fbc:var(--navy-soft);--fbc2:var(--border)">{{ lbl }} <span class="q-filter-count">{{ pending | selectattr("sequence_label", "equalto", lbl) | list | length }}</span></button>
-    {% endfor %}
+  <div style="flex-shrink:0;display:flex;align-items:center;gap:12px">
+    <svg width="72" height="72" viewBox="0 0 120 120">
+      {% set circ = 251.2 %}{% set r = 40 %}{% set offset = namespace(val=0) %}
+      <circle cx="60" cy="60" r="{{ r }}" fill="none" stroke="var(--border)" stroke-width="12"/>
+      {% for lbl in label_set.labels %}
+      {% set cnt = pending | selectattr("sequence_label", "equalto", lbl) | list | length %}
+      {% set dash = (cnt / total_q * circ)|round(2) %}
+      {% set _c = _lbl_colors.map.get(lbl, _color_cycle[0]) %}
+      <circle cx="60" cy="60" r="{{ r }}" fill="none" stroke="{{ _c[3] }}" stroke-width="12"
+        stroke-dasharray="{{ dash }} {{ circ - dash }}"
+        stroke-dashoffset="{{ (circ * 0.25 - offset.val)|round(2) }}"
+        stroke-linecap="butt" transform="rotate(-90 60 60)"/>
+      {% set offset.val = offset.val + dash %}
+      {% endfor %}
+      <text x="60" y="55" text-anchor="middle" font-family="'Playfair Display',serif" font-size="24" font-weight="700" fill="var(--navy)">{{ total_q }}</text>
+      <text x="60" y="70" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="10" fill="var(--text-3)">IN QUEUE</text>
+    </svg>
+    <div style="display:flex;flex-direction:column;gap:4px">
+      {% for lbl in label_set.labels %}
+      {% set cnt = pending | selectattr("sequence_label", "equalto", lbl) | list | length %}
+      {% set _c = _lbl_colors.map.get(lbl, _color_cycle[0]) %}
+      <div style="display:flex;align-items:center;gap:5px">
+        <span style="width:7px;height:7px;border-radius:50%;background:{{ _c[3] }};flex-shrink:0"></span>
+        <span style="font-size:11px;color:var(--text-2)">{{ lbl }}</span>
+        <span style="font-size:11px;font-weight:700;color:var(--navy);font-family:'IBM Plex Mono',monospace">{{ cnt }}</span>
+      </div>
+      {% endfor %}
+    </div>
   </div>
-  <div style="flex:1;min-width:200px">
+  <div style="width:1px;height:56px;background:var(--border);flex-shrink:0;align-self:center"></div>
+  {% endif %}
+  <div style="flex:1;min-width:240px;display:flex;flex-direction:column;gap:8px">
+    <div style="display:flex;gap:4px;flex-wrap:wrap">
+      <button onclick="setQueueFilter('all', this)" id="qf-all" class="q-filter-btn active-filter"><span class="q-filter-count" style="font-size:11px;font-weight:700;opacity:1">{{ total_q }}</span> All</button>
+      {% for lbl in label_set.labels %}
+      {% set cnt = pending | selectattr("sequence_label", "equalto", lbl) | list | length %}
+      {% set _c = _lbl_colors.map.get(lbl, _color_cycle[0]) %}
+      <button onclick="setQueueFilter('{{ lbl|lower|replace(' ', '-') }}', this)" class="q-filter-btn" style="--fc:{{ _c[0] }};--fbc:{{ _c[1] }};--fbc2:{{ _c[2] }}"><span class="q-filter-count" style="font-size:11px;font-weight:700;opacity:1">{{ cnt }}</span> {{ lbl }}</button>
+      {% endfor %}
+    </div>
     <div style="position:relative">
       <span style="position:absolute;left:9px;top:50%;transform:translateY(-50%);color:var(--text-4);font-size:13px;pointer-events:none">⌕</span>
       <input type="text" id="queueSearch" placeholder="Search by name or email…" oninput="filterQueue()"
@@ -150,11 +187,10 @@
   <div class="queue-header">
     <div class="queue-meta">
       <span class="queue-name">{{ item.customer_name }}</span>
-      <span class="tag-status tag-{{ item.approval_chip_cls }}">{{ item.approval_status_label }}</span>
+      <span class="reach-stage" style="font-size:10.5px">{{ item.sequence_label }}</span>
     </div>
     <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-      <span class="queue-info">Type</span>
-      <span class="reach-stage">{{ item.sequence_label }}</span>
+      <span class="tag-status tag-{{ item.approval_chip_cls }}">{{ item.approval_status_label }}</span>
       <div class="q-menu-wrap">
         <button onclick="toggleQMenu(this)" style="background:none;border:1px solid var(--border);border-radius:6px;cursor:pointer;padding:2px 8px;color:var(--text-3);font-size:14px;line-height:1.4" onmouseenter="this.style.background='var(--navy-soft)'" onmouseleave="this.style.background=''">⋮</button>
         <div class="q-dropdown">
@@ -213,11 +249,10 @@
   <div class="queue-header">
     <div class="queue-meta">
       <span class="queue-name">{{ item.customer_name }}</span>
-      <span class="tag-status tag-{{ item.approval_chip_cls }}">{{ item.approval_status_label }}</span>
+      <span class="reach-stage" style="font-size:10.5px">{{ item.sequence_label }}</span>
     </div>
     <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-      <span class="queue-info">Type</span>
-      <span class="reach-stage">{{ item.sequence_label }}</span>
+      <span class="tag-status tag-{{ item.approval_chip_cls }}">{{ item.approval_status_label }}</span>
       <div class="q-menu-wrap">
         <button onclick="toggleQMenu(this)" style="background:none;border:1px solid var(--border);border-radius:6px;cursor:pointer;padding:2px 8px;color:var(--text-3);font-size:14px;line-height:1.4" onmouseenter="this.style.background='var(--navy-soft)'" onmouseleave="this.style.background=''">⋮</button>
         <div class="q-dropdown">

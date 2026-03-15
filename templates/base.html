@@ -206,7 +206,7 @@
 
       <div class="sb-section">Queues</div>
       <a href="/outreach" class="sb-link {% if active == 'outreach' %}active{% endif %}" onclick="trackEvent('nav_to_outreach', {page:'outreach'})">
-        <span>✉</span> Outreach Queue
+        <span>📨</span> Outreach Queue
         <span id="nav-badge-queue" style="margin-left:auto;background:var(--gold);color:#fff;font-size:9.5px;font-weight:600;font-family:'IBM Plex Mono',monospace;padding:1px 7px;border-radius:20px{% if not (queue_count is defined and queue_count > 0) %};display:none{% endif %}">{% if queue_count is defined and queue_count > 0 %}{{ queue_count }}{% endif %}</span>
       </a>
       <a href="/meetings" class="sb-link {% if active == 'meetings' %}active{% endif %}" onclick="trackEvent('nav_to_meetings', {page:'meetings'})">

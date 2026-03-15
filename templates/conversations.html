@@ -139,6 +139,9 @@
       <a href="/conversations/{{ item.customer_id }}" style="font-size:15px;font-family:'Playfair Display',serif;color:var(--navy);font-weight:700;text-decoration:none;white-space:nowrap" onmouseenter="this.style.textDecoration='underline'" onmouseleave="this.style.textDecoration='none'">{{ item.customer_name }}</a>
       <span style="width:1px;height:14px;background:var(--border);flex-shrink:0"></span>
       <span class="health-chip chip-{{ item.health_chip_cls }}">{{ item.health_label }}</span>
+      <span style="width:1px;height:14px;background:var(--border);flex-shrink:0;margin-left:4px"></span>
+      <span class="status-pill {{ item.status_cls }}" style="font-size:9.5px;padding:1px 8px">{{ item.status_label }}</span>
+      <span class="opp-chip" style="font-size:9.5px">{{ item.opp_est }}{% if item.opp_label %} · {{ item.opp_label }}{% endif %}</span>
     </div>
     {# 3-dot menu #}
     <div class="conv-menu-wrap" style="flex-shrink:0">
@@ -156,7 +159,7 @@
   <div class="conv-body-row" style="display:flex;align-items:center;gap:12px">
 
     {# Email preview — one line, half width #}
-    <div class="conv-preview-wrap" style="flex:0 0 46%;max-width:46%;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:10px 12px;min-width:0;min-height:72px">
+    <div class="conv-preview-wrap" style="flex:0 0 52%;max-width:52%;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:10px 12px;min-width:0;min-height:72px">
       <div style="font-size:10.5px;color:var(--text-3);font-family:'IBM Plex Mono',monospace;margin-bottom:3px">
         {% if item.last_message_is_inbound %}<span style="color:var(--red);font-weight:600">Customer</span>{% else %}Outbound{% endif %} · {{ item.last_message_at | est }}
       </div>
@@ -164,29 +167,24 @@
       <div style="font-size:11px;color:var(--text-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ item.last_message_preview }}</div>
     </div>
 
-    {# Info row: Job Type | Messages | Last Interaction | Status · Opportunity #}
-    <div style="flex:1;display:flex;align-items:center;gap:10px;min-width:0;flex-wrap:wrap">
-      <div style="min-width:0">
+    {# Info row: Job Type | Messages | Last Interaction — centered, aligned with open button #}
+    <div style="flex:1;display:flex;align-items:center;justify-content:center;gap:14px;min-width:0;flex-wrap:wrap">
+      <div style="min-width:0;text-align:center">
         <div class="right-label">Job Type</div>
-        <div style="display:flex;align-items:center;gap:5px;white-space:nowrap">
+        <div style="display:flex;align-items:center;justify-content:center;gap:5px;white-space:nowrap">
           <span style="font-size:10.5px;font-family:'IBM Plex Mono',monospace;color:var(--text-2);font-weight:500">{{ item.service_type if item.service_type else '—' }}</span>
           <span style="font-size:9.5px;font-family:'IBM Plex Mono',monospace;padding:1px 6px;border-radius:3px;{% if item.engagement_type == 'Call' %}background:#eff6ff;color:var(--blue);border:1px solid #bfdbfe{% else %}background:var(--green-pale);color:var(--green);border:1px solid #a7f3d0{% endif %}">{{ '📞 Call' if item.engagement_type == 'Call' else '🔧 On-site' }}</span>
         </div>
       </div>
       <div style="width:1px;height:22px;background:var(--border);flex-shrink:0"></div>
-      <div style="white-space:nowrap">
+      <div style="white-space:nowrap;text-align:center">
         <div class="right-label">Messages</div>
         <div class="right-value">↑{{ item.outbound_count }} · ↓{{ item.inbound_count }}</div>
       </div>
       <div style="width:1px;height:22px;background:var(--border);flex-shrink:0"></div>
-      <div style="min-width:0">
-        <div class="right-label">Last Interaction</div>
-        <div class="right-value" style="white-space:nowrap">{{ item.last_interaction_label }} · {{ item.last_touch_at | est }}</div>
-      </div>
-      <div style="width:1px;height:22px;background:var(--border);flex-shrink:0"></div>
-      <div style="min-width:0;display:flex;align-items:center;gap:7px;flex-wrap:nowrap">
-        <span class="status-pill {{ item.status_cls }}" style="font-size:9.5px;padding:1px 7px;flex-shrink:0">{{ item.status_label }}</span>
-        <span class="opp-chip">{{ item.opp_est }}{% if item.opp_label %} · {{ item.opp_label }}{% endif %}</span>
+      <div style="min-width:0;text-align:center">
+        <div class="right-label">Last Touch</div>
+        <div class="right-value" style="white-space:nowrap">{{ item.last_touch_at | est }}</div>
       </div>
     </div>
 

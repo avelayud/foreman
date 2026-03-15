@@ -2337,20 +2337,29 @@ def updates_page(request: Request):
         feed_items = []
 
         # 1. Needs Response
-        _cls_action = {
-            "booking_intent": "Booking intent — send a time proposal",
-            "price_inquiry": "Sent a price question — send quote",
-            "callback_request": "Requested a callback — confirm timing",
-            "not_interested": "Not interested — consider closing",
-            "unsubscribe_request": "Requested unsubscribe — take action",
-            "unclear": "Replied — review and write a response",
+        _cls_what_happened = {
+            "booking_intent": "Customer replied with booking intent",
+            "price_inquiry": "Customer asked about pricing",
+            "callback_request": "Customer requested a callback",
+            "not_interested": "Customer said they're not interested right now",
+            "unsubscribe_request": "Customer asked to be removed from list",
+            "unclear": "Customer replied — intent unclear",
+        }
+        _cls_next_step = {
+            "booking_intent": "Propose 3 available time slots",
+            "price_inquiry": "Send a quote or pricing details",
+            "callback_request": "Call them or confirm a good time to connect",
+            "not_interested": "Reply conversationally or close conversation",
+            "unsubscribe_request": "Mark as unsubscribed immediately",
+            "unclear": "Read the reply and draft a response",
         }
         for item in needs_response:
             ts = item["last_inbound_at"] or item.get("created_at")
             cls = item.get("classification", "unclear")
-            description = _cls_action.get(cls, "Replied — write a response")
             hours = item.get("hours_waiting")
-            detail = f"Waiting {hours}h for reply" if hours and hours > 0 else "Reply when ready"
+            description = _cls_what_happened.get(cls, "Customer replied")
+            next_step = _cls_next_step.get(cls, "Read and respond")
+            detail = next_step  # keep detail as alias for quadrant view
             feed_items.append({
                 "ts": ts,
                 "customer_id": item["customer_id"],
@@ -2359,6 +2368,7 @@ def updates_page(request: Request):
                 "category_label": "Needs Response",
                 "category_color": "#ef4444",
                 "description": description,
+                "next_step": next_step,
                 "detail": detail,
                 "seen": bool(last_viewed_dt and ts and ts < last_viewed_dt),
             })
@@ -2371,6 +2381,8 @@ def updates_page(request: Request):
             days_ov = item.get("days_overdue", 0)
             step = item.get("sequence_step", "outreach_sent")
             step_label = {"outreach_sent": "initial outreach", "sequence_step_2": "follow-up 1", "sequence_step_3": "follow-up 2"}.get(step, "outreach")
+            description = f"No reply after {step_label} — {days_ov} day{'s' if days_ov != 1 else ''} overdue"
+            next_step = f"Queue the next follow-up (after {step_label})"
             feed_items.append({
                 "ts": ts,
                 "customer_id": item["customer_id"],
@@ -2378,8 +2390,9 @@ def updates_page(request: Request):
                 "category": "needs_follow_up",
                 "category_label": "Needs Follow-up",
                 "category_color": "#f59e0b",
-                "description": f"Follow-up overdue by {days_ov} day{'s' if days_ov != 1 else ''}",
-                "detail": f"After {step_label} — queue next follow-up",
+                "description": description,
+                "next_step": next_step,
+                "detail": next_step,
                 "seen": bool(last_viewed_dt and ts and ts < last_viewed_dt),
             })
 
@@ -2398,6 +2411,7 @@ def updates_page(request: Request):
             )
             outbound = [l for l in logs if l.direction == "outbound"]
             ts = max((_l.sent_at or _l.created_at for _l in outbound), default=None) if outbound else None
+            next_step = "Send a reminder if no response within 2 days"
             feed_items.append({
                 "ts": ts,
                 "customer_id": cust.id,
@@ -2405,8 +2419,9 @@ def updates_page(request: Request):
                 "category": "invite_sent",
                 "category_label": "Invite Sent",
                 "category_color": "#7c3aed",
-                "description": "Booking proposal sent — awaiting confirmation",
-                "detail": "Follow up if no response within 2 days",
+                "description": "Calendar invite sent — awaiting customer confirmation",
+                "next_step": next_step,
+                "detail": next_step,
                 "seen": bool(last_viewed_dt and ts and ts < last_viewed_dt),
             })
 
@@ -2414,6 +2429,7 @@ def updates_page(request: Request):
         for item in calendar_updates:
             ts = item.get("slot_start")
             slot_label = ts.strftime("%-b %-d") if ts else "unknown date"
+            next_step = f"Review the appointment details and confirm it's still on"
             feed_items.append({
                 "ts": ts,
                 "customer_id": item["customer_id"],
@@ -2422,7 +2438,8 @@ def updates_page(request: Request):
                 "category_label": "Calendar",
                 "category_color": "#3b82f6",
                 "description": item["issue"],
-                "detail": f"Appointment {slot_label} — review and confirm",
+                "next_step": next_step,
+                "detail": next_step,
                 "seen": bool(last_viewed_dt and ts and ts < last_viewed_dt),
             })
 
