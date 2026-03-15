@@ -41,11 +41,11 @@
   .pg-section .priority-table{border-radius:0 0 var(--radius) var(--radius)}
 
   /* ── PRIORITY TABLE ── */
-  /* Cols: Score | Customer | Status | Est.Value | Dormant | Last Service | Last Interaction | Action | Mark as Booked | ··· */
+  /* Cols: Score | Customer | Status | Est.Value | Dormant | Last Service | Last Interaction | ··· */
   .priority-table{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;box-shadow:var(--shadow-sm)}
-  .pt-head{display:grid;grid-template-columns:64px 1.7fr 1.1fr 0.9fr 0.6fr 1.2fr 1.5fr 1.0fr 1.0fr 40px;padding:9px 16px;background:var(--navy-soft);border-bottom:1px solid var(--border);gap:10px;align-items:center}
+  .pt-head{display:grid;grid-template-columns:64px 1.7fr 1.1fr 0.9fr 0.6fr 1.2fr 1.5fr 40px;padding:9px 16px;background:var(--navy-soft);border-bottom:1px solid var(--border);gap:10px;align-items:center}
   .pt-th{font-size:9px;font-family:'IBM Plex Mono',monospace;letter-spacing:1.4px;text-transform:uppercase;color:var(--text-3);font-weight:700;white-space:nowrap;text-align:center}
-  .pt-row{display:grid;grid-template-columns:64px 1.7fr 1.1fr 0.9fr 0.6fr 1.2fr 1.5fr 1.0fr 1.0fr 40px;padding:11px 16px;border-bottom:1px solid var(--border);align-items:center;gap:10px;transition:background 0.1s}
+  .pt-row{display:grid;grid-template-columns:64px 1.7fr 1.1fr 0.9fr 0.6fr 1.2fr 1.5fr 40px;padding:11px 16px;border-bottom:1px solid var(--border);align-items:center;gap:10px;transition:background 0.1s}
   .pt-row>div{text-align:center;display:flex;align-items:center;justify-content:center}
   .pt-row:last-child{border-bottom:none}
   .pt-row:hover{background:var(--navy-soft)}
@@ -82,21 +82,6 @@
   .s-booked{background:var(--green-pale);color:var(--green)}
   .s-unsub{background:#eef0f3;color:#9ca3af;border:1.5px solid #e5e7eb}
 
-  /* Action buttons — 80% column width, blocky */
-  .act-btn{font-size:11px;padding:5px 0;border-radius:6px;cursor:pointer;font-family:'IBM Plex Sans',sans-serif;font-weight:600;white-space:nowrap;border:1.5px solid transparent;transition:all 0.15s;text-decoration:none;display:block;text-align:center;line-height:1.4;width:80%;letter-spacing:0.1px}
-  .act-draft{background:var(--navy);color:#fff;border-color:var(--navy)}
-  .act-draft:hover{background:#1a2a4a}
-  .act-followup{background:var(--blue-pale);color:var(--blue);border-color:#93c5fd}
-  .act-followup:hover{background:#dbeafe;border-color:var(--blue)}
-  .act-call{background:var(--amber-pale);color:var(--amber);border-color:#fcd34d}
-  .act-call:hover{background:#fef3c7;border-color:var(--amber)}
-  .act-book{background:var(--green);color:#fff;border-color:var(--green);width:80%;padding:5px 0;border-radius:6px;font-size:11px;font-weight:600;font-family:'IBM Plex Sans',sans-serif;cursor:pointer;border:1.5px solid var(--green);transition:all 0.15s;white-space:nowrap;display:block;text-align:center}
-  .act-book:hover{background:#156347}
-  /* Terminal state badges — 80% column width, pill shape */
-  .act-badge{display:block;width:80%;padding:5px 0;border-radius:20px;font-size:10px;font-weight:600;font-family:'IBM Plex Mono',monospace;white-space:nowrap;text-align:center;letter-spacing:0.5px}
-  .act-badge-booked{background:var(--green-pale);color:var(--green)}
-  .act-badge-unsub{background:#eef0f3;color:#9ca3af;border:1.5px solid #e5e7eb}
-  .act-badge-done{background:var(--navy-soft);color:var(--text-3)}
   .act-empty{font-size:10.5px;color:var(--text-4);font-family:'IBM Plex Mono',monospace}
 
   /* ··· more menu */
@@ -112,17 +97,6 @@
   /* Empty state */
   .empty-state{padding:40px;text-align:center;color:var(--text-3);font-size:13px}
 
-  /* ── MODAL ── */
-  .modal-overlay{display:none;position:fixed;inset:0;background:rgba(10,22,40,0.45);z-index:1000;align-items:center;justify-content:center}
-  .modal-overlay.open{display:flex}
-  .modal{background:var(--surface);border-radius:12px;padding:28px 30px;width:380px;box-shadow:var(--shadow-lg)}
-  .modal h3{font-size:16px;font-weight:700;color:var(--navy);margin-bottom:8px;font-family:'Playfair Display',serif}
-  .modal p{font-size:13px;color:var(--text-2);margin-bottom:18px}
-  .modal label{display:block;font-size:11px;font-family:'IBM Plex Mono',monospace;letter-spacing:1px;text-transform:uppercase;color:var(--text-3);margin-bottom:5px}
-  .modal input,.modal textarea{width:100%;border:1px solid var(--border);border-radius:7px;padding:9px 12px;font-size:13.5px;font-family:'IBM Plex Sans',sans-serif;color:var(--text);outline:none;transition:border-color 0.15s;margin-bottom:14px}
-  .modal input:focus,.modal textarea:focus{border-color:var(--navy)}
-  .modal textarea{resize:vertical;height:70px}
-  .modal-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:6px}
 </style>
 {% endblock %}
 
@@ -132,55 +106,63 @@
 <div class="page-eyebrow">{{ operator.business_name }} · {{ today_str }}</div>
 <h1 class="page-title">Priority Dashboard</h1>
 
-{# ── 8 METRIC CARDS ── #}
-<div class="metric-grid">
-  <div class="metric-cell">
-    <div class="metric-label">Dormant Identified</div>
-    <div class="metric-value">{{ metrics.dormant_identified }}</div>
-    <div class="metric-sub">Score &gt;40, not yet contacted</div>
+{# ── Row 1: Revenue Opportunity ── #}
+<div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-bottom:10px">
+  <div style="background:var(--surface);border:1px solid var(--border);border-left:4px solid var(--red);border-radius:var(--radius);box-shadow:var(--shadow-sm);padding:14px 18px">
+    <div class="metric-label">Uncontacted Revenue</div>
+    <div class="metric-value" style="font-size:26px">${{ "{:,.0f}".format(dm.uncontacted_rev) }}</div>
+    <div class="metric-sub">{{ dm.uncontacted_count }} customers never contacted</div>
+    {% if dm.uncontacted_with_val < dm.uncontacted_count * 0.5 and dm.uncontacted_count > 0 %}
+    <div style="font-size:10.5px;color:var(--amber);margin-top:4px">Add opportunity values to track pipeline</div>
+    {% endif %}
   </div>
-  <div class="metric-cell">
-    <div class="metric-label">% Dormant Contacted</div>
-    <div class="metric-value">{{ metrics.pct_contacted }}%</div>
-    <div class="metric-sub">Of priority-scored customers</div>
+  <div style="background:var(--surface);border:1px solid var(--border);border-left:4px solid var(--amber);border-radius:var(--radius);box-shadow:var(--shadow-sm);padding:14px 18px">
+    <div class="metric-label">In-Flight Revenue</div>
+    <div class="metric-value" style="font-size:26px">${{ "{:,.0f}".format(dm.in_flight_rev) }}</div>
+    <div class="metric-sub">{{ dm.in_flight_count }} active conversations</div>
   </div>
-  <div class="metric-cell">
-    <div class="metric-label">Responses Received</div>
-    <div class="metric-value">{{ metrics.responses_received }}</div>
-    <div class="metric-sub">Inbound replies logged</div>
+  <div style="background:var(--surface);border:1px solid var(--border);border-left:4px solid var(--blue);border-radius:var(--radius);box-shadow:var(--shadow-sm);padding:14px 18px">
+    <div class="metric-label">Booked Pipeline</div>
+    <div class="metric-value" style="font-size:26px">${{ "{:,.0f}".format(dm.booked_rev) }}</div>
+    <div class="metric-sub">{{ dm.booked_count }} appointments confirmed</div>
   </div>
-  <div class="metric-cell">
-    <div class="metric-label">Active Conversations</div>
-    <div class="metric-value">{{ metrics.active_conversations }}</div>
-    <div class="metric-sub">Open threads, no booking yet</div>
+  <div style="background:var(--surface);border:1px solid var(--border);border-left:4px solid var(--green);border-radius:var(--radius);box-shadow:var(--shadow-sm);padding:14px 18px">
+    <div class="metric-label">Converted (YTD)</div>
+    <div class="metric-value" style="font-size:26px;color:var(--green)">${{ "{:,.0f}".format(dm.converted_rev) }}</div>
+    <div class="metric-sub">{{ dm.converted_count }} jobs closed this year</div>
   </div>
 </div>
-<div class="metric-grid" style="border-radius:0 0 var(--radius) var(--radius);margin-top:-1px;margin-bottom:28px">
-  <div class="metric-cell {% if metrics.jobs_booked > 0 %}accent-green{% endif %}">
-    <div class="metric-label">Jobs Booked</div>
-    <div class="metric-value">{{ metrics.jobs_booked }}</div>
-    <div class="metric-sub">Converted via Foreman</div>
+
+{# ── Row 2: Pipeline Health ── #}
+<div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-bottom:28px">
+  <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow-sm);padding:14px 18px">
+    <div class="metric-label">Reply Rate</div>
+    <div class="metric-value" style="font-size:26px">{{ dm.reply_rate }}%</div>
+    <div class="metric-sub">{{ dm.replied_count }} / {{ dm.contacted_count }} contacted</div>
   </div>
-  <div class="metric-cell {% if metrics.revenue_generated > 0 %}accent{% endif %}">
-    <div class="metric-label">Revenue Generated</div>
-    <div class="metric-value">${{ "{:,.0f}".format(metrics.revenue_generated) }}</div>
-    <div class="metric-sub">From Foreman-booked jobs</div>
+  <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow-sm);padding:14px 18px">
+    <div class="metric-label">Booking Rate</div>
+    <div class="metric-value" style="font-size:26px">{{ dm.booking_rate }}%</div>
+    <div class="metric-sub">{{ dm.booking_rate_num }} booked / {{ dm.replied_count }} replied</div>
   </div>
-  <div class="metric-cell">
-    <div class="metric-label">Potential Revenue</div>
-    <div class="metric-value" style="color:var(--amber)">${{ "{:,.0f}".format(metrics.potential_revenue) }}</div>
-    <div class="metric-sub">Uncontacted priority queue</div>
+  <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow-sm);padding:14px 18px">
+    <div class="metric-label">Needs Attention</div>
+    <div class="metric-value" style="font-size:26px{% if conversations_attention_count > 0 %};color:var(--red){% endif %}">{{ conversations_attention_count }}</div>
+    <div class="metric-sub">need response or follow-up</div>
   </div>
-  <div class="metric-cell">
-    <div class="metric-label">Avg Job Value</div>
-    <div class="metric-value">${{ "{:,.0f}".format(metrics.avg_job_value) }}</div>
-    <div class="metric-sub">Historical average</div>
+  <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow-sm);padding:14px 18px">
+    <div class="metric-label">Total Outreach</div>
+    <div class="metric-value" style="font-size:26px">{{ dm.contacted_count }}</div>
+    <div class="metric-sub">customers contacted</div>
   </div>
 </div>
 
 {# ── PRIORITY GROUPS ── #}
-<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
-  <h2 style="font-size:13px;font-weight:600;color:var(--navy)">Priority Queue</h2>
+<div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:8px">
+  <div>
+    <h2 style="font-size:13px;font-weight:700;color:var(--navy);margin-bottom:2px">Outreach Priority Queue</h2>
+    <div style="font-size:11.5px;color:var(--text-3)">Sorted by opportunity score. Take action from the conversation page.</div>
+  </div>
   <a href="/customers" style="font-size:12px;color:var(--blue);text-decoration:none;font-family:'IBM Plex Sans',sans-serif;font-weight:500">View all customers →</a>
 </div>
 
@@ -210,8 +192,6 @@
       <div class="pt-th">Dormant</div>
       <div class="pt-th">Last Service</div>
       <div class="pt-th">Last Interaction</div>
-      <div class="pt-th">Action</div>
-      <div class="pt-th">Mark as Booked</div>
       <div class="pt-th"></div>
     </div>
 
@@ -271,34 +251,6 @@
         {% endif %}
       </div>
 
-      <div onclick="event.stopPropagation()">
-        {% if c.reactivation_status == 'never_contacted' %}
-          <button onclick="draftOutreach({{ c.id }}, this)" class="act-btn act-draft">Draft Outreach</button>
-        {% elif c.reactivation_status in ('outreach_sent', 'sequence_step_2', 'sequence_step_3') %}
-          <button onclick="draftFollowup({{ c.id }}, this)" class="act-btn act-followup">Draft Follow-up</button>
-        {% elif c.reactivation_status == 'replied' %}
-          <button onclick="bookCall({{ c.id }}, this)" class="act-btn act-call">Book Call</button>
-        {% elif c.reactivation_status == 'booked' %}
-          <span class="act-badge act-badge-booked">Booked</span>
-        {% elif c.reactivation_status == 'sequence_complete' %}
-          <span class="act-badge act-badge-done">Seq. Done</span>
-        {% elif c.reactivation_status == 'unsubscribed' %}
-          <span class="act-badge act-badge-unsub">Unsubscribed</span>
-        {% else %}
-          <span class="act-empty">—</span>
-        {% endif %}
-      </div>
-
-      <div onclick="event.stopPropagation()">
-        {% if c.reactivation_status not in ('booked', 'unsubscribed', 'never_contacted') %}
-          <button class="act-btn act-book" onclick="openBookModal({{ c.id }}, '{{ c.name|replace("'","\\'")|e }}')">Mark as Booked</button>
-        {% elif c.reactivation_status == 'booked' %}
-          <span class="act-empty" style="font-size:10px;color:var(--green)">✓ Done</span>
-        {% else %}
-          <span class="act-empty">—</span>
-        {% endif %}
-      </div>
-
       <div class="more-wrap" onclick="event.stopPropagation()">
         <button class="more-btn" onclick="toggleMore(event, this)" title="More options">⋯</button>
         <div class="more-dropdown">
@@ -331,21 +283,6 @@
 {{ render_group('ripe', 'Ripe for Reactivation', '🎯', '#1e3a5f', 'Dormant customers ranked by priority score. Start the conversation.', group_ripe) }}
 {{ render_group('declined', 'On Hold / Declined', '⏸', '#6b7280', 'Customers who completed the sequence with no response, or unsubscribed.', group_declined) }}
 
-{# ── MARK AS BOOKED MODAL ── #}
-<div class="modal-overlay" id="bookModal">
-  <div class="modal">
-    <h3>Mark as Booked</h3>
-    <p id="bookModalCustomer" style="color:var(--text-3);font-size:12px;margin-bottom:16px"></p>
-    <label>Job Value ($)</label>
-    <input type="number" id="bookJobValue" placeholder="e.g. 450" min="0" step="1">
-    <label>Notes (optional)</label>
-    <textarea id="bookNotes" placeholder="Service type, notes…"></textarea>
-    <div class="modal-actions">
-      <button class="btn-ghost" onclick="closeBookModal()">Cancel</button>
-      <button class="btn-success" onclick="submitBooked()">Confirm Booking</button>
-    </div>
-  </div>
-</div>
 
 {% endblock %}
 
@@ -378,88 +315,5 @@
     document.querySelectorAll('.more-dropdown.open').forEach(d => d.classList.remove('open'));
   });
 
-  // ── Mark as Booked modal ───────────────────────────────────────────────────
-  let _bookCustomerId = null;
-
-  function openBookModal(customerId, customerName) {
-    _bookCustomerId = customerId;
-    document.getElementById('bookModalCustomer').textContent = customerName;
-    document.getElementById('bookJobValue').value = '';
-    document.getElementById('bookNotes').value = '';
-    document.getElementById('bookModal').classList.add('open');
-    document.getElementById('bookJobValue').focus();
-  }
-
-  function closeBookModal() {
-    document.getElementById('bookModal').classList.remove('open');
-    _bookCustomerId = null;
-  }
-
-  document.getElementById('bookModal').addEventListener('click', function(e) {
-    if (e.target === this) closeBookModal();
-  });
-
-  async function draftOutreach(customerId, btn) {
-    btn.disabled = true;
-    const orig = btn.textContent;
-    btn.textContent = 'Generating…';
-    try {
-      const res = await fetch(`/api/action/draft-outreach/${customerId}`, {method: 'POST'});
-      if (res.ok) { window.location.href = '/outreach'; }
-      else { btn.disabled = false; btn.textContent = orig; alert('Could not generate draft'); }
-    } catch(e) { btn.disabled = false; btn.textContent = orig; }
-  }
-
-  async function draftFollowup(customerId, btn) {
-    btn.disabled = true;
-    const orig = btn.textContent;
-    btn.textContent = 'Generating…';
-    try {
-      const res = await fetch(`/api/action/draft-followup/${customerId}`, {method: 'POST'});
-      if (res.ok) { window.location.href = '/outreach'; }
-      else { btn.disabled = false; btn.textContent = orig; alert('Could not generate follow-up'); }
-    } catch(e) { btn.disabled = false; btn.textContent = orig; }
-  }
-
-  async function bookCall(customerId, btn) {
-    btn.disabled = true;
-    const orig = btn.textContent;
-    btn.textContent = 'Generating…';
-    try {
-      const res = await fetch(`/api/action/book-call/${customerId}`, {method: 'POST'});
-      if (res.ok) { window.location.href = '/meetings'; }
-      else {
-        const data = await res.json().catch(() => ({}));
-        btn.disabled = false; btn.textContent = orig;
-        alert('Book Call failed: ' + (data.detail || res.status));
-      }
-    } catch(e) { btn.disabled = false; btn.textContent = orig; alert('Book Call error: ' + e.message); }
-  }
-
-  async function submitBooked() {
-    const jobValue = parseFloat(document.getElementById('bookJobValue').value);
-    const notes = document.getElementById('bookNotes').value.trim();
-    if (!jobValue || jobValue <= 0) {
-      alert('Please enter a valid job value.');
-      return;
-    }
-    const btn = document.querySelector('#bookModal .btn-success');
-    btn.disabled = true;
-    btn.textContent = 'Saving…';
-    try {
-      const res = await fetch(`/api/customer/${_bookCustomerId}/mark-booked`, {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({job_value: jobValue, notes: notes}),
-      });
-      if (!res.ok) throw new Error((await res.json()).detail || 'Server error');
-      closeBookModal();
-      window.location.reload();
-    } catch (err) {
-      alert('Error: ' + err.message);
-      btn.disabled = false;
-      btn.textContent = 'Confirm Booking';
-    }
-  }
 </script>
 {% endblock %}

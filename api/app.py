@@ -1557,6 +1557,79 @@ def _get_enriched_customers(operator_id: int) -> list[dict]:
     return enriched
 
 
+def _compute_dashboard_metrics(db, operator_id: int) -> dict:
+    """Compute revenue pipeline and outreach health metrics for the dashboard."""
+    from datetime import timezone as _tz
+    now_utc = datetime.now(timezone.utc)
+    year_start = datetime(now_utc.year, 1, 1, tzinfo=timezone.utc)
+
+    uncontacted = db.query(Customer).filter(
+        Customer.operator_id == operator_id,
+        Customer.reactivation_status == "never_contacted",
+    ).all()
+    uncontacted_rev = sum(c.estimated_job_value or 0 for c in uncontacted)
+    uncontacted_count = len(uncontacted)
+    uncontacted_with_val = sum(1 for c in uncontacted if c.estimated_job_value)
+
+    in_flight_statuses = ("outreach_sent", "sequence_step_2", "sequence_step_3", "replied", "invite_sent")
+    in_flight = db.query(Customer).filter(
+        Customer.operator_id == operator_id,
+        Customer.reactivation_status.in_(in_flight_statuses),
+    ).all()
+    in_flight_rev = sum(c.estimated_job_value or 0 for c in in_flight)
+    in_flight_count = len(in_flight)
+
+    booked_bookings = db.query(Booking).filter(
+        Booking.operator_id == operator_id,
+        Booking.status.in_(["tentative", "confirmed"]),
+    ).all()
+    booked_bookings = [b for b in booked_bookings if not getattr(b, "job_won", False)]
+    booked_rev = sum(b.estimated_value or 0 for b in booked_bookings)
+    booked_count = len(booked_bookings)
+
+    all_bookings = db.query(Booking).filter(Booking.operator_id == operator_id).all()
+    converted = [
+        b for b in all_bookings
+        if getattr(b, "job_won", False)
+        and getattr(b, "closed_at", None)
+        and b.closed_at.replace(tzinfo=timezone.utc) >= year_start
+    ]
+    converted_rev = sum(getattr(b, "final_invoice_value", None) or 0 for b in converted)
+    converted_count = len(converted)
+
+    all_contacted = db.query(Customer).filter(
+        Customer.operator_id == operator_id,
+        Customer.reactivation_status != "never_contacted",
+        Customer.reactivation_status != "unsubscribed",
+    ).all()
+    contacted_count = len(all_contacted)
+    reply_statuses = ("replied", "invite_sent", "booked", "sequence_complete")
+    replied = [c for c in all_contacted if c.reactivation_status in reply_statuses]
+    replied_count = len(replied)
+    reply_rate = round(replied_count / contacted_count * 100) if contacted_count else 0
+
+    booked_statuses = ("invite_sent", "booked")
+    booking_rate_num = sum(1 for c in replied if c.reactivation_status in booked_statuses)
+    booking_rate = round(booking_rate_num / replied_count * 100) if replied_count else 0
+
+    return {
+        "uncontacted_rev": uncontacted_rev,
+        "uncontacted_count": uncontacted_count,
+        "uncontacted_with_val": uncontacted_with_val,
+        "in_flight_rev": in_flight_rev,
+        "in_flight_count": in_flight_count,
+        "booked_rev": booked_rev,
+        "booked_count": booked_count,
+        "converted_rev": converted_rev,
+        "converted_count": converted_count,
+        "reply_rate": reply_rate,
+        "replied_count": replied_count,
+        "contacted_count": contacted_count,
+        "booking_rate": booking_rate,
+        "booking_rate_num": booking_rate_num,
+    }
+
+
 @app.get("/", response_class=HTMLResponse)
 def dashboard(request: Request):
     if (guard := _db_starting_response()):
@@ -1662,11 +1735,15 @@ def dashboard(request: Request):
 
     today_str = datetime.utcnow().strftime('%A, %B %-d, %Y')
 
+    with get_db() as db2:
+        dm = _compute_dashboard_metrics(db2, OPERATOR_ID)
+
     return templates.TemplateResponse("dashboard.html", {
         "request": request,
         "active": "dashboard",
         "operator": operator_data,
         "metrics": metrics,
+        "dm": dm,
         "group_upcoming": group_upcoming,
         "group_attention": group_attention,
         "group_ripe": group_ripe,
