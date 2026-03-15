@@ -1,7 +1,7 @@
 # Job 27 — Agents Page: Grouping + Local Timezone Timestamps
 
 **Phase:** 8
-**Status:** ⬜ Not started
+**Status:** ✅ Complete
 **Depends on:** Nothing — fully independent
 **Goal:** Group agents into logical pipeline stages so the page is easier to scan, and fix "Last Run" timestamps to display in the operator's local timezone instead of UTC.
 

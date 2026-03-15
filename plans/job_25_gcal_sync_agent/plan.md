@@ -1,7 +1,7 @@
 # Job 25 — Google Calendar Sync Agent
 
 **Phase:** 8 (quality + reliability — parallel with Job 24)
-**Status:** ⬜ Not started
+**Status:** ✅ Complete
 **Depends on:** Job 24 (`health_override` field must exist — used when surfacing conflicts)
 **Goal:** A daily agent that reads attendee response status from Google Calendar for every Foreman booking that has a linked GCal event. Catches calendar acceptances, declines, deletions, and time changes that never made it into the Foreman inbox — the primary source of stuck conversation states for customers in the `invite_sent` stage.
 

@@ -21,7 +21,7 @@
 ## Current Status
 
 - **Active Phase:** Phase 8 — Operator Config + Agent Quality
-- **State:** Phases 1–7 and 6b all complete. Jobs 11–23 complete (Gmail thread fix, meeting approval gate, calendar acceptance/decline, reply detector trigger chain, invite_sent status, meetings queue overhaul, appointment confirmed module, status refresh triggers, updates page improvements, draft revision notes). Next: Phase 8 (Operator Config page), then Phase 9 (SMS).
+- **State:** Phases 1–7 and 6b all complete. Jobs 11–30 complete. Latest: deploy bug fixes (google_cal_event_id SCHEMA_PATCHES, invite_sent Enum, updates page AttributeError), conversation detail UI polish, navbar reorganization, Command Center redesign, Conversations compact card layout. Next: Phase 8 Jobs 05/06/09 (Operator Config, Prompt Quality, Revenue Data Integrity), Job 31 (Priority Dashboard Redesign), Job 32 (Analytics — backlog).
 - **Last Updated:** 2026-03-14
 - **Live URL:** https://web-production-3df3a.up.railway.app
 - **Repo:** https://github.com/avelayud/foreman
@@ -29,6 +29,20 @@
 ---
 
 ## Recently Completed
+
+### 2026-03-14 — Jobs 24–30 + Deploy Fixes + UI Polish
+
+- **Job 24 (Conversation State Agent):** `agents/state_reconciler.py` — 5 idempotent reconciliation rules run at startup + every 15 min via APScheduler. Fixes orphaned states (e.g. customer replied but still marked in-sequence).
+- **Job 25 (GCal Sync Agent):** `agents/gcal_sync.py` — 5-case sync: detects deleted/rescheduled calendar events, sets `orphaned`/`time_changed` flags on Booking, runs at startup + every 6 hours. `integrations/calendar.py` added `update_calendar_event()` via `events().patch()`.
+- **Job 26 (Edit Meeting Invite):** Edit appointment toggle on conversation page — inline form with date/time/duration/service/notes/email fields. `POST /api/booking/{id}/edit` endpoint + `EditBookingRequest` Pydantic model. Patches GCal event if `google_cal_event_id` present.
+- **Job 27 (Agents Page Polish):** All 13 agents grouped into 5 labelled sections (Listening & Classification, Outreach & Drafting, Booking & Calendar, Maintenance & Data, Internal Ops). Group headers with descriptions. `last_run_at` via `est` filter.
+- **Job 28 (Meeting Queue Status):** Fixed status tags on Meetings Queue to show invite_sent/booking_intent correctly. `health_override` on Customer model with `dismissHealth()` + `clearHealthOverride()` JS. Auto-expires on new genuine inbound.
+- **Job 29 (Conversations Layout):** Donut chart added to conversations page. Compact filter tabs with counts. `_compute_donut_arcs()` + `HEALTH_COLORS` in app.py. `health_key`, `health_color`, `last_contact_display` on each conversation item.
+- **Job 30 (Command Center Redesign):** `/updates` fully redesigned: Section A = chronological notification feed (filled dot = unread/seen via `last_updates_viewed` cookie, hollow = seen), Section B = 2×2 quadrant grid (Needs Response / Needs Follow-up / Invite Sent / Calendar). `feed_items` + `quadrant_data` built in app.py.
+- **Deploy bug fixes:** `google_cal_event_id` added to SCHEMA_PATCHES["bookings"]; `invite_sent` added to `reactivation_status` Enum; `/updates` route column-projection query expanded with `response_classification`; Command Center crash fixed (`qdata['items']` subscript vs `qdata.items` method ambiguity in Jinja2).
+- **Conversation detail UI polish:** Action banner moved above appointment panel; panel renamed "Appointment"; opportunity value range moved above job notes with inline Update Value button; first-open opportunity value popup (modal) — fixed endpoint URL (`/notes` not `/update-notes`) and sessionStorage debounce.
+- **Navbar reorganization:** Dashboard → Priority Dashboard; Updates → Command Center; All Customers / Calendar / Analytics moved to new "Explore" section; All Agents moved under Internal.
+- **Conversations page:** Reverted from compact row list to card-based detail layout (`.conv-card` with colored left border, 2-col layout with message preview and action buttons), made ~30% more compact. Donut integrated inline with filter bar instead of standalone block.
 
 ### 2026-03-14 — Jobs 11–23: Meetings Queue, Conversation UX, Booking Flow
 
@@ -412,22 +426,27 @@ I'm continuing work on Foreman — an AI reactivation system for HVAC & field se
 
 Read PROJECT_PLAN.md and README.md first for full context, then look at any code files attached.
 
-Current state (2026-03-14): Phases 1–7 + 6b all complete. Jobs 11–23 complete.
+Current state (2026-03-14): Phases 1–7 + 6b all complete. Jobs 11–30 complete.
 Live: https://web-production-3df3a.up.railway.app
 
-Completed recently (Jobs 11–23):
-- Gmail thread split fix, meeting approval gate, calendar acceptance false positive fix.
-- Reply detector: 5-min poll, inline response generator trigger, nav badge live refresh.
-- invite_sent status, calendar invite accept/decline handling, meetings queue UI overhaul.
-- Appointment confirmed module (schedule panel, CSS order swap), status refresh triggers.
-- Meetings queue scoped to booking_confirmed only. booking_intent → Outreach Queue.
-- Updates page: sorted by created_at, post-visit section. Draft revision notes on all queues.
-- Post-Visit Agent (agents/post_visit.py): daily, flags customers with past appointments needing outcome. Revenue data integrity checkpoints (estimate required, quote/close/no-show).
+Completed recently (Jobs 24–30):
+- Job 24: state_reconciler.py — 5 idempotent rules, runs every 15 min.
+- Job 25: gcal_sync.py — detects deleted/rescheduled GCal events, orphaned/time_changed flags, every 6 hrs.
+- Job 26: Edit appointment form on conversation page. POST /api/booking/{id}/edit, patches GCal.
+- Job 27: Agents page grouped into 5 sections with labels + descriptions.
+- Job 28: Meeting queue status tags fixed. health_override + dismissHealth/clearHealthOverride.
+- Job 29: Conversations page: donut chart inline with filter bar, health_key/health_color/last_contact_display.
+- Job 30: Command Center redesign — chronological feed (seen/unread cookie) + 2×2 quadrant grid.
+- Deploy fixes: google_cal_event_id in SCHEMA_PATCHES, invite_sent in Enum, Command Center crash fix.
+- Conversations page: restored card layout (compact), donut inline with filters.
+- Opportunity value popup fix: wrong endpoint URL (/update-notes → /notes), sessionStorage debounce.
 
 Active: Phase 8 — Operator Config + Agent Quality + Revenue Data Integrity
 - Job 05: Operator Config page (/settings) — sliders, job ranking, estimate ranges, business context
 - Job 06: Prompt Quality Sprint — rewrite reactivation/conversation/follow-up prompts using config values
 - Job 09: Revenue Data Integrity — mandatory booking estimates, post-visit lock, quote/close capture, PostVisitAgent
+- Job 31: Priority Dashboard Redesign — overview section, metric cards
+- Job 32: Analytics Overhaul — backlog (product discussion first)
 
 Next after Phase 8: Phase 9 (SMS via Twilio, operator-driven), Phase 10 (Jobber integration).
 

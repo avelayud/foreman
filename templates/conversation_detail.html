@@ -1342,7 +1342,7 @@
     statusEl.textContent = 'Saving…';
     statusEl.style.color = 'var(--text-3)';
     try {
-      const res = await fetch(`/api/booking/${ACTIVE_BOOKING_ID}/update-notes`, {
+      const res = await fetch(`/api/booking/${ACTIVE_BOOKING_ID}/notes`, {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({estimated_value_low: low ? parseFloat(low) : null, estimated_value_high: high ? parseFloat(high) : null}),
@@ -1365,6 +1365,7 @@
   window.addEventListener('DOMContentLoaded', function() {
     const key = 'opp_prompt_shown_' + CUSTOMER_ID;
     if (!sessionStorage.getItem(key)) {
+      sessionStorage.setItem(key, '1');
       setTimeout(function() {
         document.getElementById('opp-modal').style.display = 'flex';
       }, 600);

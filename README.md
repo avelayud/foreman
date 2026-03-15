@@ -30,7 +30,7 @@ Foreman identifies dormant customers, scores them by rebooking probability, reac
 
 ## Product State (2026-03-14)
 
-> **Phases 1–7 + 6b complete. Jobs 11–23 complete.** Full booking flow live end-to-end: reply detected → classified → draft generated → operator approves → calendar invite sent → customer accepts → booking confirmed + GCal event created. Meeting approval gate, invite_sent status, accept/decline handling, appointment module on conversation page, draft revision notes, post-visit outcome tracking. Active: Phase 8 (Operator Config + Agent Quality).
+> **Phases 1–7 + 6b complete. Jobs 11–30 complete.** Full booking flow live end-to-end. Command Center (chronological feed + quadrant grid), Conversations compact card layout with inline donut, Edit Appointment form, grouped Agents page, Conversation State Agent (state_reconciler), GCal Sync Agent. Active: Phase 8 (Operator Config + Prompt Quality + Revenue Data Integrity), Job 31 (Priority Dashboard), Job 32 (Analytics — backlog).
 
 ## Feature Status
 
@@ -82,6 +82,15 @@ Foreman identifies dormant customers, scores them by rebooking probability, reac
 | Post-Visit Agent — daily, flags appointments needing outcome logged | ✅ |
 | Post-visit outcome tracking — Quote Given, Job Won, No Show, conversation lock | ✅ |
 | Nav badge live refresh after send/approve actions | ✅ |
+| Conversation State Agent (state_reconciler) — 5 idempotent rules, every 15 min | ✅ |
+| GCal Sync Agent — detects deleted/rescheduled events, orphaned/time_changed flags | ✅ |
+| Edit Appointment form on conversation page — patches GCal event inline | ✅ |
+| Agents page grouped into 5 labelled sections with descriptions | ✅ |
+| Command Center (`/updates`) — chronological feed (seen/unread) + 2×2 quadrant grid | ✅ |
+| Conversations page — compact card layout with inline donut + filter bar | ✅ |
+| Opportunity value popup on first open of conversation (booking without estimate) | ✅ |
+| Priority Dashboard redesign — overview section, metric cards | ⬜ Phase 8 (Job 31) |
+| Analytics Dashboard overhaul | ⬜ Backlog (Job 32 — design discussion first) |
 | Operator Config page (`/settings`) — tone, salesy, job ranking, estimate ranges | ⬜ Phase 8 (Job 05) |
 | Prompt Quality Sprint — HVAC-native agent voices using config values | ⬜ Phase 8 (Job 06) |
 | SMS channel (Twilio) — send path + inbound webhook | ⬜ Phase 9 (Job 07) |
@@ -121,7 +130,16 @@ plans/
 ├── job_08_sms_ux/                 # ⬜ Phase 9 (depends on Job 07)
 ├── job_09_revenue_data_integrity/ # ⬜ Phase 8 (parallel to Jobs 05/06)
 ├── job_10_jobber_integration/     # ⬜ Phase 10
-└── archive/                       # ✅ Completed jobs 11–23
+├── job_24_conversation_state_agent/ # ✅ Complete
+├── job_25_gcal_sync_agent/          # ✅ Complete
+├── job_26_edit_meeting_invite/      # ✅ Complete
+├── job_27_agents_page_polish/       # ✅ Complete
+├── job_28_meeting_queue_status/     # ✅ Complete
+├── job_29_conversations_layout/     # ✅ Complete
+├── job_30_updates_page_redesign/    # ✅ Complete
+├── job_31_priority_dashboard_redesign/ # ⬜ Phase 8
+├── job_32_analytics_overhaul/       # 🟡 Backlog (design discussion first)
+└── archive/                         # ✅ Completed jobs 11–23
 ```
 
 ---

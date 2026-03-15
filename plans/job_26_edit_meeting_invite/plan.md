@@ -1,7 +1,7 @@
 # Job 26 — Edit / Reschedule Meeting Invite
 
 **Phase:** 8
-**Status:** ⬜ Not started
+**Status:** ✅ Complete
 **Depends on:** Nothing — fully independent
 **Goal:** Let operators edit a confirmed meeting invite directly from the Appointment panel — change time, service type, notes, or email body — and re-send the updated invite without creating a duplicate booking.
 

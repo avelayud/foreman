@@ -1,7 +1,7 @@
 # Job 29 — Conversations Page: Compact Layout + Distribution Donut
 
 **Phase:** 8
-**Status:** ⬜ Not started
+**Status:** ✅ Complete
 **Depends on:** Nothing — fully independent
 **Goal:** Make the conversations list more information-dense (show 4–6 cards at once instead of 2) and add a donut chart showing the distribution of conversation health states so operators can assess the overall pipeline at a glance before diving into individual conversations.
 
