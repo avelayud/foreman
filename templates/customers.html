@@ -20,9 +20,9 @@
 
   /* Table — same grid as dashboard */
   .priority-table{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;box-shadow:var(--shadow-sm)}
-  .pt-head{display:grid;grid-template-columns:64px 1.4fr 0.9fr 1.1fr 0.9fr 0.6fr 1.2fr 1fr 1fr 100px 40px;padding:9px 16px;background:var(--navy-soft);border-bottom:1px solid var(--border);gap:10px;align-items:center}
+  .pt-head{display:grid;grid-template-columns:64px 1.4fr 0.9fr 1.1fr 0.9fr 0.6fr 1.2fr 1fr 120px 40px;padding:9px 16px;background:var(--navy-soft);border-bottom:1px solid var(--border);gap:10px;align-items:center}
   .pt-th{font-size:9px;font-family:'IBM Plex Mono',monospace;letter-spacing:1.4px;text-transform:uppercase;color:var(--text-3);font-weight:700;white-space:nowrap;text-align:center}
-  .pt-row{display:grid;grid-template-columns:64px 1.4fr 0.9fr 1.1fr 0.9fr 0.6fr 1.2fr 1fr 1fr 100px 40px;padding:11px 16px;border-bottom:1px solid var(--border);align-items:center;gap:10px;transition:background 0.1s}
+  .pt-row{display:grid;grid-template-columns:64px 1.4fr 0.9fr 1.1fr 0.9fr 0.6fr 1.2fr 1fr 120px 40px;padding:11px 16px;border-bottom:1px solid var(--border);align-items:center;gap:10px;transition:background 0.1s}
   .pt-row>div{text-align:center;display:flex;align-items:center;justify-content:center}
   .pt-row:last-child{border-bottom:none}
   .pt-row:hover{background:var(--navy-soft)}
@@ -119,7 +119,6 @@
     <div class="pt-th">Last Service</div>
     <div class="pt-th">Last Interaction</div>
     <div class="pt-th">Action</div>
-    <div class="pt-th">Mark as Booked</div>
     <div class="pt-th"></div>
   </div>
 
@@ -176,28 +175,20 @@
       {% else %}<span class="act-empty">—</span>{% endif %}
     </div>
 
-    <div onclick="event.stopPropagation()">
+    <div style="display:flex;justify-content:center" onclick="event.stopPropagation()">
       {% if c.reactivation_status == 'never_contacted' %}
-        <a href="/customer/{{ c.id }}" class="act-btn act-draft">Draft Outreach</a>
-      {% elif c.reactivation_status in ('outreach_sent','sequence_step_2','sequence_step_3') %}
-        <a href="/conversations/{{ c.id }}" class="act-btn act-followup">Draft Follow-up</a>
+      <button class="btn-primary" style="font-size:11px;padding:5px 12px;white-space:nowrap" onclick="draftOutreach({{ c.id }}, this)">Draft →</button>
       {% elif c.reactivation_status == 'replied' %}
-        <a href="/conversations/{{ c.id }}" class="act-btn act-call">Book Call</a>
-      {% elif c.reactivation_status == 'booked' %}
-        <span class="act-badge act-badge-booked">Booked</span>
+      <a href="/conversations/{{ c.id }}" class="btn-success" style="text-decoration:none;font-size:11px;padding:5px 12px;white-space:nowrap">Book Call →</a>
+      {% elif c.reactivation_status in ('outreach_sent', 'sequence_step_2', 'sequence_step_3') %}
+      <a href="/conversations/{{ c.id }}" class="btn-secondary" style="text-decoration:none;font-size:11px;padding:5px 12px;white-space:nowrap">Follow-up →</a>
+      {% elif c.reactivation_status in ('invite_sent', 'booked') %}
+      <a href="/conversations/{{ c.id }}" class="btn-ghost" style="text-decoration:none;font-size:11px;padding:5px 12px;white-space:nowrap">View →</a>
       {% elif c.reactivation_status == 'sequence_complete' %}
-        <span class="act-badge act-badge-done">Seq. Done</span>
-      {% elif c.reactivation_status == 'unsubscribed' %}
-        <span class="act-badge act-badge-unsub">Unsubscribed</span>
-      {% else %}<span class="act-empty">—</span>{% endif %}
-    </div>
-
-    <div onclick="event.stopPropagation()">
-      {% if c.reactivation_status not in ('booked','unsubscribed','never_contacted') %}
-        <button class="act-btn act-book" onclick="openBookModal({{ c.id }}, '{{ c.name|replace("'","\\'")|e }}')">Mark as Booked</button>
-      {% elif c.reactivation_status == 'booked' %}
-        <span class="act-empty" style="font-size:10px;color:var(--green)">✓ Done</span>
-      {% else %}<span class="act-empty">—</span>{% endif %}
+      <a href="/conversations/{{ c.id }}" class="btn-ghost" style="text-decoration:none;font-size:11px;padding:5px 12px;white-space:nowrap;color:var(--text-3)">Re-engage →</a>
+      {% else %}
+      <span class="act-empty">—</span>
+      {% endif %}
     </div>
 
     <div class="more-wrap" onclick="event.stopPropagation()">
@@ -215,27 +206,11 @@
   {% endfor %}
 </div>
 
-{# Mark as Booked Modal #}
-<div class="modal-overlay" id="bookModal">
-  <div class="modal">
-    <h3>Mark as Booked</h3>
-    <p id="bookModalCustomer" style="color:var(--text-3);font-size:12px;margin-bottom:16px"></p>
-    <label>Job Value ($)</label>
-    <input type="number" id="bookJobValue" placeholder="e.g. 450" min="0" step="1">
-    <label>Notes (optional)</label>
-    <textarea id="bookNotes" placeholder="Service type, notes…"></textarea>
-    <div class="modal-actions">
-      <button class="btn-ghost" onclick="closeBookModal()">Cancel</button>
-      <button class="btn-success" onclick="submitBooked()">Confirm Booking</button>
-    </div>
-  </div>
-</div>
 {% endblock %}
 
 {% block scripts %}
 <script>
   let _currentGroup = 'all';
-  let _bookCustomerId = null;
 
   function setGroup(group, btn) {
     _currentGroup = group;
@@ -276,6 +251,20 @@
     });
   }
 
+  async function draftOutreach(customerId, btn) {
+    const orig = btn.textContent;
+    btn.disabled = true; btn.textContent = 'Drafting…';
+    try {
+      const res = await fetch(`/api/draft/${customerId}`, { method: 'POST' });
+      if (!res.ok) throw new Error((await res.json()).detail || 'Error');
+      btn.textContent = 'Queued ✓';
+      setTimeout(() => { window.location.href = '/outreach'; }, 800);
+    } catch (e) {
+      btn.textContent = orig; btn.disabled = false;
+      alert('Error: ' + e.message);
+    }
+  }
+
   function toggleMore(e, btn) {
     e.stopPropagation();
     const dropdown = btn.nextElementSibling;
@@ -286,42 +275,6 @@
   document.addEventListener('click', () => {
     document.querySelectorAll('.more-dropdown.open').forEach(d => d.classList.remove('open'));
   });
-
-  function openBookModal(customerId, customerName) {
-    _bookCustomerId = customerId;
-    document.getElementById('bookModalCustomer').textContent = customerName;
-    document.getElementById('bookJobValue').value = '';
-    document.getElementById('bookNotes').value = '';
-    document.getElementById('bookModal').classList.add('open');
-    document.getElementById('bookJobValue').focus();
-  }
-  function closeBookModal() {
-    document.getElementById('bookModal').classList.remove('open');
-    _bookCustomerId = null;
-  }
-  document.getElementById('bookModal').addEventListener('click', function(e) {
-    if (e.target === this) closeBookModal();
-  });
-  async function submitBooked() {
-    const jobValue = parseFloat(document.getElementById('bookJobValue').value);
-    const notes = document.getElementById('bookNotes').value.trim();
-    if (!jobValue || jobValue <= 0) { alert('Please enter a valid job value.'); return; }
-    const btn = document.querySelector('#bookModal .btn-success');
-    btn.disabled = true; btn.textContent = 'Saving…';
-    try {
-      const res = await fetch(`/api/customer/${_bookCustomerId}/mark-booked`, {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({job_value: jobValue, notes: notes}),
-      });
-      if (!res.ok) throw new Error((await res.json()).detail || 'Server error');
-      closeBookModal();
-      window.location.reload();
-    } catch (err) {
-      alert('Error: ' + err.message);
-      btn.disabled = false; btn.textContent = 'Confirm Booking';
-    }
-  }
 
   // Init
   applyFilters();
