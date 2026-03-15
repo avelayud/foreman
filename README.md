@@ -28,9 +28,9 @@ Foreman identifies dormant customers, scores them by rebooking probability, reac
 
 ---
 
-## Product State (2026-03-14)
+## Product State (2026-03-15)
 
-> **Phases 1–7 + 6b complete. Jobs 05, 09, 11–31 complete.** Full booking flow live end-to-end. UI polish sprint complete: Command Center read/unread feed, Outreach Queue type-based filters (Send Pending first), Conversations job type + call/on-site badge, booking invite now queues to Meetings Queue instead of sending directly, booking_intent correctly routes to Outreach Queue. Active: Phase 8 Job 06 (Prompt Quality Sprint). Job 32 (Analytics — backlog).
+> **Phases 1–7 + 6b complete. Jobs 05, 09, 11–31 complete.** Full booking flow live end-to-end. UI polish sprint 2 complete: nav icons consistent (📨 Outreach Queue), Conversations status pill + opp chip in header, Outreach Queue donut filter bar + type tag left/approval tag right, Command Center split What Happened / Next Step columns with classification-aware text, Dashboard Action column with context-aware buttons. Active: Phase 8 Job 06 (Prompt Quality Sprint). Job 32 (Analytics — backlog).
 
 ## Feature Status
 
@@ -100,6 +100,12 @@ Foreman identifies dormant customers, scores them by rebooking probability, reac
 | Command Center — read/unread state (localStorage), wider Time/Customer columns, Status column | ✅ |
 | Booking invite queues to Meetings Queue (no longer sends directly from conversation page) | ✅ |
 | booking_intent draft routing fixed → Outreach Queue (not Meetings Queue) | ✅ |
+| Nav icons consistent (📨 Outreach Queue, 🤖 Agents, ⚙️ Settings, 🛠️ Dev Tools) | ✅ |
+| Conversations — status pill + opp chip in card header next to health chip | ✅ |
+| Outreach Queue — donut filter bar (type-based, color-coded, count-prefixed labels) | ✅ |
+| Outreach Queue — type tag left next to name, approval tag right | ✅ |
+| Command Center — What Happened + Next Step as separate columns, classification-aware text | ✅ |
+| Dashboard — Action column with Draft/Book Call/Follow-up/View/Re-engage buttons | ✅ |
 | Draft Learning Agent — backlog plan | ⬜ Backlog |
 | Conversation page redesign (opportunity snapshot, recap, operator prep) — backlog plan | ⬜ Backlog |
 | Analytics Dashboard overhaul | ⬜ Backlog (Job 32 — design discussion first) |
