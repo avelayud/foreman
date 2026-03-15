@@ -43,9 +43,9 @@
   /* ── PRIORITY TABLE ── */
   /* Cols: Score | Customer | Status | Est.Value | Dormant | Last Service | Last Interaction | ··· */
   .priority-table{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;box-shadow:var(--shadow-sm)}
-  .pt-head{display:grid;grid-template-columns:64px 1.7fr 1.1fr 0.9fr 0.6fr 1.2fr 1fr 120px 40px;padding:9px 16px;background:var(--navy-soft);border-bottom:1px solid var(--border);gap:10px;align-items:center}
+  .pt-head{display:grid;grid-template-columns:64px 1.4fr 0.9fr 1.1fr 0.9fr 0.6fr 1.2fr 1fr 120px 40px;padding:9px 16px;background:var(--navy-soft);border-bottom:1px solid var(--border);gap:10px;align-items:center}
   .pt-th{font-size:9px;font-family:'IBM Plex Mono',monospace;letter-spacing:1.4px;text-transform:uppercase;color:var(--text-3);font-weight:700;white-space:nowrap;text-align:center}
-  .pt-row{display:grid;grid-template-columns:64px 1.7fr 1.1fr 0.9fr 0.6fr 1.2fr 1fr 120px 40px;padding:11px 16px;border-bottom:1px solid var(--border);align-items:center;gap:10px;transition:background 0.1s}
+  .pt-row{display:grid;grid-template-columns:64px 1.4fr 0.9fr 1.1fr 0.9fr 0.6fr 1.2fr 1fr 120px 40px;padding:11px 16px;border-bottom:1px solid var(--border);align-items:center;gap:10px;transition:background 0.1s}
   .pt-row>div{text-align:center;display:flex;align-items:center;justify-content:center}
   .pt-row:last-child{border-bottom:none}
   .pt-row:hover{background:var(--navy-soft)}
@@ -198,7 +198,8 @@
   <div class="priority-table">
     <div class="pt-head">
       <div class="pt-th">Score</div>
-      <div class="pt-th" style="text-align:left;padding-left:10px;line-height:1.6">Customer<br><span style="font-size:8px;letter-spacing:0.8px;color:var(--text-4);font-weight:500">Primary Job Type</span></div>
+      <div class="pt-th" style="text-align:left;padding-left:10px">Customer</div>
+      <div class="pt-th" style="text-align:left">Job Type</div>
       <div class="pt-th sep-th">Status</div>
       <div class="pt-th">Est. Value</div>
       <div class="pt-th">Dormant</div>
@@ -219,7 +220,10 @@
 
       <div class="c-cell">
         <span class="c-name">{{ c.name }}</span>
-        {% if c.last_service_type %}<span class="c-svctype">{{ c.last_service_type }}</span>{% endif %}
+      </div>
+
+      <div style="justify-content:flex-start;min-width:0">
+        {% if c.last_service_type %}<span class="c-svctype" style="font-size:11.5px;color:var(--text-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block;width:100%">{{ c.last_service_type }}</span>{% else %}<span style="font-size:11px;color:var(--text-4)">—</span>{% endif %}
       </div>
 
       <div class="sep-col">
