@@ -7,6 +7,12 @@
 
 ---
 
+## Design Constraints From Job 31
+
+When Job 31 (Priority Dashboard) is executed, two things must carry into the analytics design:
+1. **No action buttons anywhere on read-only pages.** Mark as Booked and Draft Outreach have been removed from the dashboard priority queue. The analytics page should follow the same rule — all views are observational, no inline actions.
+2. **Status tagging consistency.** All list rows and table rows that show a customer's status must use the `status-pill s-*` tag format (same as Conversations page, Outreach Queue, Meetings Queue). Plain text status labels are not acceptable in list contexts.
+
 ## Why This Is Backlog
 
 Analytics is the hardest page to get right because it requires a clear answer to: *what decisions should an operator be able to make after looking at this page?* Without a clear answer, we'll build charts that look interesting but don't change behavior.

@@ -17,29 +17,24 @@
   .chip-invite-sent{background:#ede9fe;color:#6d28d9;border-color:#c4b5fd}
   .chip-closed{background:var(--green-pale);color:var(--green);border-color:#a7f3d0}
 
-  .conv-layout{display:grid;grid-template-columns:minmax(0,1fr) minmax(200px,22%);gap:10px;align-items:stretch}
-  .conv-left{min-width:0}
-  .conv-right{border-left:1px solid var(--border);padding-left:12px;display:flex;flex-direction:column;justify-content:space-between;gap:7px}
-  .conv-top{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;flex-wrap:wrap}
-  .conv-name{font-size:15px;font-family:'Playfair Display',serif;color:var(--navy);font-weight:700;text-decoration:none}
-  .conv-name:hover{text-decoration:underline}
-  .conv-meta{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:3px}
-  .conv-meta-item{font-size:10.5px;color:var(--text-3);font-family:'IBM Plex Mono',monospace}
-
-  .conv-preview{font-size:11.5px;color:var(--text-2);line-height:1.5;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:8px 10px;margin-top:8px}
-  .opp-chip{font-size:10.5px;color:var(--text-2);font-family:'IBM Plex Mono',monospace;background:var(--gold-pale);border:1px solid var(--gold-rule);border-radius:20px;padding:3px 8px}
+  .opp-chip{font-size:10.5px;font-family:'IBM Plex Mono',monospace;background:var(--gold-pale);border:1px solid var(--gold-rule);border-radius:20px;padding:2px 8px;color:var(--text-2)}
   .right-label{font-size:9.5px;font-family:'IBM Plex Mono',monospace;letter-spacing:0.9px;text-transform:uppercase;color:var(--text-3);margin-bottom:2px}
-  .right-value{font-size:11.5px;color:var(--text)}
+  .right-value{font-size:11.5px;color:var(--text);font-family:'IBM Plex Mono',monospace}
 
   .conv-filter-btn{padding:4px 10px;border-radius:20px;font-size:11px;font-family:'IBM Plex Mono',monospace;border:1px solid var(--border);color:var(--text-3);background:var(--surface);cursor:pointer;transition:all 0.15s;white-space:nowrap;display:inline-flex;align-items:center;gap:4px}
   .conv-filter-btn:hover{border-color:var(--fc, var(--navy));color:var(--fc, var(--navy));background:var(--fbc, var(--navy-soft))}
   .conv-filter-btn.active-filter{background:var(--fbc, var(--navy));border-color:var(--fbc2, var(--navy));color:var(--fc, #fff);font-weight:600}
   .conv-filter-btn#filter-all.active-filter{background:var(--navy);border-color:var(--navy);color:#fff}
-  .filter-count{font-size:9.5px;font-family:'IBM Plex Mono',monospace;opacity:0.75}
+  .filter-count{font-size:9.5px;opacity:0.75}
 
-  @media (max-width: 1024px){.conv-layout{grid-template-columns:1fr}}
-  @media (max-width: 680px){
-    .conv-right{border-left:none;border-top:1px solid var(--border);padding-left:0;padding-top:8px}
+  .conv-menu-wrap{position:relative}
+  .conv-dropdown{display:none;position:absolute;right:0;top:26px;background:var(--surface);border:1px solid var(--border);border-radius:8px;box-shadow:var(--shadow);min-width:130px;z-index:20;overflow:hidden}
+  .conv-dropdown a{display:block;padding:8px 14px;font-size:12px;color:var(--text);text-decoration:none}
+  .conv-dropdown a:hover{background:var(--navy-soft)}
+
+  @media (max-width: 700px){
+    .conv-body-row{flex-direction:column!important}
+    .conv-preview-wrap{max-width:100%!important;flex:1!important}
   }
 </style>
 {% endblock %}
@@ -65,7 +60,6 @@
 {# ── Compact summary strip: donut + filter tabs + search ── #}
 {% if donut_total > 0 %}
 <div style="display:flex;align-items:center;gap:16px;margin-bottom:14px;padding:12px 16px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow-sm);flex-wrap:wrap">
-  {# Donut — compact #}
   <div style="flex-shrink:0;display:flex;align-items:center;gap:12px">
     <svg width="72" height="72" viewBox="0 0 120 120">
       {% for arc in donut_arcs %}
@@ -74,7 +68,6 @@
       <text x="60" y="55" text-anchor="middle" font-family="'Playfair Display',serif" font-size="24" font-weight="700" fill="var(--navy)">{{ donut_total }}</text>
       <text x="60" y="70" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="10" fill="var(--text-3)">ACTIVE</text>
     </svg>
-    {# Legend #}
     <div style="display:flex;flex-direction:column;gap:4px">
       {% for seg in donut_segments %}{% if seg.count > 0 %}
       <div style="display:flex;align-items:center;gap:5px">
@@ -85,11 +78,7 @@
       {% endif %}{% endfor %}
     </div>
   </div>
-
-  {# Divider #}
   <div style="width:1px;height:56px;background:var(--border);flex-shrink:0;align-self:center"></div>
-
-  {# Search + Filters #}
   <div style="flex:1;min-width:240px;display:flex;flex-direction:column;gap:8px">
     <div style="position:relative">
       <span style="position:absolute;left:9px;top:50%;transform:translateY(-50%);color:var(--text-4);font-size:13px;pointer-events:none">⌕</span>
@@ -108,7 +97,6 @@
   </div>
 </div>
 {% else %}
-{# No donut — just search + filter #}
 <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap">
   <div style="position:relative;flex:1;min-width:200px;max-width:300px">
     <span style="position:absolute;left:9px;top:50%;transform:translateY(-50%);color:var(--text-4);font-size:13px;pointer-events:none">⌕</span>
@@ -130,50 +118,55 @@
 {# ── Conversation Cards ── #}
 {% for item in conversations %}
 <div class="conv-card {{ item.health_chip_cls }}" data-name="{{ item.customer_name|lower }}" data-email="{{ item.customer_email|lower if item.customer_email else '' }}" data-health="{{ item.health_chip_cls }}">
-  <div class="conv-layout">
-    <div class="conv-left">
-      <div class="conv-top">
-        <div>
-          <a href="/conversations/{{ item.customer_id }}" class="conv-name">{{ item.customer_name }}</a>
-          <div class="conv-meta">
-            <span class="health-chip chip-{{ item.health_chip_cls }}">{{ item.health_label }}</span>
-            <span class="conv-meta-item">Out {{ item.outbound_count }}</span>
-            <span class="conv-meta-item">In {{ item.inbound_count }}</span>
-          </div>
-        </div>
-      </div>
 
-      <div class="conv-preview">
-        <div style="font-size:10.5px;color:var(--text-3);font-family:'IBM Plex Mono',monospace;margin-bottom:4px">
-          {% if item.last_message_is_inbound %}<span style="color:var(--red);font-weight:600">Customer replied</span>{% else %}Last outbound{% endif %} · {{ item.last_message_at | est }}
-        </div>
-        <div style="font-size:11.5px;font-weight:600;color:var(--navy);margin-bottom:4px">{{ item.last_message_subject }}</div>
-        {{ item.last_message_preview }}
+  {# Header: name + 3-dot menu #}
+  <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:5px">
+    <div>
+      <a href="/conversations/{{ item.customer_id }}" style="font-size:15px;font-family:'Playfair Display',serif;color:var(--navy);font-weight:700;text-decoration:none" onmouseenter="this.style.textDecoration='underline'" onmouseleave="this.style.textDecoration='none'">{{ item.customer_name }}</a>
+      <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:3px">
+        <span class="health-chip chip-{{ item.health_chip_cls }}">{{ item.health_label }}</span>
+        <span class="status-pill {{ item.status_cls }}" style="font-size:10px;padding:2px 8px">{{ item.status_label }}</span>
+        <span style="font-size:10.5px;color:var(--text-3);font-family:'IBM Plex Mono',monospace">Out {{ item.outbound_count }} · In {{ item.inbound_count }}</span>
       </div>
     </div>
+    {# 3-dot menu #}
+    <div class="conv-menu-wrap">
+      <button onclick="toggleConvMenu(this)" style="background:none;border:none;cursor:pointer;padding:3px 7px;color:var(--text-3);font-size:16px;line-height:1;border-radius:4px;margin-top:-2px" onmouseenter="this.style.background='var(--navy-soft)'" onmouseleave="this.style.background=''">⋮</button>
+      <div class="conv-dropdown">
+        <a href="/customer/{{ item.customer_id }}">Customer Page</a>
+      </div>
+    </div>
+  </div>
 
-    <div class="conv-right">
+  {# Body: preview (one line, ~50%) + last interaction + opportunity + open button #}
+  <div class="conv-body-row" style="display:flex;align-items:center;gap:12px">
+
+    {# Email preview — one line, half width #}
+    <div class="conv-preview-wrap" style="flex:0 0 48%;max-width:48%;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:7px 10px;min-width:0">
+      <div style="font-size:10.5px;color:var(--text-3);font-family:'IBM Plex Mono',monospace;margin-bottom:3px">
+        {% if item.last_message_is_inbound %}<span style="color:var(--red);font-weight:600">Customer</span>{% else %}Outbound{% endif %} · {{ item.last_message_at | est }}
+      </div>
+      <div style="font-size:11.5px;font-weight:600;color:var(--navy);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ item.last_message_subject }}</div>
+      <div style="font-size:11px;color:var(--text-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ item.last_message_preview }}</div>
+    </div>
+
+    {# Last interaction + opportunity #}
+    <div style="flex:1;display:flex;flex-direction:column;gap:5px;min-width:0">
       <div>
         <div class="right-label">Last Interaction</div>
-        <div class="right-value" style="font-family:'IBM Plex Mono',monospace">{{ item.last_interaction_label }}</div>
-        <div class="conv-meta-item" style="margin-top:1px">{{ item.last_touch_at | est }}</div>
+        <div class="right-value">{{ item.last_interaction_label }} · {{ item.last_touch_at | est }}</div>
       </div>
-
-      <div>
-        <div class="right-label">Status</div>
-        <div class="right-value">{{ item.status_label }}</div>
-      </div>
-
       <div>
         <div class="right-label">Opportunity</div>
-        <div class="opp-chip">{{ item.opp_est }} · {{ item.opp_label }}</div>
-      </div>
-
-      <div style="display:flex;gap:6px;flex-wrap:wrap">
-        <a href="/customer/{{ item.customer_id }}" class="btn-ghost" style="text-decoration:none;font-size:11px;padding:5px 10px">Customer</a>
-        <a href="/conversations/{{ item.customer_id }}" class="btn-primary" style="text-decoration:none;font-size:11px;padding:5px 12px">Open →</a>
+        <span class="opp-chip">{{ item.opp_est }} · {{ item.opp_label }}</span>
       </div>
     </div>
+
+    {# Open button #}
+    <div style="flex-shrink:0">
+      <a href="/conversations/{{ item.customer_id }}" class="btn-primary" style="text-decoration:none;font-size:11px;padding:6px 14px">Open →</a>
+    </div>
+
   </div>
 </div>
 {% endfor %}
@@ -217,5 +210,20 @@ function filterConversations() {
   const noResults = document.getElementById('conv-no-results');
   if (noResults) noResults.style.display = (shown === 0) ? '' : 'none';
 }
+
+function toggleConvMenu(btn) {
+  const dropdown = btn.nextElementSibling;
+  const isOpen = dropdown.style.display === 'block';
+  // Close all open dropdowns
+  document.querySelectorAll('.conv-dropdown').forEach(d => d.style.display = 'none');
+  if (!isOpen) dropdown.style.display = 'block';
+}
+
+// Close menus on outside click
+document.addEventListener('click', function(e) {
+  if (!e.target.closest('.conv-menu-wrap')) {
+    document.querySelectorAll('.conv-dropdown').forEach(d => d.style.display = 'none');
+  }
+});
 </script>
 {% endblock %}

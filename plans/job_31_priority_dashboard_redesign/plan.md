@@ -52,9 +52,18 @@ The redesign separates **opportunity** (money available) from **pipeline** (mone
 
 ---
 
-### Row 3 — Priority Queue (unchanged structure, redesigned header)
+### Row 3 — Priority Queue (redesigned, no action buttons)
 
-The current priority queue table is good — keep it. Just update the section label above it from "Priority Queue" to "Outreach Priority Queue" and add a brief sentence: "Sorted by opportunity score. These are your highest-leverage conversations right now."
+The current priority queue table shows action buttons (Draft Outreach, Mark as Booked) inline. **Remove all action buttons from this table.** The operator takes action from the conversation page — the dashboard priority queue is read-only. Also remove Mark as Booked from the dashboard entirely (that flow belongs on the conversation page).
+
+Each row in the priority queue should show:
+- Customer name (links to conversation)
+- Score badge (high/medium/low tier color)
+- Status tag (same pill format as conversations page — `status-pill s-*` classes, matching the tagging style used on Conversations, Outreach Queue, Meetings Queue)
+- Days dormant
+- Estimated value
+
+Update the section label to "Outreach Priority Queue" and add: "Sorted by opportunity score. Take action from the conversation page."
 
 ---
 
