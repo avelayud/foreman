@@ -207,6 +207,7 @@ def _get_queue_count(db) -> int:
             OutreachLog.approval_status == "pending",
             ~OutreachLog.response_classification.in_(_MEETINGS_CLASSIFICATIONS)
             | OutreachLog.response_classification.is_(None),
+            (OutreachLog.operator_initiated == True) | (OutreachLog.sequence_step > 0),
         )
         .count()
     )
@@ -1959,7 +1960,9 @@ def outreach_queue(request: Request):
                 OutreachLog.operator_id == OPERATOR_ID,
                 OutreachLog.dry_run == True,
                 ~OutreachLog.response_classification.in_(_MEETINGS_CLASSIFICATIONS)
-            | OutreachLog.response_classification.is_(None),
+                | OutreachLog.response_classification.is_(None),
+                # Only show operator-initiated drafts (sequence_step=0) or any follow-up
+                (OutreachLog.operator_initiated == True) | (OutreachLog.sequence_step > 0),
             )
             .order_by(OutreachLog.created_at.desc())
             .all()
@@ -4605,6 +4608,7 @@ def approve_draft(customer_id: int, req: ApproveRequest):
             scheduled_send_at=None,
             send_error=None,
             sequence_step=0,
+            operator_initiated=True,
         )
         db.add(log)
         customer.reactivation_status = "outreach_sent"

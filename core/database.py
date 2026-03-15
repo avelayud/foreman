@@ -90,6 +90,7 @@ SCHEMA_PATCHES = {
         "booking_slot_start": "TIMESTAMP",
         "booking_slot_end": "TIMESTAMP",
         "draft_queued": "BOOLEAN",
+        "operator_initiated": "BOOLEAN",
     },
 }
 
@@ -147,6 +148,24 @@ def _apply_schema_patches():
                     UPDATE operators
                     SET outreach_mode = 'dry_run'
                     WHERE outreach_mode IS NULL OR outreach_mode = ''
+                    """
+                )
+            )
+
+        # Reset customers incorrectly marked 'outreach_sent' by the reactivation agent
+        # (agent set this status on draft creation, but no email was ever actually sent).
+        # Safe to re-run: only affects customers with no real sent outreach (dry_run=FALSE).
+        if "customers" in table_names and "outreach_logs" in table_names:
+            conn.execute(
+                text(
+                    """
+                    UPDATE customers
+                    SET reactivation_status = 'never_contacted'
+                    WHERE reactivation_status = 'outreach_sent'
+                      AND id NOT IN (
+                        SELECT DISTINCT customer_id FROM outreach_logs
+                        WHERE dry_run = FALSE AND direction = 'outbound'
+                      )
                     """
                 )
             )

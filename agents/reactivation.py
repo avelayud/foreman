@@ -1,15 +1,15 @@
 """
 agents/reactivation.py
-Reactivation outreach agent.
+Reactivation analysis agent.
 
 Scans for dormant customers (never_contacted, days >= threshold), ranks by
-priority score, generates a personalized email draft via Claude for each, and
-saves it to OutreachLog (dry_run=True) for operator review in the /outreach queue.
+priority score, and runs the customer analyzer to build/refresh profiles so
+they are ready when the operator drafts outreach from the dashboard.
 
-IMPORTANT: This agent NEVER sends emails. It only generates drafts.
-All outreach requires explicit operator approval via the /outreach queue.
-Emails move from "Pending Approval" to "Active Conversations" only when the
-operator manually clicks "Mark as Sent" in the UI.
+IMPORTANT: This agent does NOT create drafts or send emails.
+Drafts are only created when the operator explicitly clicks "Draft →" on the
+dashboard. This prevents the outreach queue from being flooded with unsolicited
+auto-generated drafts.
 
 Usage:
     python -m agents.reactivation --operator-id 1 [--limit N] [--threshold DAYS]
@@ -26,7 +26,7 @@ import anthropic
 
 from core.config import config
 from core.database import get_db
-from core.models import Customer, Operator, OutreachLog
+from core.models import Customer, Operator
 from agents.customer_analyzer import analyze_customer, format_profile_for_prompt
 
 
@@ -181,38 +181,18 @@ def run(operator_id: int, limit: int = 10, threshold_days: int = None, dry_run: 
         print("[reactivation] No eligible customers found. Done.")
         return
 
-    client = anthropic.Anthropic(api_key=config.ANTHROPIC_API_KEY)
-    queued = 0
+    analyzed = 0
 
     for customer in targets:
         print(f"  → {customer['name']} ({customer['days_dormant']}d dormant, ${customer['total_spend']:.0f} LTV)")
         try:
-            draft = generate_draft(client, customer, operator)
-            print(f"     subject: {draft['subject']}")
-
-            with get_db() as db:
-                log = OutreachLog(
-                    operator_id=operator_id,
-                    customer_id=customer["id"],
-                    channel="email",
-                    direction="outbound",
-                    subject=draft["subject"],
-                    content=draft["body"],
-                    dry_run=True,
-                    sequence_step=0,
-                )
-                db.add(log)
-
-                # Update status so we don't re-draft on next run
-                cust = db.query(Customer).filter_by(id=customer["id"]).first()
-                if cust:
-                    cust.reactivation_status = "outreach_sent"
-
-            queued += 1
+            # Build/refresh customer profile so it's ready when operator drafts outreach
+            analyze_customer(operator_id, customer["id"], verbose=True)
+            analyzed += 1
         except Exception as e:
-            print(f"     ERROR: {e}")
+            print(f"     [analyzer] ERROR: {e}")
 
-    print(f"\n[reactivation] Done. {queued}/{len(targets)} drafts queued in /outreach.")
+    print(f"\n[reactivation] Done. {analyzed}/{len(targets)} customer profiles refreshed.")
 
 
 # ── CLI entry point ────────────────────────────────────────────────────────────

@@ -337,6 +337,7 @@ class OutreachLog(Base):
     response_classification = Column(String, nullable=True)  # booking_intent | callback_request | price_inquiry | not_interested | unclear
     classified_at = Column(DateTime, nullable=True)
     draft_queued = Column(Boolean, default=False)  # True once response_generator has staged a draft for this inbound log
+    operator_initiated = Column(Boolean, nullable=True)  # NULL/False = agent-generated (hidden); True = operator explicitly requested
     converted_to_job = Column(Boolean, default=False)
     converted_job_value = Column(Float, nullable=True)
     converted_at = Column(DateTime, nullable=True)
