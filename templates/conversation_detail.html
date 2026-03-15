@@ -386,19 +386,34 @@
               <div style="font-size:9px;font-family:'IBM Plex Mono',monospace;letter-spacing:1px;text-transform:uppercase;color:var(--text-3);margin-bottom:5px">Available Slots</div>
               <div id="booking-slot-btns" style="display:flex;flex-wrap:wrap;gap:5px"></div>
             </div>
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
               <div>
                 <label class="field-label">Service Type</label>
                 <input type="text" id="book-service-type" class="field-input" value="{{ customer.last_service_type or 'Service' }}" placeholder="e.g. AC tune-up" />
               </div>
               <div>
-                <label class="field-label">Draft Notes <span style="font-weight:400;text-transform:none;letter-spacing:0;font-size:9px">(optional — for email draft in Meetings Queue)</span></label>
+                <label class="field-label">Draft Notes <span style="font-weight:400;text-transform:none;letter-spacing:0;font-size:9px">(optional)</span></label>
                 <input type="text" id="book-notes" class="field-input" placeholder="e.g. mention seasonal discount" />
+              </div>
+            </div>
+            <div>
+              <label class="field-label">Estimated Job Value</label>
+              <div style="display:flex;align-items:center;gap:8px;margin-top:2px;flex-wrap:wrap">
+                <div style="display:flex;align-items:center;border:1px solid var(--border);border-radius:7px;overflow:hidden;background:#fff">
+                  <span style="padding:6px 8px;font-size:12.5px;color:var(--text-3);background:var(--bg);border-right:1px solid var(--border)">$</span>
+                  <input type="number" id="book-estimated-value" placeholder="850" min="0" step="50"
+                         style="border:none;padding:6px 9px;font-size:12.5px;width:90px;outline:none;background:#fff"
+                         onchange="if(this.value) document.getElementById('book-estimate-unknown').checked=false">
+                </div>
+                <label style="font-size:11px;color:var(--text-3);display:flex;align-items:center;gap:4px;white-space:nowrap;cursor:pointer">
+                  <input type="checkbox" id="book-estimate-unknown"
+                         onchange="if(this.checked) document.getElementById('book-estimated-value').value=''"> Unknown
+                </label>
               </div>
             </div>
           </div>
           <div style="font-size:11.5px;color:var(--text-3);margin-bottom:10px;font-family:'IBM Plex Sans',sans-serif;line-height:1.5">
-            The invite email, estimated value, and confirmation note are all drafted and approved in the <strong>Meetings Queue</strong>.
+            The invite email and confirmation note are drafted and approved in the <strong>Meetings Queue</strong>.
           </div>
           <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
             <button class="book-send-btn" id="book-send-btn" onclick="sendBookingInvite()">Queue to Meetings →</button>
@@ -1190,11 +1205,20 @@
       return;
     }
 
+    const estimateUnknown = document.getElementById('book-estimate-unknown')?.checked || false;
+    const estimatedValueStr = document.getElementById('book-estimated-value')?.value?.trim() || '';
+    if (!estimateUnknown && !estimatedValueStr) {
+      statusEl.style.color = 'var(--red)';
+      statusEl.textContent = '⚠ Enter an estimated job value or check Unknown.';
+      return;
+    }
+
     btn.disabled = true;
     btn.textContent = 'Queuing…';
     statusEl.textContent = '';
 
     try {
+      const estimVal = estimateUnknown ? null : (parseFloat(estimatedValueStr) || null);
       const res = await fetch(`/api/customer/${CUSTOMER_ID}/queue-booking-invite`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1203,6 +1227,8 @@
           slot_end: slotEnd,
           service_type: document.getElementById('book-service-type').value || 'Service',
           notes: document.getElementById('book-notes').value || '',
+          estimated_value: estimVal,
+          estimate_unknown: estimateUnknown,
         }),
       });
       const data = await res.json().catch(() => ({}));
